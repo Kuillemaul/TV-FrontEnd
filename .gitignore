@@ -1,0 +1,7 @@
+node_modules/
+dist/
+config/config.yaml
+pc-agent/agent.json
+pc-agent/cache/
+*.log
+.DS_Store

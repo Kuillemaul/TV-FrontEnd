@@ -1,0 +1,70 @@
+{
+  "port": 47800,
+  "token": "change-me",
+
+  "steam": {
+    "enabled": true,
+    "controllerLookup": true
+  },
+
+  "kbm": {
+    "Factorio": true,
+    "Hades II": false
+  },
+
+  "games": [
+    {
+      "id": "fortnite",
+      "title": "Fortnite",
+      "uri": "com.epicgames.launcher://apps/Fortnite?action=launch&silent=true",
+      "art": "https://cdn2.unrealengine.com/fortnite-logo.jpg",
+      "controller": "full",
+      "processDir": "C:/Program Files/Epic Games/Fortnite"
+    },
+    {
+      "id": "minecraft",
+      "title": "Minecraft Java",
+      "command": ["C:/XboxGames/Minecraft Launcher/Content/Minecraft.exe"],
+      "requiresKbm": true
+    }
+  ],
+
+  "emulators": [
+    {
+      "system": "snes",
+      "name": "SNES",
+      "romDir": "D:/ROMs/snes",
+      "extensions": [".sfc", ".smc", ".zip"],
+      "artDir": "D:/ROMs/snes/media/covers",
+      "command": ["C:/RetroArch-Win64/retroarch.exe", "-f", "-L", "C:/RetroArch-Win64/cores/snes9x_libretro.dll", "{rom}"]
+    },
+    {
+      "system": "n64",
+      "name": "N64",
+      "romDir": "D:/ROMs/n64",
+      "extensions": [".z64", ".n64", ".v64"],
+      "command": ["C:/RetroArch-Win64/retroarch.exe", "-f", "-L", "C:/RetroArch-Win64/cores/mupen64plus_next_libretro.dll", "{rom}"]
+    },
+    {
+      "system": "gc",
+      "name": "GameCube",
+      "romDir": "D:/ROMs/gamecube",
+      "extensions": [".rvz", ".iso"],
+      "command": ["C:/Dolphin/Dolphin.exe", "-b", "-e", "{rom}"]
+    },
+    {
+      "system": "ps2",
+      "name": "PlayStation 2",
+      "romDir": "D:/ROMs/ps2",
+      "extensions": [".chd", ".iso"],
+      "command": ["C:/PCSX2/pcsx2-qt.exe", "-fullscreen", "-nogui", "--", "{rom}"]
+    },
+    {
+      "system": "switch",
+      "name": "Switch",
+      "romDir": "D:/ROMs/switch",
+      "extensions": [".nsp", ".xci"],
+      "command": ["C:/Ryujinx/Ryujinx.exe", "--fullscreen", "{rom}"]
+    }
+  ]
+}

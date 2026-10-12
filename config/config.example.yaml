@@ -1,0 +1,142 @@
+# Hearth configuration. Copy to config/config.yaml and fill in.
+# Anything you leave out falls back to demo data, so you can set things up one piece at a time.
+
+server:
+  port: 8787
+  host: 127.0.0.1          # use 0.0.0.0 to reach the UI from a phone/laptop on your LAN
+
+ui:
+  name: Living Room
+  clock24h: false
+
+# Tiles on the Apps row. type: web opens a kiosk browser window, type: command runs a program.
+apps:
+  - id: plex
+    name: Plex
+    color: "#e5a00d"
+    launch: { type: command, command: [flatpak, run, tv.plex.PlexHTPC] }
+  - id: netflix
+    name: Netflix
+    color: "#e50914"
+    launch: { type: web, url: https://www.netflix.com/browse }
+  - id: youtube
+    name: YouTube
+    color: "#ff0033"
+    # YouTube's TV interface (remote-friendly) needs a TV user agent.
+    launch:
+      type: web
+      url: https://www.youtube.com/tv
+      userAgent: "Mozilla/5.0 (SMART-TV; Linux; Tizen 6.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/6.0 TV Safari/538.1"
+  - id: disney
+    name: Disney+
+    color: "#113ccf"
+    launch: { type: web, url: https://www.disneyplus.com }
+  - id: prime
+    name: Prime Video
+    color: "#00a8e1"
+    launch: { type: web, url: https://www.primevideo.com }
+  - id: jellyfin
+    name: Jellyfin
+    color: "#7a3fd1"
+    launch: { type: command, command: [flatpak, run, com.github.iwalton3.jellyfin-media-player, --tv, --fullscreen] }
+
+# Browser used for type: web apps. {url} and {profile} are filled in.
+# google-chrome-stable includes Widevine, which Netflix/Disney+/Prime need.
+browser:
+  - google-chrome-stable
+  - --kiosk
+  - --app={url}
+  - --user-data-dir={profile}
+  - --ozone-platform-hint=auto
+  - --noerrdialogs
+  - --disable-session-crashed-bubble
+  - --autoplay-policy=no-user-gesture-required
+
+# ---------------------------------------------------------------------------
+# Live TV: Tvheadend drives the USB tuner (guide, live, DVR)
+# ---------------------------------------------------------------------------
+livetv:
+  tvheadend:
+    url: http://127.0.0.1:9981
+    # Leave blank if Tvheadend allows 127.0.0.1 without a password (recommended),
+    # otherwise set "HTTP authentication" to "Both plain and digest" in Tvheadend.
+    username: ""
+    password: ""
+    profile: pass          # pass = untouched stream, mpv decodes it with VAAPI
+  # mpv gets a playlist of every channel so CH+/CH- (PgUp/PgDn) zap without leaving the player.
+  player: [mpv, --fs, --force-window=immediate, "--title=Hearth Live TV", "--playlist={playlist}", "--playlist-start={index}"]
+  recordingPlayer: [mpv, --fs, --force-window=immediate, "--title=Hearth Recording", "{url}"]
+
+# ---------------------------------------------------------------------------
+# Home Assistant: dashboard, quick controls and the voice assistant
+# ---------------------------------------------------------------------------
+homeassistant:
+  url: http://homeassistant.local:8123
+  token: "PASTE_A_LONG_LIVED_ACCESS_TOKEN"   # Profile → Security → Long-lived access tokens
+  weather: weather.forecast_home
+  favorites: [light.living_room, light.tv_backlight, scene.movie_time, lock.front_door]
+  lovelacePath: /lovelace/0                   # "Full dashboard" button opens this in kiosk mode
+  dashboard:
+    - title: Living Room
+      cards: [light.living_room, light.tv_backlight, media_player.living_room, scene.movie_time]
+    - title: Climate
+      cards: [climate.thermostat, sensor.outdoor_temperature, { entity: sensor.living_room_humidity, name: Humidity }]
+    - title: Security
+      cards: [lock.front_door, cover.garage_door, binary_sensor.back_door, camera.front_porch]
+  voice:
+    pipeline: ""            # Assist pipeline id; blank = your preferred pipeline
+    language: en
+    ttsEngine: tts.piper    # speak replies through the TV; remove to only show them on screen
+
+# ---------------------------------------------------------------------------
+# Home lab
+# ---------------------------------------------------------------------------
+lab:
+  services:
+    - { name: Proxmox, url: "https://192.168.1.10:8006", open: true }
+    - { name: TrueNAS, url: "https://192.168.1.11" }
+    - { name: Plex Media Server, url: "http://192.168.1.12:32400/web", check: "http://192.168.1.12:32400/identity" }
+    - { name: Home Assistant, url: "http://homeassistant.local:8123" }
+    - { name: Pi-hole, url: "http://192.168.1.2/admin" }
+  # Home Assistant sensors to show as stat tiles (Proxmox, NAS, UPS, speedtest integrations…)
+  sensors: [sensor.pve_cpu_usage, sensor.truenas_pool_used, sensor.ups_load, sensor.speedtest_download]
+
+# ---------------------------------------------------------------------------
+# Game streaming: Sunshine + Hearth agent on each PC, Moonlight on the TV
+# ---------------------------------------------------------------------------
+gaming:
+  moonlight: [flatpak, run, com.moonlight_stream.Moonlight, stream, "{host}", "{app}"]
+  hosts:
+    - id: gaming-pc
+      name: Gaming PC
+      agent: http://192.168.1.50:47800
+      token: "SAME_TOKEN_AS_AGENT_JSON"
+      moonlightHost: 192.168.1.50
+      moonlightApp: Desktop
+      mac: "AA:BB:CC:DD:EE:01"   # Wake-on-LAN
+      quitOnExit: true           # close the game on the PC when you quit the stream
+    - id: emulator-pc
+      name: Emulator PC
+      agent: http://192.168.1.51:47800
+      token: "SAME_TOKEN_AS_AGENT_JSON"
+      moonlightHost: 192.168.1.51
+      moonlightApp: Desktop
+      mac: "AA:BB:CC:DD:EE:02"
+  # Force the keyboard & mouse prompt on/off. Key is "<hostId>:<gameId>" or the exact title.
+  kbmOverrides:
+    "Stardew Valley": false
+    "gaming-pc:steam-427520": true
+
+# Keys that close whatever is on screen and return to Hearth (read straight from /dev/input,
+# so they work even inside Netflix or Moonlight). holdMs avoids clashing with in-game use.
+homeKeys:
+  - { key: KEY_HOMEPAGE, holdMs: 0 }   # Home button on most remotes
+  - { key: BTN_MODE, holdMs: 1000 }    # hold the Xbox/PS button for 1s
+
+system:
+  volumeUp: [wpctl, set-volume, -l, "1.0", "@DEFAULT_AUDIO_SINK@", 5%+]
+  volumeDown: [wpctl, set-volume, "@DEFAULT_AUDIO_SINK@", 5%-]
+  mute: [wpctl, set-mute, "@DEFAULT_AUDIO_SINK@", toggle]
+  suspend: [systemctl, suspend]
+  reboot: [systemctl, reboot]
+  poweroff: [systemctl, poweroff]

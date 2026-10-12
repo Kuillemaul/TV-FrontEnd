@@ -1,0 +1,16 @@
+[Unit]
+Description=Hearth TV shell server
+After=pipewire.service
+
+[Service]
+WorkingDirectory=/opt/hearth
+Environment=NODE_ENV=production
+Environment=HEARTH_CONFIG=/opt/hearth/config/config.yaml
+# Each watched input device holds a libuv thread while reading.
+Environment=UV_THREADPOOL_SIZE=32
+ExecStart=/usr/bin/node /opt/hearth/server/dist/index.js
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target

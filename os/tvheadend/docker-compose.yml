@@ -1,0 +1,19 @@
+# Tvheadend for the USB tuner: live TV, guide (EPG) and DVR.
+#   sudo apt install docker.io docker-compose-v2
+#   sudo docker compose -f /opt/hearth/os/tvheadend/docker-compose.yml up -d
+# Then open http://<tv-ip>:9981 and run the setup wizard.
+services:
+  tvheadend:
+    image: lscr.io/linuxserver/tvheadend:latest
+    container_name: tvheadend
+    network_mode: host            # HDHomeRun discovery + simple localhost access for Hearth
+    restart: unless-stopped
+    environment:
+      - PUID=1000                 # id -u tv
+      - PGID=1000                 # id -g tv
+      - TZ=America/Chicago
+    devices:
+      - /dev/dvb:/dev/dvb         # USB tuner (e.g. Hauppauge WinTV-dualHD)
+    volumes:
+      - /srv/tvheadend/config:/config
+      - /srv/recordings:/recordings
