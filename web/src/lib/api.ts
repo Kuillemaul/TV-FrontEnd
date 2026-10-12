@@ -280,6 +280,7 @@ export type ServerEvent =
   | { type: 'remote'; cmd: string; text?: string }
   | { type: 'settings' }
   | { type: 'games' }
+  | { type: 'display' }
   | { type: 'pair'; hostId: string; stage: 'waking' | 'pairing' | 'auto-pin' | 'paired' | 'failed'; message: string };
 
 export async function get<T>(path: string): Promise<T> {

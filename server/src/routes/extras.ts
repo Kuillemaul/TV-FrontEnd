@@ -3,6 +3,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import type { AlertService } from '../alerts.js';
 import { AudioControl } from '../audio.js';
+import { DisplayControl } from '../display.js';
 import type { EventBus } from '../bus.js';
 import { expand, type HearthConfig, type LabAction } from '../config.js';
 import type { Launcher } from '../launcher.js';
@@ -105,6 +106,29 @@ export function registerExtras(app: FastifyInstance, ctx: ExtrasContext): void {
   );
   app.post<{ Body: { percent: number } }>('/api/audio/volume', async (req) => run(() => audio.setVolume(Number(req.body.percent))));
   app.post<{ Body: { channel: number } }>('/api/audio/test', async (req) => run(() => audio.test(Number(req.body.channel))));
+
+  /* ---------------- display: resolution & refresh rate ---------------- */
+
+  const display = new DisplayControl(state, () => bus.emit({ type: 'display' }), app.log);
+  // cage needs a moment after start before outputs can be reconfigured.
+  setTimeout(() => void display.restore(), 4000);
+  app.get('/api/display', async () => display.status());
+  app.post<{ Body: { output: string; width: number; height: number; refresh: number } }>('/api/display/mode', async (req) =>
+    run(async () => {
+      requireParent();
+      const { output, width, height, refresh } = req.body;
+      await display.set({ output: String(output), width: Number(width), height: Number(height), refresh: Number(refresh) });
+      return display.status();
+    }),
+  );
+  app.post('/api/display/keep', async () => run(() => display.keep()));
+  app.post('/api/display/revert', async () => run(() => display.revert()));
+  app.post<{ Body: { output: string } }>('/api/display/auto', async (req) =>
+    run(async () => {
+      requireParent();
+      await display.auto(String(req.body.output));
+    }),
+  );
 
   /* ---------------- Moonlight ---------------- */
 

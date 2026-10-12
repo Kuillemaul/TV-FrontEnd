@@ -6,6 +6,7 @@ import { SettingsExtras } from '../components/SettingsExtras';
 import { SoundSettings } from '../components/SoundSettings';
 import { ControllerTest } from '../components/ControllerTest';
 import { GamingPcsSettings } from '../components/Pairing';
+import { DisplaySettings } from '../components/DisplaySettings';
 import { Icon } from '../components/Icon';
 import { Button, DemoBanner, Modal, NotSetUp, PageHeader, Tile } from '../components/Layout';
 import { post, useApi, useServerEvents, type AppTile, type Dashboard, type HaEntity, type LabStatus } from '../lib/api';
@@ -173,6 +174,7 @@ export function SettingsPage() {
         </div>
       </section>
       <SettingsExtras />
+      <DisplaySettings />
       <SoundSettings />
       {!hearth.isKid ? <GamingPcsSettings /> : null}
       <section className="settings-group">

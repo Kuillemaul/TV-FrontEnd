@@ -18,6 +18,7 @@ export type UiEvent =
   | { type: 'remote'; cmd: string; text?: string }
   | { type: 'settings' }
   | { type: 'games' }
+  | { type: 'display' }
   | { type: 'pair'; hostId: string; stage: 'waking' | 'pairing' | 'auto-pin' | 'paired' | 'failed'; message: string };
 
 export type GameStage = 'waking' | 'launching' | 'streaming' | 'ended' | 'error';

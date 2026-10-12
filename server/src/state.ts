@@ -20,6 +20,17 @@ interface PersistedState {
   settings: { scenes: boolean; wakeWord: boolean; alertsOverApps: boolean };
   /** Phone remotes that have been paired (token → label). */
   remoteTokens: Record<string, { label: string; pairedAt: number }>;
+  /** Screen mode chosen in Settings → Display, re-applied when Hearth starts. */
+  display?: DisplayMode;
+  /** Set while re-applying `display` at start-up; still set next time = it crashed the session. */
+  displayRestoring?: number;
+}
+
+export interface DisplayMode {
+  output: string;
+  width: number;
+  height: number;
+  refresh: number;
 }
 
 /** Small JSON store for things the UI should remember across restarts. */
@@ -60,6 +71,24 @@ export class StateStore {
 
   get settings(): PersistedState['settings'] {
     return this.data.settings;
+  }
+
+  get display(): DisplayMode | undefined {
+    return this.data.display;
+  }
+
+  setDisplay(mode: DisplayMode | undefined): void {
+    this.data.display = mode;
+    this.save();
+  }
+
+  get displayRestoring(): number | undefined {
+    return this.data.displayRestoring;
+  }
+
+  setDisplayRestoring(at: number | undefined): void {
+    this.data.displayRestoring = at;
+    this.save();
   }
 
   updateSettings(patch: Partial<PersistedState['settings']>): void {

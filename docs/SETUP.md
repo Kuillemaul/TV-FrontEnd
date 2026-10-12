@@ -59,6 +59,14 @@ The installer:
 - adds the Hearth boot splash (Plymouth), hides the boot menu and kernel text, and starts Chrome and the server
   side by side so the TV is ready sooner. Hold **Shift** or tap **Esc** while it boots to get the boot menu back.
 
+**Display:** Settings → Display picks the resolution (4K, 1080p…) and refresh rate (60/59.94/50/24 Hz). A new
+setting goes back by itself after 15 seconds unless you press *Keep*, so a mode the TV can't show never leaves you
+with a black screen. HDR isn't available on this setup yet: cage (the kiosk compositor in Debian 13) can't output
+HDR, so 4K HDR films and videos play tone-mapped to SDR.
+
+**Pin to Home:** press **X** on a controller (or **P**, the remote's Menu key, or right-click) on any app, game,
+channel or smart-home control to pin it to the top of Home. Do the same on Home to move or unpin it.
+
 **Plex "Continue watching"** on Home opens Plex HTPC and tells it to play from where you stopped (like casting from
 the Plex phone app). In Plex HTPC's settings, keep **Advertise as player** on. If it isn't found, Plex HTPC still
 opens and the show is first in its own Continue Watching row.
@@ -346,8 +354,11 @@ control off).
 
 1. Add each PC to `config.yaml` under `gaming.hosts` with the agent URL, the **same token**, its IP and its MAC
    address (Wake-on-LAN).
-2. Pair Moonlight with each PC once. Add a temporary Moonlight app tile (see [Adding apps](#adding-apps)), open it,
-   select the PC, and enter the PIN in Sunshine's web UI on that PC.
+2. Pair Moonlight with each PC once: **Settings → Gaming PCs → Pair <PC>**. Hearth wakes the PC, starts Moonlight's
+   pairing and shows a 4-digit PIN with a QR code for the PC's Apollo/Sunshine PIN page (`https://<pc>:47990/pin`);
+   type the PIN there. To skip that step, put the Apollo web login in the PC's `agent.json`
+   (`"apollo": {"username": "...", "password": "..."}`) and the agent enters the PIN itself.
+   *Open Moonlight* in the same place opens Moonlight's own settings (resolution, bitrate, 5.1 audio).
 3. In Moonlight's settings, set the resolution and FPS to match your TV (e.g. 4K60, or 1080p120) and enable
    "Optimize game settings" and "Quit app on host after quitting stream" if you like.
 
