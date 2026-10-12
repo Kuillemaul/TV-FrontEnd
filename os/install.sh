@@ -13,7 +13,7 @@ TV_USER=tv
 echo "==> Packages"
 apt-get update
 apt-get install -y --no-install-recommends \
-  sudo cage xwayland mpv curl ca-certificates gnupg flatpak \
+  sudo cage xwayland mpv curl ca-certificates gnupg flatpak polkitd \
   pipewire pipewire-pulse wireplumber \
   intel-media-va-driver vainfo \
   fonts-inter fonts-noto-color-emoji \
@@ -81,6 +81,7 @@ PROFILE
 chown -R "$TV_USER:$TV_USER" "$TV_HOME"
 
 # Let the tv user sleep/reboot/power off from the Settings page without a password.
+mkdir -p /etc/polkit-1/rules.d
 cat > /etc/polkit-1/rules.d/50-hearth-power.rules <<'RULES'
 polkit.addRule(function (action, subject) {
   if (subject.user == "tv" && /^org\.freedesktop\.login1\.(suspend|reboot|power-off)/.test(action.id)) {
