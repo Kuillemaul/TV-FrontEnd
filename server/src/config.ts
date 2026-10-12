@@ -147,6 +147,8 @@ export interface GameHostConfig {
    * stream first and have the agent wait for the virtual display before starting the game.
    */
   virtualDisplay: boolean;
+  /** When you quit from inside the game, end the stream and return to Hearth. */
+  endStreamOnGameExit: boolean;
 }
 
 export interface GamingConfig {
@@ -279,6 +281,7 @@ function normaliseHost(h: any, i: number): GameHostConfig {
     mac: h.mac ? String(h.mac) : undefined,
     quitOnExit: h.quitOnExit ?? true,
     virtualDisplay: h.virtualDisplay ?? false,
+    endStreamOnGameExit: h.endStreamOnGameExit ?? true,
   };
 }
 

@@ -196,6 +196,21 @@ The TV runs **Moonlight** to show the stream.
    - Windows must auto-login (`netplwiz`, or Sysinternals Autologon) so the agent and Sunshine run after a wake.
    - Give the PC a DHCP reservation so its IP never changes.
 
+### Closing a game
+
+Any of these closes the game on the PC and brings the TV back to Hearth:
+
+- **Quit from inside the game**: RetroArch's *Quit*, Dolphin's *Stop*, a PC game's *Exit to desktop*. The agent
+  notices the game has gone (within a few seconds) and the TV ends the stream (`endStreamOnGameExit`, on by default).
+- **Leave the stream**: the remote's **Home** key, holding the **Xbox/PS button** for a second, or Moonlight's
+  Start+Select+LB+RB. The agent then closes the game: the emulator it started, or everything running from the
+  game's install folder for Steam/Playnite games (`quitOnExit`).
+
+Tips: map an emulator "quit" hotkey to a controller combo (e.g. RetroArch *Hotkey enable* = Select,
+*Quit* = Start), so Select+Start ends an emulated game. A game started through a launcher that exits straight
+away (e.g. `explorer.exe shell:AppsFolder\…` for Game Pass) is tracked by its install folder instead. Set
+`processDir` for such custom games, or the TV can't tell when they've ended (you'd leave with Home instead).
+
 ### Apollo (virtual display)
 
 Apollo creates a virtual monitor when the TV connects, matching the TV's resolution and refresh rate, and can turn
@@ -240,7 +255,8 @@ with a "Show more" tile. Search, the platform chips and voice ("play Chrono Trig
 - Box art comes from LaunchBox's `Images/<Platform>/Box - Front` folders.
 - `platforms` limits the list to certain systems, e.g. `["Nintendo 64", "Sega Genesis"]`.
 - Not supported: LaunchBox startup/pause screens, AutoHotkey scripts and additional apps. Hearth runs the
-  emulator directly, without opening LaunchBox or BigBox.
+  emulator directly, without opening LaunchBox or BigBox. Closing works without them, see
+  [Closing a game](#closing-a-game).
 
 ### Playnite
 

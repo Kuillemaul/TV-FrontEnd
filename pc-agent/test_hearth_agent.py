@@ -249,6 +249,33 @@ class VirtualDisplayTests(unittest.TestCase):
         self.assertFalse(ok)
 
 
+class GameExitTests(unittest.TestCase):
+    def test_reports_exit_only_after_missing_twice(self) -> None:
+        launcher = agent.Launcher()
+        launcher.STUB_SECONDS = 0.2
+        launcher.launch({"title": "Super Metroid", "_launch": {"command": ["sleep", "0.6"]}})
+        time.sleep(1.0)  # exited before anyone asked: still counts, we started it ourselves
+        self.assertTrue(launcher.game_running(), "first miss is forgiven")
+        self.assertFalse(launcher.game_running(), "second miss means it exited")
+
+    def test_launcher_stub_exit_is_not_game_over(self) -> None:
+        launcher = agent.Launcher()
+        launcher.launch({"title": "Forza (Game Pass)", "_launch": {"command": ["true"]}})
+        time.sleep(0.3)
+        self.assertIsNone(launcher.game_running(), "explorer.exe-style launcher exited at once: can't tell")
+        self.assertIsNone(launcher.game_running())
+
+    def test_unknown_when_never_seen(self) -> None:
+        launcher = agent.Launcher()
+        launcher.current = {"title": "Via URI", "_launch": {"uri": "steam://x"}}
+        self.assertIsNone(launcher.game_running())
+
+    def test_processes_under_install_dir(self) -> None:
+        fake = lambda: [(1, "/games/Celeste/Celeste.exe"), (2, "/games/CelesteMod/x.exe"), (3, "/usr/bin/steam")]
+        self.assertEqual(agent.processes_under("/games/Celeste", paths=fake), [1])
+        self.assertEqual(agent.processes_under("/", paths=fake), [])
+
+
 class LibraryTests(unittest.TestCase):
     def test_frontend_entry_replaces_duplicate_steam_entry(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

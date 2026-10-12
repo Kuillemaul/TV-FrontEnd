@@ -839,10 +839,51 @@ def open_uri(uri: str) -> None:
         webbrowser.open(uri)
 
 
-def kill_processes_under(directory: str) -> None:
-    """Close every process whose executable lives under `directory` (used for Steam games)."""
+def process_paths() -> list[tuple[int, str]]:
+    """(pid, executable path) for every process we can see. Fast: no PowerShell."""
+    out: list[tuple[int, str]] = []
+    if IS_WINDOWS:
+        import ctypes
+        from ctypes import wintypes
+
+        psapi, k32 = ctypes.WinDLL("psapi"), ctypes.WinDLL("kernel32")  # type: ignore[attr-defined]
+        pids = (wintypes.DWORD * 8192)()
+        needed = wintypes.DWORD()
+        if not psapi.EnumProcesses(ctypes.byref(pids), ctypes.sizeof(pids), ctypes.byref(needed)):
+            return out
+        for pid in pids[: needed.value // ctypes.sizeof(wintypes.DWORD)]:
+            handle = k32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+            if not handle:
+                continue
+            try:
+                buf = ctypes.create_unicode_buffer(1024)
+                size = wintypes.DWORD(1024)
+                if k32.QueryFullProcessImageNameW(handle, 0, buf, ctypes.byref(size)):
+                    out.append((int(pid), buf.value))
+            finally:
+                k32.CloseHandle(handle)
+        return out
+    for pid in os.listdir("/proc"):
+        if pid.isdigit():
+            try:
+                out.append((int(pid), os.readlink(f"/proc/{pid}/exe")))
+            except OSError:
+                pass
+    return out
+
+
+def processes_under(directory: str, paths=process_paths) -> list[int]:
+    """PIDs whose executable lives under `directory` (a game's install folder)."""
     directory = os.path.normcase(os.path.abspath(directory))
     if len(directory) < 8:  # refuse something silly like C:\ or /
+        return []
+    return [pid for pid, exe in paths() if os.path.normcase(exe).startswith(directory + os.sep)]
+
+
+def kill_processes_under(directory: str) -> None:
+    """Close every process whose executable lives under `directory` (used for Steam/Playnite games)."""
+    directory = os.path.normcase(os.path.abspath(directory))
+    if len(directory) < 8:
         return
     if IS_WINDOWS:
         ps = (
@@ -851,26 +892,27 @@ def kill_processes_under(directory: str) -> None:
         )
         subprocess.run(["powershell", "-NoProfile", "-Command", ps, directory.lower()], capture_output=True)
         return
-    for pid in os.listdir("/proc"):
-        if not pid.isdigit():
-            continue
+    for pid in processes_under(directory):
         try:
-            exe = os.path.normcase(os.readlink(f"/proc/{pid}/exe"))
+            os.kill(pid, signal.SIGTERM)
         except OSError:
-            continue
-        if exe.startswith(directory + os.sep):
-            try:
-                os.kill(int(pid), signal.SIGTERM)
-            except OSError:
-                pass
+            pass
 
 
 class Launcher:
+    #: A started process that exits this quickly was a launcher stub (explorer.exe shell:…,
+    #: a game's own launcher), not the game itself, so its exit doesn't mean "game over".
+    STUB_SECONDS = 15.0
+
     def __init__(self) -> None:
         self.proc: subprocess.Popen[bytes] | None = None
         self.current: dict[str, Any] | None = None
         # Bumped by /stop, so a launch still waiting for Apollo's display is abandoned.
         self.generation = 0
+        self.launched_at = 0.0
+        self.seen_running = False
+        self.misses = 0
+        self.proc_exited_at: float | None = None
 
     def launch(self, entry: dict[str, Any]) -> None:
         self.stop()
@@ -900,6 +942,51 @@ class Launcher:
         else:
             raise ValueError(f"{entry['title']} has no command or uri")
         self.current = entry
+        self.launched_at = time.time()
+        self.misses = 0
+        self.proc_exited_at = None
+        # We started this process ourselves, so we know the game started.
+        self.seen_running = self.proc is not None
+        if self.proc is not None:
+            proc = self.proc
+
+            def watch() -> None:
+                proc.wait()
+                if self.proc is proc:
+                    self.proc_exited_at = time.time()
+
+            threading.Thread(target=watch, daemon=True).start()
+
+    def _alive(self) -> bool | None:
+        """Is the game process there? None when we have no way to tell."""
+        e = self.current
+        if not e:
+            return None
+        proc_alive = self.proc is not None and self.proc.poll() is None
+        stub = self.proc_exited_at is not None and self.proc_exited_at - self.launched_at < self.STUB_SECONDS
+        if e.get("_processDir"):
+            return proc_alive or bool(processes_under(e["_processDir"]))
+        if self.proc is not None and not stub:
+            return proc_alive
+        return None
+
+    def game_running(self) -> bool | None:
+        """
+        True while the game runs, False once it has exited (quit from inside the game), None
+        if we can't tell. Only says False after the game was seen running and then missing
+        twice in a row, so a slow-starting game (Steam, launchers) never ends the stream early.
+        """
+        alive = self._alive()
+        if alive is None and self.proc_exited_at is not None and self.proc_exited_at - self.launched_at < self.STUB_SECONDS:
+            self.seen_running = False  # that was a launcher; only trust what we can observe from now on
+        if alive:
+            self.seen_running = True
+            self.misses = 0
+            return True
+        if alive is None or not self.seen_running:
+            return None
+        self.misses += 1
+        return False if self.misses >= 2 else True
 
     def stop(self) -> None:
         self.generation += 1
@@ -1047,7 +1134,8 @@ def make_handler(cfg: dict[str, Any], library: Library, launcher: Launcher):
         def do_GET(self) -> None:  # noqa: N802
             if self.path == "/health":
                 current = launcher.current["title"] if launcher.current else None
-                return self._json(200, {"ok": True, "host": socket.gethostname(), "uptime": uptime_seconds(), "playing": current})
+                running = launcher.game_running() if launcher.current else None
+                return self._json(200, {"ok": True, "host": socket.gethostname(), "uptime": uptime_seconds(), "playing": current, "gameRunning": running})
             if not self._authed():
                 return
             url = urllib.parse.urlsplit(self.path)

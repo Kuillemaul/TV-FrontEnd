@@ -118,7 +118,8 @@ gaming:
       moonlightHost: 192.168.1.50
       moonlightApp: Desktop
       mac: "AA:BB:CC:DD:EE:01"   # Wake-on-LAN
-      quitOnExit: true           # close the game on the PC when you quit the stream
+      quitOnExit: true           # close the game on the PC when you leave the stream
+      endStreamOnGameExit: true  # quit inside the game → stream ends, back to Hearth
       # Apollo: connect the stream first (Apollo creates its virtual monitor and turns the real ones
       # off), then start the game on that virtual monitor. Leave out for plain Sunshine.
       virtualDisplay: true

@@ -76,6 +76,13 @@ export interface BrowseSources {
 
 export type PowerAction = 'wake' | 'sleep' | 'restart' | 'shutdown';
 
+interface AgentHealth {
+  uptime?: number;
+  playing?: string | null;
+  /** true while the game runs, false once it exited, null/absent when the agent can't tell. */
+  gameRunning?: boolean | null;
+}
+
 const CACHE_MS = 5 * 60 * 1000;
 
 export class GameService {
@@ -108,10 +115,10 @@ export class GameService {
     });
   }
 
-  private async health(h: GameHostConfig): Promise<{ uptime?: number; playing?: string | null } | null> {
+  private async health(h: GameHostConfig): Promise<AgentHealth | null> {
     try {
       const res = await this.agent(h, '/health', undefined, 2000);
-      return res.ok ? ((await res.json()) as { uptime?: number; playing?: string | null }) : null;
+      return res.ok ? ((await res.json()) as AgentHealth) : null;
     } catch {
       return null;
     }
@@ -325,6 +332,24 @@ export class GameService {
     if (!res.ok) throw new Error(`${h.name}: ${await res.text()}`);
   }
 
+  /**
+   * Quit from inside the game (RetroArch "Quit", "Exit to desktop"…) and the stream would
+   * otherwise stay on the PC's desktop. Poll the agent; when it says the game has exited,
+   * end the stream so the TV comes straight back to Hearth.
+   */
+  private watchForGameExit(h: GameHostConfig, sessionId: string): void {
+    if (!h.endStreamOnGameExit) return;
+    const timer = setInterval(async () => {
+      if (this.launcher.session?.id !== sessionId) return clearInterval(timer);
+      const health = await this.health(h);
+      if (health?.gameRunning === false && this.launcher.session?.id === sessionId) {
+        clearInterval(timer);
+        this.bus.toast(`${health.playing ?? 'The game'} closed on ${h.name}`);
+        await this.launcher.stop();
+      }
+    }, 4000);
+  }
+
   /* ---------------- launching ---------------- */
 
   private status(hostId: string, gameId: string, stage: GameStage, message: string): void {
@@ -381,12 +406,14 @@ export class GameService {
         }
         this.status(hostId, gameId, 'streaming', `Streaming ${title}`);
         this.state.addRecentGame({ hostId, gameId, title, art });
+        this.watchForGameExit(h, `game:${hostId}:${gameId}`);
       } else {
         this.status(hostId, gameId, 'launching', `Starting ${title} on ${h.name}…`);
         await startGame(false);
         this.status(hostId, gameId, 'streaming', `Streaming ${title}`);
         this.state.addRecentGame({ hostId, gameId, title, art });
         await this.launcher.launch(`game:${hostId}:${gameId}`, title, moonlight, onStreamEnd);
+        this.watchForGameExit(h, `game:${hostId}:${gameId}`);
       }
     } catch (err) {
       this.status(hostId, gameId, 'error', (err as Error).message);
