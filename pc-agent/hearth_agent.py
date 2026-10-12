@@ -869,6 +869,8 @@ class Launcher:
     def __init__(self) -> None:
         self.proc: subprocess.Popen[bytes] | None = None
         self.current: dict[str, Any] | None = None
+        # Bumped by /stop, so a launch still waiting for Apollo's display is abandoned.
+        self.generation = 0
 
     def launch(self, entry: dict[str, Any]) -> None:
         self.stop()
@@ -900,6 +902,7 @@ class Launcher:
         self.current = entry
 
     def stop(self) -> None:
+        self.generation += 1
         if self.proc and self.proc.poll() is None:
             log("stopping game process")
             if IS_WINDOWS:
@@ -913,6 +916,63 @@ class Launcher:
             kill_processes_under(self.current["_processDir"])
         self.proc = None
         self.current = None
+
+
+# ---- Apollo / virtual display ---------------------------------------------------------
+
+
+def active_displays() -> list[str]:
+    """Names of the display adapters Windows currently has attached to the desktop."""
+    if not IS_WINDOWS:
+        return []
+    import ctypes
+    from ctypes import wintypes
+
+    class DISPLAY_DEVICEW(ctypes.Structure):  # noqa: N801 - Win32 name
+        _fields_ = [
+            ("cb", wintypes.DWORD),
+            ("DeviceName", wintypes.WCHAR * 32),
+            ("DeviceString", wintypes.WCHAR * 128),
+            ("StateFlags", wintypes.DWORD),
+            ("DeviceID", wintypes.WCHAR * 128),
+            ("DeviceKey", wintypes.WCHAR * 128),
+        ]
+
+    ATTACHED_TO_DESKTOP = 0x1
+    names, i = [], 0
+    while True:
+        dd = DISPLAY_DEVICEW()
+        dd.cb = ctypes.sizeof(dd)
+        if not ctypes.windll.user32.EnumDisplayDevicesW(None, i, ctypes.byref(dd), 0):  # type: ignore[attr-defined]
+            break
+        if dd.StateFlags & ATTACHED_TO_DESKTOP:
+            names.append(dd.DeviceString)
+        i += 1
+    return names
+
+
+def wait_for_virtual_display(cfg: dict[str, Any], displays=active_displays, sleep=time.sleep) -> bool:
+    """
+    With Apollo, the virtual monitor only exists once the TV's stream has connected, and the
+    real monitors are switched off at that moment. Wait for it before starting the game, so the
+    game opens on the virtual display at the TV's resolution instead of on a monitor that's
+    about to disappear. Returns False on timeout (the game is started anyway).
+    """
+    vd = cfg.get("virtualDisplay", {})
+    match = vd.get("match", "Virtual Display").lower()  # Apollo's SudoVDA: "SudoMaker Virtual Display Adapter"
+    timeout = float(vd.get("timeoutSeconds", 45))
+    settle = float(vd.get("settleSeconds", 2))
+    if not IS_WINDOWS and displays is active_displays:
+        sleep(float(vd.get("fallbackSeconds", 5)))  # can't see displays here: just give the stream a head start
+        return True
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if any(match in name.lower() for name in displays()):
+            sleep(settle)  # let Windows finish moving to the new display layout
+            return True
+        sleep(0.5)
+    log(f"virtual display matching '{match}' didn't appear within {timeout:.0f}s; starting the game anyway")
+    return False
 
 
 def uptime_seconds() -> int:
@@ -1014,10 +1074,18 @@ def make_handler(cfg: dict[str, Any], library: Library, launcher: Launcher):
                 return
             try:
                 if self.path == "/launch":
-                    gid = self._body().get("id", "")
+                    body = self._body()
+                    gid = body.get("id", "")
                     entry = library.get(gid)
                     if not entry:
                         return self._json(404, {"error": f"unknown game {gid}"})
+                    if body.get("waitForDisplay"):
+                        log(f"waiting for Apollo's virtual display before starting {entry['title']}")
+                        generation = launcher.generation
+                        wait_for_virtual_display(cfg)
+                        if launcher.generation != generation:
+                            log("stream ended while waiting; not starting the game")
+                            return self._json(409, {"error": "The stream ended before the game started"})
                     launcher.launch(entry)
                     return self._json(200, {"ok": True})
                 if self.path == "/power":
@@ -1061,7 +1129,11 @@ def main() -> None:
     parser.add_argument("--config", default=str(Path(__file__).with_name("agent.json")))
     parser.add_argument("--list", action="store_true", help="print the detected library and exit")
     parser.add_argument("--check", metavar="TITLE", help="look a game up on the Steam store now and show the keyboard/mouse decision")
+    parser.add_argument("--displays", action="store_true", help="list active displays (run while streaming to see Apollo's virtual display)")
     args = parser.parse_args()
+    if args.displays:
+        print("\n".join(active_displays()) or "No displays found (this only works on Windows)")
+        return
     if args.check:
         check_title(args.check)
         return

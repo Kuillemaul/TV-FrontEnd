@@ -163,9 +163,9 @@ The TV runs **Moonlight** to show the stream.
 
 ### On each PC
 
-1. **Install Sunshine** (https://app.lizardbyte.dev/Sunshine). In its web UI (`https://localhost:47990`), keep the
-   default **Desktop** app. Hearth starts the game itself and then streams the desktop, so any game works without
-   adding each one to Sunshine.
+1. **Install Apollo** (https://github.com/ClassicOldSong/Apollo), or Sunshine. In its web UI
+   (`https://localhost:47990`), keep the default **Desktop** app. Hearth starts the game itself and streams the
+   desktop, so any game works without adding each one to Apollo. See [Apollo](#apollo-virtual-display) below.
 2. **Install Python 3.9+** (Windows: from python.org, tick "Add to PATH").
 3. **Install the agent:** copy the `pc-agent/` folder to the PC, then:
    - Windows: `powershell -ExecutionPolicy Bypass -File install-windows.ps1`. This creates `agent.json` with a random
@@ -195,6 +195,25 @@ The TV runs **Moonlight** to show the stream.
    - Turn on Wake-on-LAN in the BIOS and in the network adapter's Windows properties (*Wake on Magic Packet*).
    - Windows must auto-login (`netplwiz`, or Sysinternals Autologon) so the agent and Sunshine run after a wake.
    - Give the PC a DHCP reservation so its IP never changes.
+
+### Apollo (virtual display)
+
+Apollo creates a virtual monitor when the TV connects, matching the TV's resolution and refresh rate, and can turn
+your real monitors off for the session. Hearth works with that:
+
+1. Set `virtualDisplay: true` for the PC in the TV's `config.yaml`.
+2. When you pick a game, the TV **connects first**: Apollo creates the virtual monitor and switches your monitors
+   off. The agent **waits until Windows reports the virtual monitor**, then starts the game, so it opens on the
+   virtual display at the TV's resolution. When you quit, the game closes first (`quitOnExit`) and Apollo brings
+   your monitors back as usual. If you quit while it's still connecting, the game isn't started at all.
+3. Keep your Apollo settings as they are (virtual display, monitors off). Set the stream resolution, FPS and HDR in
+   **Moonlight on the TV**. Apollo builds the virtual monitor to match.
+4. In Apollo's web UI → *Clients*, make sure the TV (OptiPlex) is allowed to view, control and launch apps.
+5. Check it once: start a stream from the TV, then on the PC run `python hearth_agent.py --displays`. You should see
+   a line like *SudoMaker Virtual Display Adapter*. If your virtual display has a different name, set
+   `"virtualDisplay": {"match": "part of that name"}` in `agent.json`.
+
+The TV still uses Moonlight to receive the stream; Apollo is only on the PCs.
 
 ### Big libraries: favourites only
 

@@ -119,6 +119,9 @@ gaming:
       moonlightApp: Desktop
       mac: "AA:BB:CC:DD:EE:01"   # Wake-on-LAN
       quitOnExit: true           # close the game on the PC when you quit the stream
+      # Apollo: connect the stream first (Apollo creates its virtual monitor and turns the real ones
+      # off), then start the game on that virtual monitor. Leave out for plain Sunshine.
+      virtualDisplay: true
     - id: emulator-pc
       name: Emulator PC
       agent: http://192.168.1.51:47800
@@ -126,6 +129,7 @@ gaming:
       moonlightHost: 192.168.1.51
       moonlightApp: Desktop
       mac: "AA:BB:CC:DD:EE:02"
+      virtualDisplay: true
   # Force the keyboard & mouse prompt on/off. Key is "<hostId>:<gameId>" or the exact title.
   kbmOverrides:
     "Stardew Valley": false

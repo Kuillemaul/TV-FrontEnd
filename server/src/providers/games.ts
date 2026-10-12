@@ -349,23 +349,45 @@ export class GameService {
         await this.wakeAndWait(h, () => this.status(hostId, gameId, 'waking', `Waking ${h.name}…`));
       }
 
-      this.status(hostId, gameId, 'launching', `Starting ${title} on ${h.name}…`);
-      const res = await this.agent(h, '/launch', { method: 'POST', body: JSON.stringify({ id: gameId }) }, 30000);
-      if (!res.ok) throw new Error(`${h.name} could not start ${title}: ${await res.text()}`);
-
-      this.status(hostId, gameId, 'streaming', `Streaming ${title}`);
-      this.state.addRecentGame({ hostId, gameId, title, art });
+      const moonlight = { type: 'command' as const, command: expand(this.cfg.moonlight, { host: h.moonlightHost, app: h.moonlightApp }) };
       const started = Date.now();
-      await this.launcher.launch(
-        `game:${hostId}:${gameId}`,
-        title,
-        { type: 'command', command: expand(this.cfg.moonlight, { host: h.moonlightHost, app: h.moonlightApp }) },
-        () => {
-          this.state.addPlaytime(`${hostId}:${gameId}`, (Date.now() - started) / 60_000);
-          this.status(hostId, gameId, 'ended', `${title} closed`);
-          if (h.quitOnExit) this.agent(h, '/stop', { method: 'POST', body: '{}' }).catch(() => {});
-        },
-      );
+      let failed = false;
+      const onStreamEnd = () => {
+        this.state.addPlaytime(`${hostId}:${gameId}`, (Date.now() - started) / 60_000);
+        if (!failed) this.status(hostId, gameId, 'ended', `${title} closed`);
+        if (h.quitOnExit) this.agent(h, '/stop', { method: 'POST', body: '{}' }).catch(() => {});
+      };
+      const startGame = async (waitForDisplay: boolean) => {
+        const res = await this.agent(
+          h,
+          '/launch',
+          { method: 'POST', body: JSON.stringify({ id: gameId, waitForDisplay }) },
+          waitForDisplay ? 75_000 : 30_000,
+        );
+        if (!res.ok) throw new Error(`${h.name} could not start ${title}: ${await res.text()}`);
+      };
+
+      if (h.virtualDisplay) {
+        // Apollo: connect first so the virtual monitor exists (and the real ones switch off),
+        // then the agent waits for it and starts the game on it.
+        this.status(hostId, gameId, 'launching', `Connecting to ${h.name}…`);
+        await this.launcher.launch(`game:${hostId}:${gameId}`, title, moonlight, onStreamEnd);
+        try {
+          await startGame(true);
+        } catch (err) {
+          failed = true;
+          await this.launcher.stop();
+          throw err;
+        }
+        this.status(hostId, gameId, 'streaming', `Streaming ${title}`);
+        this.state.addRecentGame({ hostId, gameId, title, art });
+      } else {
+        this.status(hostId, gameId, 'launching', `Starting ${title} on ${h.name}…`);
+        await startGame(false);
+        this.status(hostId, gameId, 'streaming', `Streaming ${title}`);
+        this.state.addRecentGame({ hostId, gameId, title, art });
+        await this.launcher.launch(`game:${hostId}:${gameId}`, title, moonlight, onStreamEnd);
+      }
     } catch (err) {
       this.status(hostId, gameId, 'error', (err as Error).message);
       throw err;

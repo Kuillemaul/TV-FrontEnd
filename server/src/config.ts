@@ -142,6 +142,11 @@ export interface GameHostConfig {
   mac?: string;
   /** Ask the agent to close the game when the stream ends. */
   quitOnExit: boolean;
+  /**
+   * Apollo (or any host that creates a virtual monitor when the stream connects): start the
+   * stream first and have the agent wait for the virtual display before starting the game.
+   */
+  virtualDisplay: boolean;
 }
 
 export interface GamingConfig {
@@ -273,6 +278,7 @@ function normaliseHost(h: any, i: number): GameHostConfig {
     moonlightApp: String(h.moonlightApp ?? 'Desktop'),
     mac: h.mac ? String(h.mac) : undefined,
     quitOnExit: h.quitOnExit ?? true,
+    virtualDisplay: h.virtualDisplay ?? false,
   };
 }
 

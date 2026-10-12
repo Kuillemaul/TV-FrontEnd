@@ -236,6 +236,19 @@ class KeyboardMouseTests(unittest.TestCase):
         self.assertIsNone(agent.match_search("Halo", [{"id": 9, "name": "Halo Infinite"}]))
 
 
+class VirtualDisplayTests(unittest.TestCase):
+    def test_waits_until_apollo_display_appears(self) -> None:
+        seen = iter([["Intel(R) UHD Graphics"], ["Intel(R) UHD Graphics"], ["SudoMaker Virtual Display Adapter"]])
+        slept: list[float] = []
+        ok = agent.wait_for_virtual_display({"virtualDisplay": {"settleSeconds": 2}}, displays=lambda: next(seen), sleep=slept.append)
+        self.assertTrue(ok)
+        self.assertEqual(slept, [0.5, 0.5, 2.0])
+
+    def test_times_out_and_carries_on(self) -> None:
+        ok = agent.wait_for_virtual_display({"virtualDisplay": {"timeoutSeconds": 0}}, displays=lambda: [], sleep=lambda s: None)
+        self.assertFalse(ok)
+
+
 class LibraryTests(unittest.TestCase):
     def test_frontend_entry_replaces_duplicate_steam_entry(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
