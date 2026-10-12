@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
+import type { RequestsConfig } from './providers/seerr.js';
 
 /** How a tile launches something on the TV. */
 export type LaunchSpec =
@@ -183,6 +184,8 @@ export interface HearthConfig {
   livetv: LiveTvConfig;
   homeassistant?: HomeAssistantConfig;
   lab: LabConfig;
+  /** Seerr for requests; Radarr/Sonarr/Lidarr for the download queue. */
+  requests: RequestsConfig;
   gaming: GamingConfig;
   /** Global keys that close the foreground app and return to Hearth. */
   homeKeys: HotkeyConfig[];
@@ -246,6 +249,7 @@ function defaults(): HearthConfig {
       recordingPlayer: ['mpv', '--fs', '--force-window=immediate', '--title=Hearth Recording', '{url}'],
     },
     lab: { services: [], sensors: [], actions: [] },
+    requests: {},
     scenes: [],
     alerts: { rules: [], labDown: true },
     tv: {
@@ -405,6 +409,14 @@ export function loadConfig(path = resolveConfigPath()): HearthConfig {
     cfg.lab.services = Array.isArray(raw.lab.services) ? raw.lab.services : [];
     cfg.lab.sensors = Array.isArray(raw.lab.sensors) ? raw.lab.sensors : [];
     cfg.lab.actions = Array.isArray(raw.lab.actions) ? raw.lab.actions : [];
+  }
+  if (raw.requests) {
+    for (const k of ['seerr', 'radarr', 'sonarr', 'lidarr'] as const) {
+      const svc = raw.requests[k];
+      if (svc?.url && svc?.apiKey && !isPlaceholder(svc.apiKey)) {
+        cfg.requests[k] = { url: String(svc.url).replace(/\/(login)?\/?$/, ''), apiKey: String(svc.apiKey) };
+      }
+    }
   }
   if (Array.isArray(raw.scenes)) cfg.scenes = raw.scenes;
   if (raw.alerts) {

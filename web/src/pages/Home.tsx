@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { EntityCard } from '../components/EntityCard';
 import { PinnedRow } from '../components/Pins';
+import { DownloadsList } from './Requests';
 import { Icon } from '../components/Icon';
 import { Row, Tile } from '../components/Layout';
 import { formatTime, post, useApi, useServerEvents, type AppTile, type Dashboard, type GameLibrary, type Guide, type OnDeckItem } from '../lib/api';
@@ -116,6 +117,8 @@ export function HomePage() {
           ))}
         </Row>
       ) : null}
+
+      {hearth.info?.features.downloads && !hearth.isKid ? <DownloadsList compact /> : null}
 
       {onNow.length ? (
         <Row title="On now">

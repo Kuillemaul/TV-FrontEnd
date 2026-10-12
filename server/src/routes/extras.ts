@@ -4,6 +4,7 @@ import { extname, join } from 'node:path';
 import type { AlertService } from '../alerts.js';
 import { AudioControl } from '../audio.js';
 import { DisplayControl } from '../display.js';
+import { RequestsClient } from '../providers/seerr.js';
 import type { EventBus } from '../bus.js';
 import { expand, type HearthConfig, type LabAction } from '../config.js';
 import type { Launcher } from '../launcher.js';
@@ -129,6 +130,50 @@ export function registerExtras(app: FastifyInstance, ctx: ExtrasContext): void {
       await display.auto(String(req.body.output));
     }),
   );
+
+  /* ---------------- requests (Seerr) & downloads (Radarr / Sonarr / Lidarr) ---------------- */
+
+  const requests = new RequestsClient(config.requests);
+  const parentsOnly = () => {
+    if (isKid()) throw new PermissionError('Requests are for parents');
+  };
+  app.get<{ Querystring: { q?: string } }>('/api/requests/search', async (req) =>
+    run(async () => {
+      parentsOnly();
+      const q = (req.query.q ?? '').trim();
+      return { results: q ? await requests.search(q) : [] };
+    }),
+  );
+  app.get<{ Params: { kind: 'trending' | 'movies' | 'tv' | 'upcoming' } }>('/api/requests/discover/:kind', async (req) =>
+    run(async () => {
+      parentsOnly();
+      if (!['trending', 'movies', 'tv', 'upcoming'].includes(req.params.kind)) throw new Error('Unknown list');
+      return { results: await requests.discover(req.params.kind) };
+    }),
+  );
+  app.get('/api/requests/recent', async () =>
+    run(async () => {
+      parentsOnly();
+      return { results: await requests.recent() };
+    }),
+  );
+  app.get<{ Params: { type: 'movie' | 'tv'; id: string } }>('/api/requests/media/:type/:id', async (req) =>
+    run(async () => {
+      parentsOnly();
+      if (req.params.type !== 'movie' && req.params.type !== 'tv') throw new Error('Unknown type');
+      return { media: await requests.details(req.params.type, Number(req.params.id)) };
+    }),
+  );
+  app.post<{ Body: { mediaType: 'movie' | 'tv'; id: number } }>('/api/requests', async (req) =>
+    run(async () => {
+      requireParent();
+      const { mediaType, id } = req.body;
+      if (mediaType !== 'movie' && mediaType !== 'tv') throw new Error('Unknown type');
+      await requests.request(mediaType, Number(id));
+      return { media: await requests.details(mediaType, Number(id)) };
+    }),
+  );
+  app.get('/api/downloads', async () => (requests.hasDownloads && !isKid() ? requests.downloads() : { items: [], errors: [] }));
 
   /* ---------------- Moonlight ---------------- */
 

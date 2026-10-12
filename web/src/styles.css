@@ -1795,3 +1795,21 @@ body.is-alert { background: transparent; }
 .cover-dots span:nth-child(2) { animation-delay: 0.15s; }
 .cover-dots span:nth-child(3) { animation-delay: 0.3s; }
 @keyframes cover-dot { 0%, 100% { opacity: 0.25; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-0.4rem); } }
+
+/* ---------------- requests & downloads ---------------- */
+
+.req-requested { background: rgba(255, 181, 71, 0.92); color: #1b1300; }
+.req-processing { background: rgba(var(--accent-rgb), 0.92); color: #0b0d12; }
+.req-partial { background: rgba(61, 220, 151, 0.7); color: #04140d; }
+.req-available { background: rgba(61, 220, 151, 0.92); color: #04140d; }
+.req-blocked { background: rgba(255, 93, 108, 0.9); color: #1b0004; }
+
+.dl-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(28rem, 1fr)); gap: 0.8rem; }
+.dl-item { display: flex; align-items: center; gap: 1rem; padding: 0.9rem 1.1rem; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--border); color: var(--text-2); }
+.dl-item:focus { outline: 2px solid var(--focus); }
+.dl-text { flex: 1; min-width: 0; }
+.dl-title { color: var(--text); font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dl-sub { font-size: 0.9rem; color: var(--text-3); margin: 0.15rem 0 0.5rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dl-bar { height: 0.35rem; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.dl-bar div { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width 1s ease; }
+.dl-pct { font-variant-numeric: tabular-nums; color: var(--text); font-weight: 650; }

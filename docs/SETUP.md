@@ -65,6 +65,11 @@ quit the game, press Home, or Moonlight closes) Hearth closes the game and ends 
 *quit*, so Apollo removes its virtual display and your monitors come back on. With the Apollo login in `agent.json`
 the agent also ends it directly. Turn these off per PC with `loadingScreen: false` / `endSessionOnExit: false`.
 
+**Requests (Seerr):** with `requests:` in config.yaml, a **Requests** tab appears (parents only): search with the
+keyboard or phone remote, or browse Trending / Popular / Coming soon with the remote, then *Request* a film or every
+season of a show. Badges show what's requested, on its way or already in your library. With Radarr, Sonarr or
+Lidarr added too, a **Downloading** list (progress and time left) shows on Requests and Home.
+
 **Display:** Settings → Display picks the resolution (4K, 1080p…) and refresh rate (60/59.94/50/24 Hz). A new
 setting goes back by itself after 15 seconds unless you press *Keep*, so a mode the TV can't show never leaves you
 with a black screen. HDR isn't available on this setup yet: cage (the kiosk compositor in Debian 13) can't output

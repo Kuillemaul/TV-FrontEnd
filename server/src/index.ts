@@ -194,6 +194,8 @@ app.get('/api/info', async () => ({
     tvInputs: config.tv.inputs.length,
     wakeWordAvailable: Boolean(ha),
     labActions: config.lab.actions.length,
+    requests: Boolean(config.requests.seerr),
+    downloads: Boolean(config.requests.radarr || config.requests.sonarr || config.requests.lidarr),
   },
   screensaver: config.screensaver,
   ignoredExamples: config.ignoredExamples,

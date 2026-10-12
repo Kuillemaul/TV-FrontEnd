@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-export type PageId = 'home' | 'tv' | 'apps' | 'games' | 'smarthome' | 'lab' | 'settings';
+export type PageId = 'home' | 'tv' | 'apps' | 'games' | 'requests' | 'smarthome' | 'lab' | 'settings';
 
 export interface Info {
   name: string;
@@ -12,7 +12,7 @@ export interface Info {
   ignoredExamples: string[];
   session: Session | null;
   configPath: string;
-  features: { plex: boolean; tvInputs: number; wakeWordAvailable: boolean; labActions: number };
+  features: { plex: boolean; tvInputs: number; wakeWordAvailable: boolean; labActions: number; requests: boolean; downloads: boolean };
   screensaver: { idleMinutes: number; pickerAfterMinutes: number };
 }
 
@@ -249,6 +249,29 @@ export interface AudioStatus {
   outputs: AudioOutput[];
   current: { outputId: string; channels: number } | null;
   sink: { name: string; description: string; channels: string[]; volume: number; muted: boolean } | null;
+}
+
+export interface MediaResult {
+  id: number;
+  mediaType: 'movie' | 'tv';
+  title: string;
+  year: number | null;
+  poster?: string;
+  backdrop?: string;
+  overview: string;
+  status: 'none' | 'requested' | 'processing' | 'partial' | 'available' | 'blocked';
+  requestedBy?: string;
+  approval?: 'pending' | 'approved' | 'declined';
+}
+
+export interface DownloadItem {
+  id: string;
+  kind: 'radarr' | 'sonarr' | 'lidarr';
+  title: string;
+  subtitle: string;
+  progress: number;
+  timeLeft: string | null;
+  status: string;
 }
 
 export interface KbmStatus {

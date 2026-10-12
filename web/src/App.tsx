@@ -36,6 +36,7 @@ import { activateFocused, dispatchNav, ensureFocus, focusFirst, installNavigatio
 import { GamesPage } from './pages/Games';
 import { HomePage, useNow } from './pages/Home';
 import { LiveTvPage } from './pages/LiveTv';
+import { RequestsPage } from './pages/Requests';
 import { AppsPage, LabPage, SettingsPage, SmartHomePage } from './pages/Other';
 
 const TABS: Array<{ id: PageId; label: string; icon: string }> = [
@@ -43,6 +44,7 @@ const TABS: Array<{ id: PageId; label: string; icon: string }> = [
   { id: 'tv', label: 'Live TV', icon: 'tv' },
   { id: 'apps', label: 'Apps', icon: 'apps' },
   { id: 'games', label: 'Games', icon: 'gamepad' },
+  { id: 'requests', label: 'Requests', icon: 'download' },
   { id: 'smarthome', label: 'Smart Home', icon: 'bulb' },
   { id: 'lab', label: 'Lab', icon: 'server' },
 ];
@@ -331,7 +333,7 @@ export function App() {
             {info?.name ?? 'Hearth'}
           </div>
           <div className="tabs">
-            {TABS.filter((t) => !allowed || allowed.includes(t.id)).map((t) => (
+            {TABS.filter((t) => (!allowed || allowed.includes(t.id)) && (t.id !== 'requests' || info?.features.requests || info?.features.downloads)).map((t) => (
               <button key={t.id} className={`tab ${page === t.id ? 'tab-active' : ''}`} data-nav onClick={() => navigate(t.id)}>
                 <Icon name={t.icon} size="1.2em" />
                 <span>{t.label}</span>
@@ -363,6 +365,7 @@ export function App() {
           {page === 'tv' && <LiveTvPage />}
           {page === 'apps' && <AppsPage />}
           {page === 'games' && <GamesPage />}
+          {page === 'requests' && <RequestsPage />}
           {page === 'smarthome' && <SmartHomePage />}
           {page === 'lab' && <LabPage />}
           {page === 'settings' && <SettingsPage />}
