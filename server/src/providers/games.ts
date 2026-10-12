@@ -357,7 +357,7 @@ export class GameService {
   }
 
   /** Wake the host if needed, start the game there, then stream it with Moonlight. */
-  async launch(hostId: string, gameId: string, meta: { title?: string; art?: string } = {}): Promise<void> {
+  async launch(hostId: string, gameId: string, meta: { title?: string; art?: string; players?: number } = {}): Promise<void> {
     if (this.demo) {
       this.status(hostId, gameId, 'error', 'Demo mode – add a gaming host and PC agent to config.yaml');
       return;
@@ -386,7 +386,8 @@ export class GameService {
         const res = await this.agent(
           h,
           '/launch',
-          { method: 'POST', body: JSON.stringify({ id: gameId, waitForDisplay }) },
+          // players: how many controllers are on the TV, so the agent can set up emulators (Eden…) for them.
+          { method: 'POST', body: JSON.stringify({ id: gameId, waitForDisplay, players: meta.players }) },
           waitForDisplay ? 75_000 : 30_000,
         );
         if (!res.ok) throw new Error(`${h.name} could not start ${title}: ${await res.text()}`);

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { formatMinutes, get, type Game, type GameDetails as Details } from '../lib/api';
+import { formatMinutes, get, useApi, type Game, type GameDetails as Details, type KbmStatus } from '../lib/api';
 import { useHearth } from '../lib/hearth';
 import { Icon } from './Icon';
-import { Button, Modal } from './Layout';
+import { Button, Chip, Modal } from './Layout';
 
 const RATING_LABEL: Record<string, string> = { E: 'Everyone', E10: 'Everyone 10+', T: 'Teen', M: 'Mature 17+' };
 
@@ -21,6 +21,12 @@ export function GameDetailsModal({ game, onClose }: { game: Game; onClose: () =>
   const [d, setD] = useState<Details | null>(null);
   const [error, setError] = useState('');
   const [shot, setShot] = useState(0);
+  // Emulated games: how many controllers to set up. Starts at the number connected to the TV.
+  const emulated = game.platform !== 'PC' && !/windows|ms-dos|pc \(/i.test(game.platform);
+  const input = useApi<KbmStatus>(emulated ? '/api/system/input' : null, 3000);
+  const connected = Math.max(1, Math.min(4, input.data?.gamepads.length ?? 1));
+  const [players, setPlayers] = useState<number | null>(null);
+  const chosenPlayers = players ?? connected;
 
   useEffect(() => {
     get<Details>(`/api/games/${encodeURIComponent(game.hostId)}/details/${encodeURIComponent(game.id)}`)
@@ -32,7 +38,14 @@ export function GameDetailsModal({ game, onClose }: { game: Game; onClose: () =>
   const backdrop = d?.screenshots[shot];
   const play = () => {
     onClose();
-    hearth.playGame({ hostId: game.hostId, gameId: game.id, title: game.title, requiresKbm: game.requiresKbm, art: game.art });
+    hearth.playGame({
+      hostId: game.hostId,
+      gameId: game.id,
+      title: game.title,
+      requiresKbm: game.requiresKbm,
+      art: game.art,
+      players: emulated ? chosenPlayers : undefined,
+    });
   };
   const playedLib = d?.libraryPlaytimeMinutes ?? 0;
   const playedHearth = d?.hearthPlaytimeMinutes ?? 0;
@@ -73,6 +86,18 @@ export function GameDetailsModal({ game, onClose }: { game: Game; onClose: () =>
               <div className="details-played">
                 Played {formatMinutes(Math.max(playedLib, playedHearth))}
                 {playedHearth ? <span> · {formatMinutes(playedHearth)} on this TV</span> : null}
+              </div>
+            ) : null}
+            {emulated ? (
+              <div className="details-players" data-nav-group>
+                <span className="modal-sub">
+                  Players{input.data ? ` · ${input.data.gamepads.length} controller${input.data.gamepads.length === 1 ? '' : 's'} connected` : ''}
+                </span>
+                {[1, 2, 3, 4].map((n) => (
+                  <Chip key={n} active={chosenPlayers === n} onClick={() => setPlayers(n)}>
+                    {n}
+                  </Chip>
+                ))}
               </div>
             ) : null}
             <div className="modal-actions" data-nav-group>

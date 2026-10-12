@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { isKeyboard, isMouse, kbmStatus, parseDevices } from './input.js';
+import { gamepads, isKeyboard, isMouse, kbmStatus, parseDevices } from './input.js';
 
 // /proc/bus/input/devices format: a keyboard+touchpad combo, a controller, an IR remote receiver.
 const SAMPLE = `I: Bus=0003 Vendor=046d Product=c52b Version=0111
@@ -32,10 +32,20 @@ test('detects keyboard + mouse combo and ignores controllers', () => {
   assert.ok(isKeyboard(k400) && isMouse(k400));
   assert.ok(!isKeyboard(pad) && !isMouse(pad));
   assert.ok(isKeyboard(flirc) && !isMouse(flirc));
-  assert.deepEqual(kbmStatus(devices), { keyboard: 'Logitech K400 Plus', mouse: 'Logitech K400 Plus' });
+  assert.deepEqual(kbmStatus(devices), { keyboard: 'Logitech K400 Plus', mouse: 'Logitech K400 Plus', gamepads: ['Microsoft Xbox Controller'] });
 });
 
 test('reports nothing when only a controller is plugged in', () => {
   const pad = parseDevices(SAMPLE).filter((d) => d.name.includes('Xbox'));
-  assert.deepEqual(kbmStatus(pad), { keyboard: null, mouse: null });
+  assert.deepEqual(kbmStatus(pad), { keyboard: null, mouse: null, gamepads: ['Microsoft Xbox Controller'] });
+});
+
+test('counts controllers but not DualSense motion/touchpad devices', () => {
+  const text = [
+    'N: Name="Microsoft Xbox Controller"\nH: Handlers=event7 js0\nB: KEY=0',
+    'N: Name="Sony Interactive Entertainment DualSense Wireless Controller"\nH: Handlers=event9 js1\nB: KEY=0',
+    'N: Name="Sony Interactive Entertainment DualSense Wireless Controller Motion Sensors"\nH: Handlers=event10 js2\nB: KEY=0',
+    'N: Name="Sony Interactive Entertainment DualSense Wireless Controller Touchpad"\nH: Handlers=event11 mouse2\nB: KEY=0',
+  ].join('\n\n');
+  assert.deepEqual(gamepads(parseDevices(text)), ['Microsoft Xbox Controller', 'Sony Interactive Entertainment DualSense Wireless Controller']);
 });

@@ -92,13 +92,24 @@ export function readDevices(): InputDevice[] {
 export interface KbmStatus {
   keyboard: string | null;
   mouse: string | null;
+  /** Game controllers, in the order the kernel lists them (≈ the order they were connected). */
+  gamepads: string[];
 }
 
-/** Names of the first connected keyboard and mouse, if any. */
+// DualSense/DualShock also expose motion-sensor and touchpad devices; those aren't extra players.
+const NOT_A_PLAYER = /motion sensors|touchpad|accelerometer|consumer control/i;
+
+/** Joystick devices (js0, js1…) that are real controllers. */
+export function gamepads(devices = readDevices()): string[] {
+  return devices.filter((d) => d.handlers.some((h) => /^js\d+$/.test(h)) && !NOT_A_PLAYER.test(d.name)).map((d) => d.name);
+}
+
+/** Names of the first connected keyboard and mouse, and all controllers. */
 export function kbmStatus(devices = readDevices()): KbmStatus {
   return {
     keyboard: devices.find(isKeyboard)?.name ?? null,
     mouse: devices.find(isMouse)?.name ?? null,
+    gamepads: gamepads(devices),
   };
 }
 

@@ -7,6 +7,8 @@ export interface PlayRequest {
   title: string;
   requiresKbm: boolean;
   art?: string;
+  /** Controllers to set up in the emulator (Eden/yuzu); defaults to how many are connected. */
+  players?: number;
 }
 
 export interface Hearth {

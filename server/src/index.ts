@@ -298,7 +298,7 @@ app.get<{ Querystring: { refresh?: string; all?: string } }>('/api/games', async
   return { demo: games.demo, hosts: await games.hosts(), games: list, recent };
 });
 
-app.post<{ Params: { hostId: string; gameId: string }; Body: { title?: string; art?: string } }>(
+app.post<{ Params: { hostId: string; gameId: string }; Body: { title?: string; art?: string; players?: number } }>(
   '/api/games/:hostId/:gameId/launch',
   async (req) => {
     if (!ProfileStore.allowsGame(profiles.active, req.params.hostId, req.params.gameId)) {

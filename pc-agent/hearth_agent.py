@@ -1005,6 +1005,106 @@ class Launcher:
         self.current = None
 
 
+# ---- Controllers for emulators ---------------------------------------------------------
+
+# Switch emulators from the yuzu family share yuzu's settings format.
+YUZU_FAMILY = ("eden", "yuzu", "suyu", "sudachi", "citron", "torzu")
+MAX_PLAYERS = 8
+
+
+def emulator_exe(spec: dict[str, Any]) -> str | None:
+    """The emulator's .exe path from a launch spec (LaunchBox command line or an argv list)."""
+    if spec.get("commandLine"):
+        m = re.match(r'\s*"([^"]+)"|\s*(\S+)', spec["commandLine"])
+        return (m.group(1) or m.group(2)) if m else None
+    if spec.get("command"):
+        return spec["command"][0]
+    return None
+
+
+def yuzu_config_path(exe: str, cfg: dict[str, Any]) -> Path | None:
+    """Where an Eden/yuzu install keeps qt-config.ini: agent.json override, portable "user" folder, or AppData."""
+    stem = Path(exe.replace("\\", "/")).stem.lower()
+    family = next((f for f in YUZU_FAMILY if f in stem), None)
+    if not family:
+        return None
+    override = cfg.get("controllers", {}).get(family, {}).get("config")
+    candidates = [Path(override)] if override else []
+    exe_dir = Path(exe).parent
+    candidates += [exe_dir / "user" / "config" / "qt-config.ini"]
+    appdata = os.environ.get("APPDATA")
+    if appdata:
+        candidates += [Path(appdata) / family / "config" / "qt-config.ini"]
+    candidates += [Path.home() / ".config" / family / "qt-config.ini"]
+    return next((c for c in candidates if c.is_file()), None)
+
+
+def set_yuzu_players(text: str, players: int) -> str | None:
+    """
+    Rewrite the [Controls] section of a yuzu-family qt-config.ini so players 1..N are connected
+    and the rest are not, and players 2..N use Player 1's mapping on controller ports 2..N
+    (Apollo gives every TV controller its own virtual Xbox pad, in order). Returns None if the
+    file doesn't look like a yuzu config, so nothing is touched.
+    """
+    lines = text.splitlines()
+    start = next((i for i, l in enumerate(lines) if l.strip() == "[Controls]"), None)
+    if start is None:
+        return None
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("[")), len(lines))
+    section = lines[start + 1 : end]
+    values: dict[str, str] = {}
+    order: list[str] = []
+    for line in section:
+        if "=" in line:
+            k, v = line.split("=", 1)
+            values[k] = v
+            order.append(k)
+    p1 = {k[len("player_0_") :]: v for k, v in values.items() if k.startswith("player_0_") and "\\" not in k}
+    if not any("port:" in v for v in p1.values()):
+        return None  # Player 1 isn't mapped to a controller; leave the file alone
+
+    def put(key: str, value: str) -> None:
+        if key not in values:
+            order.append(key)
+        values[key] = value
+
+    players = max(1, min(MAX_PLAYERS, players))
+    for n in range(MAX_PLAYERS):
+        put(f"player_{n}_connected\\default", "false")
+        put(f"player_{n}_connected", "true" if n < players else "false")
+    for n in range(1, players):
+        for name, value in p1.items():
+            if name == "connected":
+                continue
+            if name == "type" or "port:" in value:
+                put(f"player_{n}_{name}\\default", "false")
+                put(f"player_{n}_{name}", re.sub(r"port:\d+", f"port:{n}", value))
+    rebuilt = [f"{k}={values[k]}" for k in order]
+    return "\n".join(lines[: start + 1] + rebuilt + lines[end:]) + ("\n" if text.endswith("\n") else "")
+
+
+def configure_players(entry: dict[str, Any], players: int | None, cfg: dict[str, Any]) -> str | None:
+    """Before launching an emulator, set it up for the number of controllers on the TV."""
+    if not players or cfg.get("controllers", {}).get("enabled", True) is False:
+        return None
+    exe = emulator_exe(entry.get("_launch", {}))
+    path = yuzu_config_path(exe, cfg) if exe else None
+    if not path:
+        return None
+    text = path.read_text(encoding="utf-8")
+    updated = set_yuzu_players(text, players)
+    if updated is None:
+        log(f"{path}: Player 1 isn't mapped to a controller in the emulator; not changing players")
+        return None
+    backup = path.with_name(path.name + ".hearth-backup")
+    if not backup.exists():
+        backup.write_text(text, encoding="utf-8")
+    if updated != text:
+        path.write_text(updated, encoding="utf-8")
+    log(f"{Path(exe.replace(chr(92), '/')).stem}: {players} player(s) connected")
+    return str(path)
+
+
 # ---- Apollo / virtual display ---------------------------------------------------------
 
 
@@ -1167,6 +1267,13 @@ def make_handler(cfg: dict[str, Any], library: Library, launcher: Launcher):
                     entry = library.get(gid)
                     if not entry:
                         return self._json(404, {"error": f"unknown game {gid}"})
+                    # Close any running game first: Eden & co. save their settings on exit and
+                    # would overwrite the controller setup below.
+                    launcher.stop()
+                    try:
+                        configure_players(entry, body.get("players"), cfg)
+                    except Exception as err:  # never block a launch over controller setup
+                        log(f"controller setup skipped: {err}")
                     if body.get("waitForDisplay"):
                         log(f"waiting for Apollo's virtual display before starting {entry['title']}")
                         generation = launcher.generation

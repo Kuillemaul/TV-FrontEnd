@@ -211,6 +211,36 @@ Tips: map an emulator "quit" hotkey to a controller combo (e.g. RetroArch *Hotke
 away (e.g. `explorer.exe shell:AppsFolder\…` for Game Pass) is tracked by its install folder instead. Set
 `processDir` for such custom games, or the TV can't tell when they've ended (you'd leave with Home instead).
 
+### Multiplayer controllers (emulators)
+
+**How controllers reach the PC:** Moonlight sends every controller connected to the TV, and Apollo turns each into
+a virtual Xbox controller on the PC, **in the order they were connected to the OptiPlex**. Turn controllers on in
+player order (player 1 first) and that order is kept. In Apollo set the controller type to **Xbox 360** so every pad
+looks the same to the emulators. Leave no controllers plugged into the PC itself, or they'd take player 1.
+
+**Eden (and yuzu, Citron, Sudachi):** there's no command-line option for controllers (`eden.exe -f -g "game"` just
+starts a game full screen), so Hearth sets up Eden's settings file for you:
+
+1. Once: start a stream from the TV with one controller, open Eden on the PC through the stream, and in
+   *Emulation → Configure → Controls* map **Player 1** to that controller (Pro Controller). Map it while streaming,
+   so it's Apollo's virtual controller and not a pad plugged into the PC.
+2. That's it. Selecting a Switch game on the TV shows **Players 1–4**, preset to the number of controllers
+   connected. Before Eden starts, the agent marks that many players **connected** (the rest off) and gives
+   players 2–4 Player 1's mapping on controllers 2–4. Eden's original file is kept as `qt-config.ini.hearth-backup`.
+
+The agent finds the settings in Eden's `user` folder (portable) or `%APPDATA%\eden\config`. If yours is elsewhere,
+set `"controllers": {"eden": {"config": "D:/Emulators/Eden/user/config/qt-config.ini"}}` in `agent.json`. To turn
+this off, set `"controllers": {"enabled": false}`.
+
+**Other emulators** just need mapping once, by controller number, and then follow the same order:
+
+| Emulator | One-time setup |
+| --- | --- |
+| RetroArch | Nothing: controllers go to players 1–4 in order automatically. |
+| Dolphin (GameCube/Wii) | *Controllers*: Port 1–4 = Standard Controller, devices `XInput/0` … `XInput/3`. |
+| PCSX2 / DuckStation | *Controllers*: Port 1 = `XInput-0` / `SDL-0`, Port 2 = `XInput-1` / `SDL-1`. |
+| Ryujinx | Players 1–4 = Xbox controller (0) … (3). Not automated; ask if you use it. |
+
 ### Apollo (virtual display)
 
 Apollo creates a virtual monitor when the TV connects, matching the TV's resolution and refresh rate, and can turn

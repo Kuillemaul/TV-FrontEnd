@@ -276,6 +276,68 @@ class GameExitTests(unittest.TestCase):
         self.assertEqual(agent.processes_under("/", paths=fake), [])
 
 
+YUZU_INI = """[UI]
+theme=default
+
+[Controls]
+player_0_type\\default=true
+player_0_type=0
+player_0_connected\\default=true
+player_0_connected=true
+player_0_button_a\\default=false
+player_0_button_a="engine:sdl,port:0,guid:030000005e0400008e02000000007801,button:1"
+player_0_lstick\\default=false
+player_0_lstick="engine:sdl,port:0,guid:030000005e0400008e02000000007801,axis_x:0,axis_y:1,deadzone:0.150000"
+player_0_motionleft\\default=false
+player_0_motionleft="engine:keyboard,code:55,toggle:0"
+player_1_connected\\default=true
+player_1_connected=false
+player_1_button_a\\default=true
+player_1_button_a="engine:keyboard,code:67,toggle:0"
+
+[System]
+language_index=1
+"""
+
+
+class ControllerTests(unittest.TestCase):
+    def test_two_players_cloned_from_player_one(self) -> None:
+        out = agent.set_yuzu_players(YUZU_INI, 2)
+        self.assertIn("player_1_connected=true", out)
+        self.assertIn('player_1_button_a="engine:sdl,port:1,guid:030000005e0400008e02000000007801,button:1"', out)
+        self.assertIn("player_1_lstick=\"engine:sdl,port:1,", out)
+        self.assertIn("player_1_type=0", out)
+        self.assertIn("player_2_connected=false", out)
+        self.assertNotIn("player_1_motionleft", out, "keyboard-only mappings aren't copied")
+        self.assertTrue(out.startswith("[UI]") and "[System]\nlanguage_index=1" in out, "other sections untouched")
+        self.assertEqual(out.count("[Controls]"), 1)
+
+    def test_four_players_and_back_to_one(self) -> None:
+        four = agent.set_yuzu_players(YUZU_INI, 4)
+        self.assertIn('player_3_button_a="engine:sdl,port:3,', four)
+        self.assertIn("player_3_connected=true", four)
+        one = agent.set_yuzu_players(four, 1)
+        self.assertIn("player_1_connected=false", one)
+        self.assertIn("player_0_connected=true", one)
+
+    def test_unmapped_player_one_is_left_alone(self) -> None:
+        self.assertIsNone(agent.set_yuzu_players("[Controls]\nplayer_0_button_a=\"engine:keyboard,code:67\"\n", 2))
+        self.assertIsNone(agent.set_yuzu_players("[UI]\nx=1\n", 2))
+
+    def test_finds_eden_config_from_launchbox_command_line(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            exe_dir = Path(tmp) / "Eden"
+            (exe_dir / "user" / "config").mkdir(parents=True)
+            ini = exe_dir / "user" / "config" / "qt-config.ini"
+            ini.write_text(YUZU_INI)
+            entry = {"title": "Mario Kart 8", "_launch": {"commandLine": f'"{exe_dir / "eden.exe"}" -f -g "D:/Switch/mk8.nsp"'}}
+            self.assertEqual(agent.configure_players(entry, 3, {}), str(ini))
+            self.assertIn("player_2_connected=true", ini.read_text())
+            self.assertTrue((ini.parent / "qt-config.ini.hearth-backup").exists())
+            # Other emulators are untouched.
+            self.assertIsNone(agent.configure_players({"title": "x", "_launch": {"command": ["retroarch.exe", "-f"]}}, 2, {}))
+
+
 class LibraryTests(unittest.TestCase):
     def test_frontend_entry_replaces_duplicate_steam_entry(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

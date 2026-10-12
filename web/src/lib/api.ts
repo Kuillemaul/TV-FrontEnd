@@ -223,6 +223,7 @@ export interface LabStatus {
 export interface KbmStatus {
   keyboard: string | null;
   mouse: string | null;
+  gamepads: string[];
 }
 
 export type UiAction =

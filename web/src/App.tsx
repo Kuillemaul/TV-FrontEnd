@@ -178,7 +178,7 @@ export function App() {
   const startGame = useCallback(
     (g: PlayRequest) => {
       setLaunch({ ...g, stage: 'starting', message: `Connecting to the PC…` });
-      void post(`/api/games/${encodeURIComponent(g.hostId)}/${encodeURIComponent(g.gameId)}/launch`, { title: g.title, art: g.art });
+      void post(`/api/games/${encodeURIComponent(g.hostId)}/${encodeURIComponent(g.gameId)}/launch`, { title: g.title, art: g.art, players: g.players });
     },
     [],
   );
