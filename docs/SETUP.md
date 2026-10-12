@@ -56,6 +56,20 @@ once per service and it remembers you. Any Linux program works too:
 - { id: steam, name: Steam, color: "#1b2838", launch: { type: command, command: [steam, -gamepadui] } }
 ```
 
+### Streaming quality
+
+Paid streaming services decide your maximum quality from how secure the device's DRM is. A Linux PC only gets
+software DRM (Widevine L3), so in Chrome on Linux:
+
+| Service | Typical max on Linux | Notes |
+| --- | --- | --- |
+| Plex (Plex HTPC app) | Full quality, 4K/HDR from your own server | Real TV app, made for remotes |
+| YouTube (`/tv` interface) | 4K | TV interface, works well with a remote |
+| Netflix, Disney+, Max, Prime Video, Hulu, Paramount+ | ~720p, stereo | Website interfaces; easiest with an air-mouse remote |
+
+No 4K, HDR, Dolby Vision or Atmos from paid services is possible on Linux. If that matters, connect a
+Google TV Streamer, Shield or Apple TV to another HDMI input for those services.
+
 ## 2. Live TV with a USB tuner
 
 Hearth uses **Tvheadend** for the tuner, channel scan, guide (EPG) and recordings. It works with nearly every
@@ -237,7 +251,7 @@ they close Netflix, Plex, mpv or Moonlight and bring you back. Change these keys
 | --- | --- |
 | Black screen after boot | Switch to tty2 (Ctrl+Alt+F2), log in, and as `tv` check `journalctl --user -u hearth -b`. Check that `cage` runs: `journalctl -b | grep cage`. |
 | Home key does nothing inside apps | `tv` must be in the `input` group (`id tv`). Log out and back in after changing it. |
-| Netflix says the browser isn't supported | Use `google-chrome-stable` (Widevine). Chromium from Debian/Ubuntu often lacks it. Netflix in Chrome on Linux tops out at 1080p. |
+| Netflix says the browser isn't supported | Use `google-chrome-stable` (Widevine). Chromium from Debian/Ubuntu often lacks it. Expect 720p from Netflix and most paid services in a Linux browser (see [Streaming quality](#streaming-quality)). |
 | Choppy live TV | `vainfo` should list H.264/MPEG-2 profiles. Make sure `intel-media-va-driver` is installed and `hwdec=vaapi` is in `~/.config/mpv/mpv.conf`. |
 | "Gaming PC is offline and has no MAC address" | Add `mac:` for the host. Wake-on-LAN must be enabled in BIOS + NIC. |
 | Game starts on the PC but the stream is black | Sunshine's Desktop app must capture the screen the game is on; run the agent in the logged-in user session (the Windows installer does this). |
