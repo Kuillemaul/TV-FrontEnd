@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=Hearth
+Description=Hearth TV boot splash
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/hearth
+ScriptFile=/usr/share/plymouth/themes/hearth/hearth.script

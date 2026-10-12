@@ -80,6 +80,36 @@ fi
 PROFILE
 chown -R "$TV_USER:$TV_USER" "$TV_HOME"
 
+echo "==> Boot splash & quick boot"
+apt-get install -y --no-install-recommends plymouth plymouth-themes
+mkdir -p /usr/share/plymouth/themes/hearth
+cp /opt/hearth/os/plymouth/hearth/* /usr/share/plymouth/themes/hearth/
+# Load the Intel graphics driver early so the splash appears straight after the BIOS logo.
+grep -qx i915 /etc/initramfs-tools/modules 2>/dev/null || echo i915 >> /etc/initramfs-tools/modules
+# Leave the last splash frame on screen until the TV shell takes over (no text console flash).
+mkdir -p /etc/systemd/system/plymouth-quit.service.d
+cat > /etc/systemd/system/plymouth-quit.service.d/hearth.conf <<'UNIT'
+[Service]
+ExecStart=
+ExecStart=-/usr/bin/plymouth quit --retain-splash
+UNIT
+touch "$TV_HOME/.hushlogin"
+if [[ -f /etc/default/grub ]]; then
+  # No boot menu (hold Shift or tap Esc during boot to get it back), quiet kernel, splash on.
+  sed -i -E \
+    -e 's/^#?GRUB_TIMEOUT=.*/GRUB_TIMEOUT=1/' \
+    -e 's/^#?GRUB_TIMEOUT_STYLE=.*/GRUB_TIMEOUT_STYLE=hidden/' \
+    -e 's/^#?GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet splash loglevel=3 rd.udev.log_level=3 systemd.show_status=false vt.global_cursor_default=0"/' \
+    /etc/default/grub
+  grep -q '^GRUB_TIMEOUT_STYLE=' /etc/default/grub || echo 'GRUB_TIMEOUT_STYLE=hidden' >> /etc/default/grub
+  update-grub
+fi
+plymouth-set-default-theme -R hearth
+# Waiting for the network to be "fully online" isn't needed to show the TV (Hearth retries).
+for unit in systemd-networkd-wait-online.service NetworkManager-wait-online.service; do
+  systemctl disable --now "$unit" 2>/dev/null || true
+done
+
 # Let the tv user sleep/reboot/power off from the Settings page without a password.
 mkdir -p /etc/polkit-1/rules.d
 cat > /etc/polkit-1/rules.d/50-hearth-power.rules <<'RULES'

@@ -17,3 +17,12 @@ createRoot(document.getElementById('root')!).render(
     <Root />
   </StrictMode>,
 );
+
+// Fade out the boot logo (index.html) once the app has painted.
+const splash = document.getElementById('splash');
+if (splash) {
+  setTimeout(() => {
+    splash.style.opacity = '0';
+    setTimeout(() => splash.remove(), 450);
+  }, 250);
+}

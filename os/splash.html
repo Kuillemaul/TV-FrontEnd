@@ -1,0 +1,29 @@
+<!doctype html>
+<!-- First thing Chrome shows: the boot logo, until the Hearth server answers. Starting
+     Chrome and the server at the same time instead of one after the other saves seconds. -->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Hearth</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #07090e; overflow: hidden; cursor: none; }
+      img { position: fixed; left: 50%; top: 50%; width: 15vw; transform: translate(-50%, -50%); animation: breathe 3.1s ease-in-out infinite alternate; }
+      @keyframes breathe { from { opacity: 0.8; } to { opacity: 1; } }
+    </style>
+  </head>
+  <body>
+    <img src="../web/public/splash.png" alt="" />
+    <script>
+      const url = 'http://127.0.0.1:8787/';
+      async function check() {
+        try {
+          await fetch(url + 'splash.png', { mode: 'no-cors', cache: 'no-store' });
+          location.replace(url);
+        } catch {
+          setTimeout(check, 250);
+        }
+      }
+      check();
+    </script>
+  </body>
+</html>

@@ -4,19 +4,16 @@
 set -uo pipefail
 
 systemctl --user import-environment WAYLAND_DISPLAY XDG_RUNTIME_DIR XDG_SESSION_TYPE DISPLAY
-systemctl --user restart hearth.service
-
-for _ in $(seq 1 60); do
-  curl -fs http://127.0.0.1:8787/api/info >/dev/null && break
-  sleep 0.5
-done
+# Don't wait for it: Chrome starts at the same time and shows the boot logo (splash.html)
+# until the server answers, then switches to Hearth.
+systemctl --user restart --no-block hearth.service
 
 PROFILE="$HOME/.local/state/hearth/shell-browser"
 mkdir -p "$PROFILE"
 # If the UI browser ever crashes, bring it straight back.
 while true; do
   google-chrome-stable \
-    --kiosk --app=http://127.0.0.1:8787 \
+    --kiosk --app=file:///opt/hearth/os/splash.html \
     --user-data-dir="$PROFILE" \
     --ozone-platform-hint=auto \
     --noerrdialogs --disable-session-crashed-bubble --disable-infobars \

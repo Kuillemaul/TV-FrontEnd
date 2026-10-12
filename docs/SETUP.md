@@ -24,6 +24,8 @@ port. Use a **DP→HDMI 2.0 active** adapter or cable for 4K60 HDR. 8 GB of RAM 
 - *Power Management → AC Recovery*: **Power On** (it comes back after a power cut)
 - *Power Management → USB Wake Support*: **Enabled** (the remote/keyboard wakes it from sleep)
 - *Secure Boot*: either setting works; disable it if you plan to use out-of-tree tuner drivers
+- Faster boot: *POST Behavior → Fastboot*: **Minimal**; *Extend BIOS POST Time*: **0 seconds**; and in
+  *Boot Sequence* put the SSD's "debian" entry first and untick network (PXE) boot
 
 **OS:** install **Debian 13** (or Ubuntu Server 24.04) *without* a desktop environment. In Debian's installer, untick
 "Debian desktop environment" and "GNOME". Keep "SSH server". Create any admin user you like; the installer creates
@@ -54,6 +56,8 @@ The installer:
 - runs the server as a systemd **user** service (`systemctl --user status hearth` as `tv`)
 - adds `tv` to the `input` group so the global **Home** key and the keyboard/mouse detection work
 - lets Settings → Sleep/Restart/Shut down work without a password (polkit rule)
+- adds the Hearth boot splash (Plymouth), hides the boot menu and kernel text, and starts Chrome and the server
+  side by side so the TV is ready sooner. Hold **Shift** or tap **Esc** while it boots to get the boot menu back.
 
 Edit `/opt/hearth/config/config.yaml`, then reboot. Logs: `journalctl --user -u hearth -f` (as `tv`).
 

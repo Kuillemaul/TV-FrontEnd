@@ -1,0 +1,21 @@
+# Hearth boot splash: the glowing logo, gently breathing, on the UI's background colour.
+# os/splash.html and web/index.html draw the same logo at the same size, so boot →
+# browser → Hearth looks like one continuous screen.
+Window.SetBackgroundTopColor(0.027, 0.035, 0.055);
+Window.SetBackgroundBottomColor(0.027, 0.035, 0.055);
+
+w = Window.GetWidth();
+h = Window.GetHeight();
+size = w * 0.15;
+logo.image = Image("logo.png").Scale(size, size);
+logo.sprite = Sprite(logo.image);
+logo.sprite.SetX(Window.GetX() + (w - size) / 2);
+logo.sprite.SetY(Window.GetY() + (h - size) / 2);
+
+t = 0;
+fun refresh_callback() {
+  t++;
+  # ~3 second breath at plymouth's 50 frames per second.
+  logo.sprite.SetOpacity(0.8 + 0.2 * Math.Sin(t / 25));
+}
+Plymouth.SetRefreshFunction(refresh_callback);
