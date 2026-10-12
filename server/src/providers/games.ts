@@ -9,7 +9,9 @@ export interface AgentGame {
   id: string;
   title: string;
   platform: string;
-  source: 'steam' | 'rom' | 'custom';
+  source: 'steam' | 'rom' | 'custom' | 'launchbox' | 'playnite';
+  /** Store/library a Playnite game comes from (Epic, Xbox, GOG…). */
+  store?: string;
   /** Public artwork URL, or true if the agent serves art at /art/<id>. */
   art?: string | boolean;
   controller?: 'full' | 'partial' | 'none' | 'unknown';
@@ -23,6 +25,7 @@ export interface Game {
   title: string;
   platform: string;
   source: AgentGame['source'];
+  store?: string;
   art?: string;
   controller: NonNullable<AgentGame['controller']>;
   requiresKbm: boolean;
@@ -117,6 +120,7 @@ export class GameService {
         title: g.title,
         platform: g.platform,
         source: g.source,
+        store: g.store || undefined,
         art: g.art === true ? `/api/games/${h.id}/art/${encodeURIComponent(g.id)}` : g.art || undefined,
         controller: g.controller ?? 'unknown',
         requiresKbm: this.kbm(h, g),

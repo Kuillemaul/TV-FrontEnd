@@ -1,8 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Icon } from '../components/Icon';
 import { Button, Chip, DemoBanner, PageHeader, Tile } from '../components/Layout';
 import { useApi, type GameLibrary } from '../lib/api';
 import { useHearth } from '../lib/hearth';
+
+/** Tiles drawn at once. Big libraries page in so the TV stays responsive to the remote. */
+const PAGE_SIZE = 120;
 
 export function GamesPage() {
   const hearth = useHearth();
@@ -10,6 +13,8 @@ export function GamesPage() {
   const [host, setHost] = useState<string>('all');
   const [platform, setPlatform] = useState<string>('all');
   const [query, setQuery] = useState('');
+  const [limit, setLimit] = useState(PAGE_SIZE);
+  useEffect(() => setLimit(PAGE_SIZE), [host, platform, query]);
 
   const platforms = useMemo(() => {
     const games = data?.games.filter((g) => host === 'all' || g.hostId === host) ?? [];
@@ -62,13 +67,13 @@ export function GamesPage() {
 
       {data && games.length === 0 ? <div className="empty">No games match.</div> : null}
       <div className="grid grid-posters">
-        {games.map((g, i) => (
+        {games.slice(0, limit).map((g, i) => (
           <Tile
             autoFocus={i === 0}
             key={`${g.hostId}:${g.id}`}
             shape="poster"
             title={g.title}
-            subtitle={`${g.platform} · ${g.hostName}`}
+            subtitle={`${g.store || g.platform} · ${g.hostName}`}
             image={g.art}
             badge={
               g.requiresKbm ? (
@@ -85,6 +90,14 @@ export function GamesPage() {
             onSelect={() => hearth.playGame({ hostId: g.hostId, gameId: g.id, title: g.title, requiresKbm: g.requiresKbm })}
           />
         ))}
+        {games.length > limit ? (
+          <Tile
+            shape="poster"
+            title={`Show ${Math.min(PAGE_SIZE, games.length - limit)} more`}
+            subtitle={`${games.length - limit} not shown · search or filter to narrow`}
+            onSelect={() => setLimit((l) => l + PAGE_SIZE)}
+          />
+        ) : null}
       </div>
     </div>
   );

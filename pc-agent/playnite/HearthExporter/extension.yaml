@@ -1,0 +1,9 @@
+Id: Hearth_Exporter
+Name: Hearth Exporter
+Author: Hearth
+Version: 1.0
+Module: HearthExporter.psm1
+Type: Script
+Links:
+  - Name: Hearth
+    Url: https://github.com/Kuillemaul/TV-FrontEnd

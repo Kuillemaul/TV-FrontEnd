@@ -9,7 +9,7 @@ controller, or a keyboard and mouse.
 - **Smart home**: Home Assistant dashboard with lights, climate, locks, covers, cameras and scenes, updating live.
 - **Home lab**: up/down and latency for your services, plus Home Assistant sensors (CPU, NAS, UPS, internet).
 - **Voice**: press the mic button and talk. TV commands ("open Netflix", "play Elden Ring", "watch channel 4") run locally; everything else ("turn off the kitchen lights") goes to Home Assistant Assist.
-- **Games**: every game on your gaming PC and emulator PC in one library. Pick one and the PC wakes, starts it, and it streams to the TV with Moonlight. Games that need a keyboard and mouse tell you to get them ready first, and the prompt shows whether a keyboard and mouse are plugged in.
+- **Games**: your favourites from **Playnite** (Steam, Epic, Game Pass, GOG…) and **LaunchBox** (emulators), plus Steam and custom entries, in one library. It handles libraries of 20,000+ ROMs. Pick one and the PC wakes, starts it, and it streams to the TV with Moonlight. Games that need a keyboard and mouse tell you to get them ready first, and the prompt shows whether a keyboard and mouse are plugged in.
 
 ```
  ┌──────────────── OptiPlex 5080 (Debian/Ubuntu) ─────────────────┐        ┌──── Gaming PC ────┐
@@ -61,7 +61,7 @@ Follow **[docs/SETUP.md](docs/SETUP.md)**: OS install, the tuner, Home Assistant
 | --- | --- |
 | `server/` | Hearth server (TypeScript, Fastify). Launcher, Tvheadend/Home Assistant/game clients, voice intents, input hotkeys. |
 | `web/` | The TV interface (React + Vite). `src/nav/spatial.ts` handles remote/controller/mouse navigation. |
-| `pc-agent/` | `hearth_agent.py`: dependency-free agent for the gaming and emulator PCs (Steam scan, ROM folders, launch/stop). |
+| `pc-agent/` | `hearth_agent.py`: dependency-free agent for the gaming and emulator PCs (Playnite, LaunchBox, Steam, ROM folders, launch/stop). `playnite/` holds the Playnite exporter extension. |
 | `config/config.example.yaml` | Every setting, documented. Copy to `config/config.yaml`. |
 | `os/` | OptiPlex setup: `install.sh`, the cage kiosk session, the systemd user service, mpv remote bindings, Tvheadend compose file. |
 
@@ -69,5 +69,6 @@ Follow **[docs/SETUP.md](docs/SETUP.md)**: OS install, the tuner, Home Assistant
 
 ```bash
 npm test -w server      # voice intents + input device detection
+cd pc-agent && python -m unittest test_hearth_agent.py   # LaunchBox/Playnite sources
 npm run typecheck
 ```

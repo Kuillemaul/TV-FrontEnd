@@ -133,18 +133,68 @@ The TV runs **Moonlight** to show the stream.
      token, starts the agent at logon, and opens port 47800 on private networks.
    - Linux: copy `agent.example.json` to `agent.json`, set a token, and run
      `python3 hearth_agent.py` from a systemd user service or your autostart.
-4. **Edit `agent.json`:**
-   - **Steam** is detected automatically (all library folders). Controller support for each game comes from the Steam
-     store. Games without controller support are flagged as needing a keyboard and mouse. Override per title under `kbm`.
-   - **Other launchers** (Epic, GOG, Xbox/Game Pass, Battle.net) go under `games` with a `uri` or `command`.
-     Set `processDir` so "quit on exit" can close them.
-   - **Emulators** go under `emulators`: one entry per system with its ROM folder, extensions and launch command
-     (`{rom}` is replaced). Cover art is matched by file name from `artDir` (e.g. scraped with Skraper).
+4. **Edit `agent.json`** to choose where games come from. You can combine sources:
+   - **Playnite** (recommended for the gaming PC): `"playnite": {"enabled": true}`. See [Playnite](#playnite) below.
+     It covers Steam, Epic, GOG, Xbox / Game Pass, EA, Ubisoft, Battle.net and games you added by hand.
+   - **LaunchBox** (recommended for the emulator PC): `"launchbox": {"path": "C:/Users/You/LaunchBox"}`.
+     See [LaunchBox](#launchbox) below.
+   - **Steam scan:** `"steam": {"enabled": true}` lists every installed Steam game. Leave it off if you use
+     Playnite. If both are on, the Playnite entry wins for any game they share.
+   - **Custom games:** anything else goes under `games` with a `uri` or `command`. A Game Pass game can be added
+     directly with `explorer.exe shell:AppsFolder\<AppID>` (find the ID with PowerShell `Get-StartApps`).
+     Set `processDir` so "quit on exit" can close it.
+   - **Plain ROM folders** (no frontend): `emulators` entries with a ROM folder, extensions and a command
+     (`{rom}` is replaced). Add `"only": ["Super Metroid", ...]` to list just those titles.
+   - **Keyboard & mouse:** Steam games without controller support in the Steam store are flagged automatically.
+     Force any title on or off under `"kbm": {"Factorio": true}`.
    - Check it: `python hearth_agent.py --list` prints what the TV will see.
 5. **Make it reachable and wakeable:**
    - Turn on Wake-on-LAN in the BIOS and in the network adapter's Windows properties (*Wake on Magic Packet*).
    - Windows must auto-login (`netplwiz`, or Sysinternals Autologon) so the agent and Sunshine run after a wake.
    - Give the PC a DHCP reservation so its IP never changes.
+
+### Big libraries: favourites only
+
+Hearth is built for huge collections. With LaunchBox and Playnite it lists **only your favourites** by default.
+Star a game there and it appears on the TV within about 15 seconds. Scanning happens in the background:
+LaunchBox's XML is streamed and only re-read when it changes (a 20,000-game library takes under a second),
+so opening the Games page never waits on the PC. If you do send thousands of games, the TV draws 120 at a time
+with a "Show more" tile. Search, the platform chips and voice ("play Chrono Trigger") still cover everything.
+
+### LaunchBox
+
+```json
+"launchbox": {
+  "path": "C:/Users/You/LaunchBox",
+  "favoritesOnly": true,
+  "platforms": [],
+  "includeHidden": false
+}
+```
+
+- Hearth launches each game the way LaunchBox would: with the game's assigned emulator, that emulator's
+  platform-specific command line (e.g. the RetroArch core), and the ROM path. PC/Windows entries open their
+  application path, which can be an .exe, a shortcut or a `steam://` link.
+- Box art comes from LaunchBox's `Images/<Platform>/Box - Front` folders.
+- `platforms` limits the list to certain systems, e.g. `["Nintendo 64", "Sega Genesis"]`.
+- Not supported: LaunchBox startup/pause screens, AutoHotkey scripts and additional apps. Hearth runs the
+  emulator directly, without opening LaunchBox or BigBox.
+
+### Playnite
+
+1. Copy `pc-agent/playnite/HearthExporter` into Playnite's `Extensions` folder
+   (`%APPDATA%\Playnite\Extensions\`, or `Extensions\` next to `Playnite.DesktopApp.exe` for the portable version),
+   then restart Playnite.
+2. Star the games you want on the TV (*Favorite*). The extension writes them to
+   `%APPDATA%\Playnite\ExtensionsData\hearth-favorites.json` when Playnite starts or closes, after a library update,
+   after you play something, and when you choose *Extensions → Hearth → Export favourites now*.
+3. Set `"playnite": {"enabled": true}` in `agent.json`. For portable Playnite, also set `exportPath`
+   (Playnite's `ExtensionsData` folder + `hearth-favorites.json`).
+
+Games launch **through Playnite** (`playnite://playnite/start/<id>`), so Epic, Game Pass and every other store
+and emulator works exactly as it does in Playnite. Keep Playnite running (it can start minimised).
+Cover art comes from Playnite. Controller support comes from Playnite's *Features* ("Full Controller Support").
+Tag a game **`Hearth: KBM`** to get the keyboard & mouse prompt, or **`Hearth: Controller`** to suppress it.
 
 ### On the TV
 

@@ -64,7 +64,8 @@ export interface Game {
   hostName: string;
   title: string;
   platform: string;
-  source: 'steam' | 'rom' | 'custom';
+  source: 'steam' | 'rom' | 'custom' | 'launchbox' | 'playnite';
+  store?: string;
   art?: string;
   controller: 'full' | 'partial' | 'none' | 'unknown';
   requiresKbm: boolean;
