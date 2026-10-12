@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 
 /** How a tile launches something on the TV. */
@@ -203,7 +204,9 @@ function normaliseHost(h: any, i: number): GameHostConfig {
 }
 
 export function resolveConfigPath(): string {
-  return resolve(process.env.HEARTH_CONFIG ?? join(process.cwd(), 'config', 'config.yaml'));
+  // Relative to the repo (server/src or server/dist → ../../config), not the working directory,
+  // because `npm start` runs from inside server/.
+  return resolve(process.env.HEARTH_CONFIG ?? fileURLToPath(new URL('../../config/config.yaml', import.meta.url)));
 }
 
 export function loadConfig(path = resolveConfigPath()): HearthConfig {
