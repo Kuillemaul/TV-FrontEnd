@@ -39,6 +39,7 @@ from typing import Any
 
 IS_WINDOWS = sys.platform == "win32"
 STEAM_STORE = "https://store.steampowered.com/api/appdetails?appids={appid}&l=english"
+STEAM_SEARCH = "https://store.steampowered.com/api/storesearch/?term={term}&l=english&cc=US"
 STEAM_ART = "https://cdn.cloudflare.steamstatic.com/steam/apps/{appid}/library_600x900.jpg"
 # Steam store category ids
 CAT_FULL_CONTROLLER = 28
@@ -131,18 +132,23 @@ def steam_games(root: Path) -> list[dict[str, Any]]:
 
 class SteamStoreCache:
     """
-    Looks up each Steam game's store page once, in the background, and caches it on disk:
+    Looks up games on the Steam store once, in the background, and caches the answers on disk:
     controller support, age rating, description, screenshots, genres and release year.
+
+    Works for games you don't own on Steam too (Epic, Game Pass, GOG, LaunchBox PC games):
+    they're matched to their Steam page by name, because almost every PC game is listed there.
     """
 
     def __init__(self, path: Path, enabled: bool) -> None:
         self.path = path
         self.enabled = enabled
         self.data: dict[str, dict[str, Any]] = {}
-        self.pending: list[int] = []
+        self.searches: dict[str, int] = {}  # normalised title -> appid (0 = no match)
+        self.pending: list[tuple[str, Any]] = []
         self.lock = threading.Lock()
         try:
             raw = json.loads(path.read_text())
+            self.searches = raw.pop("__search__", {})
             # Older caches stored just the controller string.
             self.data = {k: (v if isinstance(v, dict) else {"controller": v}) for k, v in raw.items()}
         except (OSError, ValueError):
@@ -150,36 +156,74 @@ class SteamStoreCache:
         if enabled:
             threading.Thread(target=self._worker, daemon=True).start()
 
+    def _queue(self, task: tuple[str, Any]) -> None:
+        with self.lock:
+            if task not in self.pending:
+                self.pending.append(task)
+
     def info(self, appid: int) -> dict[str, Any]:
         value = self.data.get(str(appid))
         if (value is None or "description" not in value) and self.enabled:
-            with self.lock:
-                if appid not in self.pending:
-                    self.pending.append(appid)
+            self._queue(("app", appid))
         return value or {}
 
     def get(self, appid: int) -> str:
         return self.info(appid).get("controller", "unknown")
 
+    def find(self, title: str) -> int | None:
+        """Steam appid for a game title, or None (unknown yet / no match). Looks it up in the background."""
+        key = norm_title(title)
+        if not key:
+            return None
+        if key in self.searches:
+            return self.searches[key] or None
+        if self.enabled:
+            self._queue(("search", title))
+        return None
+
+    def _save(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(json.dumps({**self.data, "__search__": self.searches}, indent=1))
+
     def _worker(self) -> None:
         while True:
             with self.lock:
-                appid = self.pending.pop(0) if self.pending else None
-            if appid is None:
+                task = self.pending.pop(0) if self.pending else None
+            if task is None:
                 time.sleep(2)
                 continue
+            kind, arg = task
             try:
-                with urllib.request.urlopen(STEAM_STORE.format(appid=appid), timeout=10) as res:
-                    body = json.load(res).get(str(appid), {})
-                self.data[str(appid)] = parse_steam_store(body)
-                self.path.parent.mkdir(parents=True, exist_ok=True)
-                self.path.write_text(json.dumps(self.data, indent=1))
+                if kind == "app":
+                    with urllib.request.urlopen(STEAM_STORE.format(appid=arg), timeout=10) as res:
+                        body = json.load(res).get(str(arg), {})
+                    self.data[str(arg)] = parse_steam_store(body)
+                else:
+                    url = STEAM_SEARCH.format(term=urllib.parse.quote(arg))
+                    with urllib.request.urlopen(url, timeout=10) as res:
+                        items = json.load(res).get("items", [])
+                    self.searches[norm_title(arg)] = match_search(arg, items) or 0
+                self._save()
             except Exception as err:  # network hiccup or rate limit: retry later
-                log(f"store lookup {appid} failed: {err}")
+                log(f"store lookup {arg} failed: {err}")
                 time.sleep(30)
-                with self.lock:
-                    self.pending.append(appid)
+                self._queue(task)
             time.sleep(1.6)  # stay well under the store API rate limit
+
+
+EDITION_WORDS = re.compile(
+    r"\b(goty|game of the year|definitive|deluxe|complete|ultimate|gold|premium|standard|enhanced|remastered|anniversary|digital)( edition)?\b|\bedition\b|[™®©]",
+    re.I,
+)
+
+
+def match_search(title: str, items: list[dict[str, Any]]) -> int | None:
+    """Pick the Steam search result that is really this game (ignoring "GOTY Edition", ™ and the like)."""
+    want = norm_title(EDITION_WORDS.sub("", title))
+    for item in items[:5]:
+        if norm_title(EDITION_WORDS.sub("", item.get("name", ""))) == want:
+            return int(item["id"])
+    return None
 
 
 def parse_steam_store(body: dict[str, Any]) -> dict[str, Any]:
@@ -425,6 +469,8 @@ class LaunchBoxSource:
             "requiresKbm": False,
             "rating": norm_rating(el.findtext("Rating")),
             "favorite": is_true(el.findtext("Favorite")),
+            "_lookup": is_pc,
+            "_steamAppid": int(m.group(1)) if is_pc and (m := re.search(r"steam://(?:rungameid|run)/(\d+)", app)) else None,
             "installed": True,
             "_launch": launch,
             "_processDir": process_dir,
@@ -515,6 +561,10 @@ class PlayniteSource:
             "art": bool(cover),
             "controller": controller,
             "requiresKbm": bool(tags & self.kbm_tags) and not (tags & self.pad_tags),
+            # Tags win; otherwise controller support is looked up on the Steam store.
+            "_tagKbm": True if tags & self.kbm_tags and not tags & self.pad_tags else False if tags & self.pad_tags else None,
+            "_steamAppid": int(g["gameId"]) if (g.get("source") or "").lower() == "steam" and str(g.get("gameId", "")).isdigit() else None,
+            "_lookup": True,
             "rating": next((r for r in map(norm_rating, ratings) if r), None),
             "favorite": legacy or bool(g.get("favorite")),
             "installed": g.get("installed", True) is not False,
@@ -593,7 +643,7 @@ class Library:
         steam_cfg = cfg.get("steam", {})
         self.steam_enabled = steam_cfg.get("enabled", True)
         self.steam_path = steam_cfg.get("path")
-        self.controllers = SteamStoreCache(cache_dir / "steam-store.json", steam_cfg.get("controllerLookup", True) and self.steam_enabled)
+        self.controllers = SteamStoreCache(cache_dir / "steam-store.json", steam_cfg.get("controllerLookup", True))
         self.launchbox = LaunchBoxSource(cfg["launchbox"]) if cfg.get("launchbox", {}).get("path") else None
         self.playnite = PlayniteSource(cfg["playnite"]) if cfg.get("playnite", {}).get("enabled") else None
         self.roms = RomFolderSource(cfg.get("emulators", []))
@@ -668,9 +718,10 @@ class Library:
             return None
         info = dict(e.get("_details") or {})
         shots: list[str] = []
-        if e.get("_appid"):
-            store = self.controllers.info(e["_appid"])
-            info = {**info, **{k: store.get(k) for k in ("description", "year", "genres") if store.get(k)}}
+        if e.get("_appid") or e.get("_lookup"):
+            store = self._steam_info(e)
+            # The library's own text wins; Steam fills the gaps.
+            info = {**{k: store.get(k) for k in ("description", "year", "genres") if store.get(k)}, **{k: v for k, v in info.items() if v}}
             shots = list(store.get("screenshots", []))
         local = self._local_shots(e)
         shots += [f"/shot/{gid}/{i}" for i in range(len(local))]
@@ -720,6 +771,8 @@ class Library:
                 "art": art if art and art.startswith("http") else bool(art),
                 "controller": g.get("controller", "unknown"),
                 "requiresKbm": g.get("requiresKbm", False),
+                "_tagKbm": g.get("requiresKbm"),
+                "_lookup": "controller" not in g,
                 "_launch": {"uri": g.get("uri"), "command": g.get("command"), "cwd": g.get("cwd")},
                 "_processDir": g.get("processDir"),
                 "_artPath": None if not art or art.startswith("http") else art,
@@ -735,15 +788,29 @@ class Library:
             return str(found) if found else None
         return e.get("_artPath")
 
+    def _steam_info(self, e: dict[str, Any]) -> dict[str, Any]:
+        """Steam store data for any PC game: by its Steam id, or matched by name (Epic, Game Pass…)."""
+        appid = e.get("_appid") or e.get("_steamAppid") or (self.controllers.find(e["title"]) if e.get("_lookup") else None)
+        return self.controllers.info(appid) if appid else {}
+
     def _public(self, e: dict[str, Any]) -> dict[str, Any]:
+        """
+        Keyboard & mouse, decided in this order: agent.json "kbm" override, a Playnite tag
+        (or "requiresKbm" on a custom game), the library's own controller info, the Steam
+        store listing. If nothing is known, no prompt.
+        """
         item = {k: v for k, v in e.items() if not k.startswith("_")}
         item.setdefault("favorite", True)
         item.setdefault("installed", True)
-        if e.get("_appid"):  # Steam controller support and rating are looked up in the background
-            store = self.controllers.info(e["_appid"])
-            item["controller"] = store.get("controller", "unknown")
+        if e.get("_appid") or e.get("_lookup"):
+            store = self._steam_info(e)
+            if item.get("controller", "unknown") == "unknown" and store.get("controller") not in (None, "unknown"):
+                item["controller"] = store["controller"]
+            if not item.get("rating") and store.get("rating"):
+                item["rating"] = store["rating"]
             item["requiresKbm"] = item["controller"] == "none"
-            item["rating"] = store.get("rating")
+        if e.get("_tagKbm") is not None:
+            item["requiresKbm"] = bool(e["_tagKbm"])
         overrides: dict[str, bool] = self.cfg.get("kbm", {})
         if e["title"] in overrides:
             item["requiresKbm"] = overrides[e["title"]]
@@ -970,11 +1037,31 @@ def make_handler(cfg: dict[str, Any], library: Library, launcher: Launcher):
     return Handler
 
 
+def check_title(title: str) -> None:
+    """Synchronous Steam lookup, for checking the keyboard/mouse decision from a terminal."""
+    url = STEAM_SEARCH.format(term=urllib.parse.quote(title))
+    with urllib.request.urlopen(url, timeout=10) as res:
+        items = json.load(res).get("items", [])
+    print("Steam search:", ", ".join(f"{i.get('name')} ({i.get('id')})" for i in items[:5]) or "no results")
+    appid = match_search(title, items)
+    if not appid:
+        print("No exact match -> controller unknown -> no keyboard/mouse prompt (tag it in Playnite if needed)")
+        return
+    with urllib.request.urlopen(STEAM_STORE.format(appid=appid), timeout=10) as res:
+        info = parse_steam_store(json.load(res).get(str(appid), {}))
+    kbm = info["controller"] == "none"
+    print(f"Matched appid {appid}: controller={info['controller']} rating={info.get('rating')} -> {'KEYBOARD & MOUSE prompt' if kbm else 'no prompt'}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Hearth PC agent")
     parser.add_argument("--config", default=str(Path(__file__).with_name("agent.json")))
     parser.add_argument("--list", action="store_true", help="print the detected library and exit")
+    parser.add_argument("--check", metavar="TITLE", help="look a game up on the Steam store now and show the keyboard/mouse decision")
     args = parser.parse_args()
+    if args.check:
+        check_title(args.check)
+        return
 
     cfg_path = Path(args.config)
     cfg = json.loads(cfg_path.read_text(encoding="utf-8"))

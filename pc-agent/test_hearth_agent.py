@@ -192,6 +192,50 @@ class BrowseTests(unittest.TestCase):
                                 "screenshots": ["https://x/1.jpg"], "genres": ["Indie"], "year": 2016})
 
 
+class KeyboardMouseTests(unittest.TestCase):
+    def test_store_lookup_decides_kbm_with_tags_and_overrides_winning(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            export = Path(tmp) / "hearth-library.json"
+            export.write_text(json.dumps([
+                # Steam game in Playnite: looked up by its Steam id
+                {"id": "civ", "name": "Sid Meier's Civilization VI", "source": "Steam", "gameId": "289070", "favorite": True},
+                # Epic game, no controller info in Playnite: matched to Steam by name
+                {"id": "aoe", "name": "Age of Empires IV: Anniversary Edition", "source": "Xbox", "favorite": True},
+                # Playnite already says full controller support
+                {"id": "fh5", "name": "Forza Horizon 5", "source": "Xbox", "features": ["Full Controller Support"], "favorite": True},
+                # Steam says no controller, but tagged as controller-friendly
+                {"id": "tagged", "name": "Factorio", "source": "Steam", "gameId": "427520", "tags": ["Hearth: Controller"], "favorite": True},
+                # Unknown everywhere: no prompt
+                {"id": "obscure", "name": "Tiny Indie Thing", "source": "itch.io", "favorite": True},
+            ]))
+            (Path(tmp) / "steam-store.json").write_text(json.dumps({
+                "289070": {"controller": "none", "rating": "E10", "description": "Civ"},
+                "1466860": {"controller": "none", "rating": "T", "description": "AoE"},
+                "427520": {"controller": "none", "description": "Factory"},
+                "__search__": {agent.norm_title("Age of Empires IV: Anniversary Edition"): 1466860, agent.norm_title("Tiny Indie Thing"): 0},
+            }))
+            lib = agent.Library({"token": "t", "steam": {"enabled": False, "controllerLookup": False},
+                                 "playnite": {"enabled": True, "exportPath": str(export)}, "kbm": {}}, Path(tmp))
+            lib.scan()
+            games = {g["title"]: g for g in lib.public()}
+            civ = games["Sid Meier's Civilization VI"]
+            self.assertEqual((civ["controller"], civ["requiresKbm"], civ["rating"]), ("none", True, "E10"))
+            self.assertTrue(games["Age of Empires IV: Anniversary Edition"]["requiresKbm"])
+            self.assertFalse(games["Forza Horizon 5"]["requiresKbm"])
+            self.assertFalse(games["Factorio"]["requiresKbm"], "tag beats the store")
+            self.assertFalse(games["Tiny Indie Thing"]["requiresKbm"], "unknown means no prompt")
+            self.assertEqual(lib.details("pn-civ")["description"], "Civ")
+
+            lib.cfg["kbm"] = {"Forza Horizon 5": True}
+            self.assertTrue({g["title"]: g for g in lib.public()}["Forza Horizon 5"]["requiresKbm"], "agent.json override beats all")
+
+    def test_search_matching_ignores_editions(self) -> None:
+        items = [{"id": 1, "name": "Age of Empires IV: Anniversary Edition"}, {"id": 2, "name": "Age of Empires II"}]
+        self.assertEqual(agent.match_search("Age of Empires IV", items), 1)
+        self.assertEqual(agent.match_search("The Witcher 3: Wild Hunt GOTY", [{"id": 292030, "name": "The Witcher® 3: Wild Hunt"}]), 292030)
+        self.assertIsNone(agent.match_search("Halo", [{"id": 9, "name": "Halo Infinite"}]))
+
+
 class LibraryTests(unittest.TestCase):
     def test_frontend_entry_replaces_duplicate_steam_entry(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

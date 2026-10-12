@@ -184,8 +184,12 @@ The TV runs **Moonlight** to show the stream.
      Set `processDir` so "quit on exit" can close it.
    - **Plain ROM folders** (no frontend): `emulators` entries with a ROM folder, extensions and a command
      (`{rom}` is replaced). Add `"only": ["Super Metroid", ...]` to list just those titles.
-   - **Keyboard & mouse:** Steam games without controller support in the Steam store are flagged automatically.
-     Force any title on or off under `"kbm": {"Factorio": true}`.
+   - **Keyboard & mouse** is worked out automatically for every PC game. The agent checks the game's Steam store
+     page: by its Steam id, or by name for Epic, Game Pass, GOG and LaunchBox PC games (almost every PC game is
+     listed on Steam). Games without controller support there get the "get your keyboard & mouse ready" prompt.
+     If the game can't be found, there's no prompt. To correct any game, tag it `Hearth: KBM` or
+     `Hearth: Controller` in Playnite, or add it to `"kbm": {"Factorio": true}` in `agent.json`.
+     Check what it decides for a title with `python hearth_agent.py --check "Age of Empires IV"`.
    - Check it: `python hearth_agent.py --list` prints what the TV will see.
 5. **Make it reachable and wakeable:**
    - Turn on Wake-on-LAN in the BIOS and in the network adapter's Windows properties (*Wake on Magic Packet*).
@@ -233,8 +237,9 @@ with a "Show more" tile. Search, the platform chips and voice ("play Chrono Trig
 
 Games launch **through Playnite** (`playnite://playnite/start/<id>`), so Epic, Game Pass and every other store
 and emulator works exactly as it does in Playnite. Keep Playnite running (it can start minimised).
-Cover art comes from Playnite. Controller support comes from Playnite's *Features* ("Full Controller Support").
-Tag a game **`Hearth: KBM`** to get the keyboard & mouse prompt, or **`Hearth: Controller`** to suppress it.
+Cover art comes from Playnite. Controller support comes from Playnite's *Features* ("Full Controller Support") when
+it has them, otherwise from the Steam store (see above). Tags are only needed to correct a game:
+**`Hearth: KBM`** forces the keyboard & mouse prompt, **`Hearth: Controller`** turns it off.
 
 ### Browsing everything else
 

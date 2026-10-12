@@ -21,6 +21,7 @@ function Export-HearthLibrary {
         if ($description -and $description.Length -gt 1500) { $description = $description.Substring(0, 1500) }
         [ordered]@{
             id               = $g.Id.ToString()
+            gameId           = $g.GameId
             name             = $g.Name
             favorite         = $g.Favorite
             installed        = $g.IsInstalled
