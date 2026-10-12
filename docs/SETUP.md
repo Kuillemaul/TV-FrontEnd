@@ -19,6 +19,8 @@ Moonlight work well. HDMI isn't standard on every 5080 Micro. Most have DisplayP
 port. Use a **DP→HDMI 2.0 active** adapter or cable for 4K60 HDR. 8 GB of RAM is enough.
 
 **BIOS (F2 at boot):**
+- *System Configuration → SATA Operation* (or *Storage → SATA/NVMe Operation*): **AHCI**. Dell ships it set to
+  "RAID On", which hides the NVMe SSD from Linux: the Debian installer won't see the disk.
 - *Power Management → AC Recovery*: **Power On** (it comes back after a power cut)
 - *Power Management → USB Wake Support*: **Enabled** (the remote/keyboard wakes it from sleep)
 - *Secure Boot*: either setting works; disable it if you plan to use out-of-tree tuner drivers
