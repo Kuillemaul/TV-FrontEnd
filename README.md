@@ -33,10 +33,10 @@ controller, or a keyboard and mouse.
 Everything runs with built-in demo data until you configure it, so you can explore the interface on any machine:
 
 ```bash
-npm install
-npm run build
-npm start             # http://localhost:8787
+npm run go            # install, build and start → http://localhost:8787
 ```
+
+(Same as `npm install`, `npm run build`, then `npm start`. Works in Windows PowerShell too.)
 
 For UI development with hot reload, run `npm run dev:server` and `npm run dev:web` (then open http://localhost:5173).
 

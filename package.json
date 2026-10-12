@@ -2,14 +2,20 @@
   "name": "hearth",
   "private": true,
   "version": "0.1.0",
-  "description": "Hearth – a living-room OS shell: live TV, streaming apps, Home Assistant, voice and game streaming in one remote-friendly UI.",
-  "workspaces": ["server", "web"],
+  "description": "Hearth \u2013 a living-room OS shell: live TV, streaming apps, Home Assistant, voice and game streaming in one remote-friendly UI.",
+  "workspaces": [
+    "server",
+    "web"
+  ],
   "scripts": {
+    "go": "npm install && npm run build && npm start",
     "dev:server": "npm run dev -w server",
     "dev:web": "npm run dev -w web",
     "build": "npm run build -w web && npm run build -w server",
     "start": "npm run start -w server",
     "typecheck": "npm run typecheck -w server && npm run typecheck -w web"
   },
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  }
 }
