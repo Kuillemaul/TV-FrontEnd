@@ -93,7 +93,13 @@ export function EntityCard({ entity, compact }: { entity: HaEntity; compact?: bo
 
   return (
     <div className={`entity ${active ? 'entity-active' : ''} ${compact ? 'entity-compact' : ''}`}>
-      <button className="entity-main" data-nav onClick={action ?? undefined} aria-disabled={!action}>
+      <button
+        className="entity-main"
+        data-nav
+        data-pin={JSON.stringify({ kind: 'entity', id: entity.entity_id, name: entity.attributes.friendly_name })}
+        onClick={action ?? undefined}
+        aria-disabled={!action}
+      >
         <span className="entity-icon">
           <Icon name={iconFor(entity, domain)} size="1.6em" />
         </span>

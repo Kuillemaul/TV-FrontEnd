@@ -6,6 +6,10 @@ export interface Info {
   name: string;
   clock24h: boolean;
   demo: { tv: boolean; homeassistant: boolean; games: boolean };
+  /** Sections configured in config.yaml (or showing demo data). */
+  setup: { tv: boolean; homeassistant: boolean; games: boolean };
+  /** Untouched example entries in config.yaml that Hearth skipped. */
+  ignoredExamples: string[];
   session: Session | null;
   configPath: string;
   features: { plex: boolean; tvInputs: number; wakeWordAvailable: boolean; labActions: number };
@@ -103,7 +107,17 @@ export interface Profile {
   liveTv: boolean;
   theme: ThemeChoice;
   limits?: Limits;
+  pins?: Pin[];
 }
+
+/** Something pinned to Home (per profile). */
+export type Pin =
+  | { kind: 'app'; id: string }
+  | { kind: 'game'; hostId: string; gameId: string; title: string; art?: string }
+  | { kind: 'channel'; id: string; name: string }
+  | { kind: 'entity'; id: string; name?: string };
+
+export const pinKey = (p: Pin) => (p.kind === 'game' ? `game:${p.hostId}:${p.gameId}` : `${p.kind}:${p.id}`);
 
 export interface ProfilesState {
   activeId: string;
@@ -199,6 +213,7 @@ export interface HaEntity {
 
 export interface Dashboard {
   demo: boolean;
+  setup: boolean;
   connected: boolean;
   hasLovelace: boolean;
   sections: Array<{ title: string; entities: HaEntity[] }>;
@@ -263,7 +278,9 @@ export type ServerEvent =
   | { type: 'timesup'; reason: 'limit' | 'bedtime' }
   | { type: 'screentime' }
   | { type: 'remote'; cmd: string; text?: string }
-  | { type: 'settings' };
+  | { type: 'settings' }
+  | { type: 'games' }
+  | { type: 'pair'; hostId: string; stage: 'waking' | 'pairing' | 'auto-pin' | 'paired' | 'failed'; message: string };
 
 export async function get<T>(path: string): Promise<T> {
   const res = await fetch(path);

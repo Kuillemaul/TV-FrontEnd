@@ -6,7 +6,7 @@ import { expand, type HearthConfig, type LaunchSpec } from './config.js';
 
 interface Running extends ForegroundSession {
   proc: ChildProcess;
-  onExit?: () => void;
+  onExit?: (code: number | null) => void;
 }
 
 export type SessionListener = (event: 'start' | 'stop', session: ForegroundSession) => void;
@@ -82,7 +82,7 @@ export class Launcher {
     return { argv };
   }
 
-  async launch(id: string, title: string, spec: LaunchSpec, onExit?: () => void): Promise<void> {
+  async launch(id: string, title: string, spec: LaunchSpec, onExit?: (code: number | null) => void): Promise<void> {
     if (this.current) await this.stop();
     const { argv, env } = this.commandFor(id, spec);
     this.log.info(`launch ${id}: ${argv.join(' ')}`);
@@ -109,7 +109,7 @@ export class Launcher {
         this.current = null;
         this.bus.emit({ type: 'session', session: null });
       }
-      running.onExit?.();
+      running.onExit?.(code);
       this.notify('stop', { id: running.id, title: running.title, startedAt: running.startedAt });
     });
   }

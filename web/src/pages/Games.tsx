@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { Browse } from '../components/Browse';
 import { RatingBadge } from '../components/GameDetails';
 import { Icon } from '../components/Icon';
-import { Button, Chip, DemoBanner, PageHeader, Tile } from '../components/Layout';
+import { Button, Chip, DemoBanner, NotSetUp, PageHeader, Tile } from '../components/Layout';
 import { PcsPanel } from '../components/PcsPanel';
-import { useApi, type GameLibrary } from '../lib/api';
+import { useApi, useServerEvents, type GameLibrary } from '../lib/api';
 import { useHearth } from '../lib/hearth';
 
 /** Tiles drawn at once. Big libraries page in so the TV stays responsive to the remote. */
@@ -15,6 +15,8 @@ type Tab = 'mine' | 'pc' | 'emu';
 export function GamesPage() {
   const hearth = useHearth();
   const { data, reload } = useApi<GameLibrary>('/api/games');
+  // The server shows the saved list instantly and says when a PC's library actually changed.
+  useServerEvents((e) => e.type === 'games' && void reload());
   const [tab, setTab] = useState<Tab>('mine');
   const [pcs, setPcs] = useState(false);
   const [host, setHost] = useState<string>('all');
@@ -66,8 +68,14 @@ export function GamesPage() {
       </PageHeader>
 
       {data?.demo ? <DemoBanner>Demo library. Install the Hearth PC agent on your gaming and emulator PCs to see your real games.</DemoBanner> : null}
+      {data && !data.demo && data.hosts.length === 0 ? (
+        <NotSetUp icon="gamepad" title="No gaming PCs yet">
+          Install the Hearth agent on each PC, then add it under <code>gaming.hosts</code> in config.yaml with the token the
+          agent’s installer printed.
+        </NotSetUp>
+      ) : null}
 
-      {tab !== 'mine' ? (
+      {data && !data.demo && data.hosts.length === 0 ? null : tab !== 'mine' ? (
         <Browse mode={tab} onSelect={hearth.openGame} />
       ) : (
         <>
@@ -94,6 +102,7 @@ export function GamesPage() {
               <Tile
                 autoFocus={i === 0}
                 key={`${g.hostId}:${g.id}`}
+                pin={{ kind: 'game', hostId: g.hostId, gameId: g.id, title: g.title, art: g.art }}
                 shape="poster"
                 title={g.title}
                 subtitle={`${g.store || g.platform} · ${g.hostName}`}

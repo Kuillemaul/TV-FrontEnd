@@ -5,8 +5,9 @@ import { Sparkline } from '../components/Sparkline';
 import { SettingsExtras } from '../components/SettingsExtras';
 import { SoundSettings } from '../components/SoundSettings';
 import { ControllerTest } from '../components/ControllerTest';
+import { GamingPcsSettings } from '../components/Pairing';
 import { Icon } from '../components/Icon';
-import { Button, DemoBanner, Modal, PageHeader, Tile } from '../components/Layout';
+import { Button, DemoBanner, Modal, NotSetUp, PageHeader, Tile } from '../components/Layout';
 import { post, useApi, useServerEvents, type AppTile, type Dashboard, type HaEntity, type LabStatus } from '../lib/api';
 import { useHearth } from '../lib/hearth';
 
@@ -25,7 +26,7 @@ export function AppsPage() {
       {data && data.length === 0 ? <div className="empty">No apps on this profile yet.</div> : null}
       <div className="grid grid-apps">
         {data?.map((a, i) => (
-          <Tile key={a.id} shape="app" title={a.name} color={a.color} image={a.logo} autoFocus={i === 0} onSelect={() => hearth.launchApp(a.id)} />
+          <Tile key={a.id} pin={{ kind: 'app', id: a.id }} shape="app" title={a.name} color={a.color} image={a.logo} autoFocus={i === 0} onSelect={() => hearth.launchApp(a.id)} />
         ))}
       </div>
     </div>
@@ -56,7 +57,12 @@ export function SmartHomePage() {
         ) : null}
       </PageHeader>
       {data?.demo ? <DemoBanner>Demo devices. Add your Home Assistant URL and a long-lived token in config.yaml.</DemoBanner> : null}
-      {data && !data.connected ? <DemoBanner>Reconnecting to Home Assistant…</DemoBanner> : null}
+      {data && !data.setup ? (
+        <NotSetUp icon="bulb" title="Home Assistant isn’t connected yet">
+          Add your Home Assistant address and a long-lived access token under <code>homeassistant</code> in config.yaml.
+        </NotSetUp>
+      ) : null}
+      {data?.setup && !data.connected ? <DemoBanner>Reconnecting to Home Assistant…</DemoBanner> : null}
       {data?.sections.map((s) => (
         <section className="ha-section" key={s.title}>
           <h2>{s.title}</h2>
@@ -81,6 +87,12 @@ export function LabPage() {
     <div className="page">
       <PageHeader title="Home Lab" />
       {data?.demo ? <DemoBanner>Demo services. List your homelab services under lab.services in config.yaml.</DemoBanner> : null}
+      {data && !data.demo && !data.services.length && !data.sensors.length ? (
+        <NotSetUp icon="server" title="No home lab services yet">
+          List your servers under <code>lab.services</code> in config.yaml (and HA sensors under <code>lab.sensors</code>) to see
+          whether they’re up.
+        </NotSetUp>
+      ) : null}
 
       {data?.sensors.length ? (
         <div className="grid grid-stats">
@@ -162,6 +174,7 @@ export function SettingsPage() {
       </section>
       <SettingsExtras />
       <SoundSettings />
+      {!hearth.isKid ? <GamingPcsSettings /> : null}
       <section className="settings-group">
         <h2>Controllers</h2>
         <div className="settings-row" data-nav-group>
@@ -184,6 +197,7 @@ export function SettingsPage() {
           <div><kbd>Enter</kbd> / A</div><div>Select</div>
           <div><kbd>Esc</kbd> / <kbd>Backspace</kbd> / B</div><div>Back</div>
           <div><kbd>M</kbd> / Y / mic key</div><div>Voice assistant</div>
+          <div><kbd>P</kbd> / X / Menu key / right-click</div><div>Pin to Home (or move/unpin on Home)</div>
           <div>Remote Home / hold Guide button</div><div>Close any app and return here</div>
         </div>
       </section>
@@ -192,9 +206,13 @@ export function SettingsPage() {
         <div className="about">
           <div>Config file: <code>{hearth.info?.configPath}</code></div>
           <div>
-            Live TV {hearth.info?.demo.tv ? 'demo' : 'connected'} · Home Assistant {hearth.info?.demo.homeassistant ? 'demo' : 'configured'} · Games{' '}
-            {hearth.info?.demo.games ? 'demo' : 'configured'}
+            {(['tv', 'homeassistant', 'games'] as const)
+              .map((k) => `${{ tv: 'Live TV', homeassistant: 'Home Assistant', games: 'Games' }[k]} ${hearth.info?.demo[k] ? 'demo' : hearth.info?.setup[k] ? 'set up' : 'not set up'}`)
+              .join(' · ')}
           </div>
+          {hearth.info?.ignoredExamples.length ? (
+            <div>Skipped example entries still in config.yaml (safe to delete): {hearth.info.ignoredExamples.join(', ')}</div>
+          ) : null}
         </div>
       </section>
 

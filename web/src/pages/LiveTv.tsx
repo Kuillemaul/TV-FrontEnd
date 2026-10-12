@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Icon } from '../components/Icon';
-import { Button, Chip, DemoBanner, Modal, PageHeader } from '../components/Layout';
+import { Button, Chip, DemoBanner, Modal, NotSetUp, PageHeader } from '../components/Layout';
 import { formatTime, post, useApi, type Guide, type Programme, type Recording } from '../lib/api';
 import { useHearth } from '../lib/hearth';
 import { useNow } from './Home';
@@ -45,6 +45,14 @@ function GuideGrid() {
   }, [data, start, end]);
 
   if (!data) return <div className="empty">Loading guide…</div>;
+  if (!data.demo && data.channels.length === 0) {
+    return (
+      <NotSetUp icon="tv" title="No channels yet">
+        Plug in the USB tuner, scan for channels in Tvheadend, then add its address under <code>livetv.tvheadend</code> in
+        config.yaml (Setup guide, section 2).
+      </NotSetUp>
+    );
+  }
   const homeChannel = data.channels.find((c) => c.id === data.lastChannel)?.id ?? data.channels[0]?.id;
   const channel = selected ? data.channels.find((c) => c.id === selected.channelId) : undefined;
   const airing = selected ? selected.start <= now && selected.end > now : false;
@@ -66,7 +74,12 @@ function GuideGrid() {
         </div>
         {data.channels.map((ch) => (
           <div className="guide-row" key={ch.id} data-nav-group>
-            <button className="guide-channel" data-nav onClick={() => hearth.watchChannel(ch.id)}>
+            <button
+              className="guide-channel"
+              data-nav
+              data-pin={JSON.stringify({ kind: 'channel', id: ch.id, name: `${ch.number} ${ch.name}` })}
+              onClick={() => hearth.watchChannel(ch.id)}
+            >
               {ch.icon ? <img src={ch.icon} alt="" /> : null}
               <span className="guide-channel-num">{ch.number}</span>
               <span className="guide-channel-name">{ch.name}</span>

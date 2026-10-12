@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { Game, Info, PageId, Profile, ProfilesState } from './api';
+import type { Game, Info, PageId, Pin, Profile, ProfilesState } from './api';
 
 export interface PlayRequest {
   hostId: string;
@@ -31,6 +31,9 @@ export interface Hearth {
   openTheme(): void;
   /** Show a game's details (screenshot, description, play time) with a Play button. */
   openGame(game: Game): void;
+  /** Pin to / unpin from this profile's Home. */
+  togglePin(pin: Pin): Promise<void>;
+  movePin(key: string, delta: number): Promise<void>;
 }
 
 export const HearthContext = createContext<Hearth | null>(null);

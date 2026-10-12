@@ -1,3 +1,4 @@
+import { readFileSync, writeFileSync } from 'node:fs';
 import type { EventBus, GameStage } from '../bus.js';
 import { expand, type GameHostConfig, type GamingConfig } from '../config.js';
 import type { Launcher } from '../launcher.js';
@@ -83,10 +84,23 @@ interface AgentHealth {
   gameRunning?: boolean | null;
 }
 
-const CACHE_MS = 5 * 60 * 1000;
+/** How often to ask a PC whether its library changed (a cheap "no changes" answer when it hasn't). */
+const RECHECK_MS = 60 * 1000;
+const HEALTH_MS = 5 * 1000;
+
+interface CachedLibrary {
+  /** When we last asked the agent (success or not). */
+  at: number;
+  /** Agent's version tag for this library; unchanged → it answers 304 with no body. */
+  etag?: string;
+  raw: AgentGame[];
+  games: Game[];
+}
 
 export class GameService {
-  private cache = new Map<string, { at: number; games: Game[] }>();
+  private cache = new Map<string, CachedLibrary>();
+  private inflight = new Map<string, Promise<void>>();
+  private healthCache = new Map<string, { at: number; value: AgentHealth | null; pending?: Promise<AgentHealth | null> }>();
   private launching = false;
   private demoAwake = new Set(['gaming-pc']);
 
@@ -95,10 +109,36 @@ export class GameService {
     private readonly launcher: Launcher,
     private readonly bus: EventBus,
     private readonly state: StateStore,
-  ) {}
+    /** Libraries are kept on disk so the list shows instantly after a reboot, even with the PCs asleep. */
+    private readonly cacheFile?: string,
+  ) {
+    if (!cacheFile) return;
+    try {
+      const saved = JSON.parse(readFileSync(cacheFile, 'utf8')) as Record<string, { etag?: string; raw: AgentGame[] }>;
+      for (const h of cfg.hosts) {
+        const entry = saved[h.id];
+        if (entry?.raw) this.cache.set(h.id, { at: 0, etag: entry.etag, raw: entry.raw, games: entry.raw.map((g) => this.toGame(h, g)) });
+      }
+    } catch {
+      /* first run */
+    }
+  }
+
+  private saveCache(): void {
+    if (!this.cacheFile) return;
+    const out = Object.fromEntries([...this.cache].map(([id, c]) => [id, { etag: c.etag, raw: c.raw }]));
+    try {
+      writeFileSync(this.cacheFile, JSON.stringify(out));
+    } catch {
+      /* not fatal */
+    }
+  }
+
+  /** Sample games only when previewing without a config file (config.demo). */
+  allowDemo = false;
 
   get demo(): boolean {
-    return this.cfg.hosts.length === 0;
+    return this.allowDemo && this.cfg.hosts.length === 0;
   }
 
   private host(id: string): GameHostConfig {
@@ -115,13 +155,22 @@ export class GameService {
     });
   }
 
-  private async health(h: GameHostConfig): Promise<AgentHealth | null> {
-    try {
-      const res = await this.agent(h, '/health', undefined, 2000);
-      return res.ok ? ((await res.json()) as AgentHealth) : null;
-    } catch {
-      return null;
-    }
+  private async health(h: GameHostConfig, maxAgeMs = 0): Promise<AgentHealth | null> {
+    const cached = this.healthCache.get(h.id);
+    if (cached && Date.now() - cached.at <= maxAgeMs) return cached.value;
+    if (cached?.pending) return cached.pending;
+    const pending = (async () => {
+      try {
+        const res = await this.agent(h, '/health', undefined, 2000);
+        return res.ok ? ((await res.json()) as AgentHealth) : null;
+      } catch {
+        return null;
+      }
+    })();
+    this.healthCache.set(h.id, { at: cached?.at ?? 0, value: cached?.value ?? null, pending });
+    const value = await pending;
+    this.healthCache.set(h.id, { at: Date.now(), value });
+    return value;
   }
 
   private async online(h: GameHostConfig): Promise<boolean> {
@@ -143,7 +192,7 @@ export class GameService {
     }
     return Promise.all(
       this.cfg.hosts.map(async (h) => {
-        const health = await this.health(h);
+        const health = await this.health(h, HEALTH_MS);
         return {
           id: h.id,
           name: h.name,
@@ -185,19 +234,48 @@ export class GameService {
     };
   }
 
+  /** Ask the agent for its library, sending our version tag so an unchanged library costs nothing. */
+  private revalidate(h: GameHostConfig): Promise<void> {
+    const running = this.inflight.get(h.id);
+    if (running) return running;
+    const job = (async () => {
+      const cached = this.cache.get(h.id);
+      try {
+        const res = await this.agent(h, '/games', { headers: cached?.etag ? { 'If-None-Match': cached.etag } : {} }, 10000);
+        if (res.status === 304 && cached) {
+          cached.at = Date.now();
+          return;
+        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const raw = (await res.json()) as AgentGame[];
+        this.cache.set(h.id, { at: Date.now(), etag: res.headers.get('etag') ?? undefined, raw, games: raw.map((g) => this.toGame(h, g)) });
+        this.saveCache();
+        if (cached) this.bus.emit({ type: 'games' });
+      } catch {
+        // Asleep/offline: keep the last known library and try again later.
+        if (cached) cached.at = Date.now();
+        else this.cache.set(h.id, { at: Date.now(), raw: [], games: [] });
+      } finally {
+        this.inflight.delete(h.id);
+      }
+    })();
+    this.inflight.set(h.id, job);
+    return job;
+  }
+
+  /**
+   * The library we already have, straight away. Checks the PC for changes in the background
+   * (at most once a minute, or now when forced); the UI is told if anything changed.
+   */
   private async fetchHost(h: GameHostConfig, force: boolean): Promise<Game[]> {
     const cached = this.cache.get(h.id);
-    if (cached && !force && Date.now() - cached.at < CACHE_MS) return cached.games;
-    try {
-      const res = await this.agent(h, '/games', undefined, 10000);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const games = ((await res.json()) as AgentGame[]).map((g) => this.toGame(h, g));
-      this.cache.set(h.id, { at: Date.now(), games });
-      return games;
-    } catch {
-      // Host asleep/offline: keep showing the last known library.
-      return cached?.games ?? [];
+    if (!cached) {
+      await this.revalidate(h);
+      return this.cache.get(h.id)?.games ?? [];
     }
+    if (force) await this.revalidate(h);
+    else if (Date.now() - cached.at > RECHECK_MS) void this.revalidate(h);
+    return this.cache.get(h.id)!.games;
   }
 
   async games(force = false): Promise<Game[]> {
@@ -294,6 +372,49 @@ export class GameService {
 
   async shot(hostId: string, gameId: string, n: number): Promise<Response> {
     return this.agent(this.host(hostId), `/shot/${encodeURIComponent(gameId)}/${n}`, undefined, 10000);
+  }
+
+  /* ---------------- Moonlight pairing ---------------- */
+
+  /** The Moonlight command without its "stream {host} {app}" part, for "pair" and opening Moonlight itself. */
+  moonlightBase(): string[] {
+    const i = this.cfg.moonlight.indexOf('stream');
+    return i > 0 ? this.cfg.moonlight.slice(0, i) : this.cfg.moonlight.filter((a) => !/\{(host|app)\}/.test(a));
+  }
+
+  /**
+   * Pair Moonlight on this TV with a PC: wake it if needed, run `moonlight pair <host> --pin`,
+   * and ask the PC's agent to type the PIN into Apollo/Sunshine when it has the login for it.
+   * Progress goes out as "pair" events; resolves with the PIN as soon as pairing has started.
+   */
+  pair(hostId: string, hooks: { onStarted?: () => void; onDone?: (ok: boolean) => void } = {}): { pin: string; host: string; webUi: string } {
+    const h = this.host(hostId);
+    const pin = String(Math.floor(1000 + Math.random() * 9000));
+    const emit = (stage: 'waking' | 'pairing' | 'auto-pin' | 'paired' | 'failed', message: string) =>
+      this.bus.emit({ type: 'pair', hostId, stage, message });
+    void (async () => {
+      try {
+        if (!(await this.online(h))) await this.wakeAndWait(h, () => emit('waking', `Waking ${h.name}…`));
+        emit('pairing', `Enter ${pin} on ${h.name}`);
+        const command = [...this.moonlightBase(), 'pair', h.moonlightHost, '--pin', pin];
+        await this.launcher.launch(`pair:${hostId}`, `Pair ${h.name}`, { type: 'command', command }, (code) => {
+          const ok = code === 0;
+          emit(ok ? 'paired' : 'failed', ok ? `Paired with ${h.name}` : `Pairing with ${h.name} didn’t finish`);
+          hooks.onDone?.(ok);
+        });
+        hooks.onStarted?.();
+        // Give Moonlight a moment to start the handshake, then let the agent enter the PIN if it can.
+        await new Promise((r) => setTimeout(r, 2500));
+        const res = await this.agent(h, '/pair', { method: 'POST', body: JSON.stringify({ pin, name: 'Hearth TV' }) }, 10000);
+        const r = res.ok ? ((await res.json()) as { ok: boolean }) : { ok: false };
+        if (r.ok) emit('auto-pin', `${h.name} accepted the PIN`);
+      } catch (err) {
+        if (this.launcher.session?.id === `pair:${hostId}`) return; // auto-PIN failed; manual entry still works
+        emit('failed', (err as Error).message);
+        hooks.onDone?.(false);
+      }
+    })();
+    return { pin, host: h.name, webUi: `https://${h.moonlightHost}:47990/pin` };
   }
 
   /* ---------------- power ---------------- */

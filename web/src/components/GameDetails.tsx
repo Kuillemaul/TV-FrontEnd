@@ -104,6 +104,9 @@ export function GameDetailsModal({ game, onClose }: { game: Game; onClose: () =>
               <Button variant="primary" icon="play" onClick={play} autoFocus>
                 {info.installed ? 'Play' : 'Install & play'}
               </Button>
+              <Button icon="pin" onClick={() => void hearth.togglePin({ kind: 'game', hostId: game.hostId, gameId: game.id, title: game.title, art: game.art })}>
+                {hearth.profile?.pins?.some((p) => p.kind === 'game' && p.hostId === game.hostId && p.gameId === game.id) ? 'Unpin from Home' : 'Pin to Home'}
+              </Button>
               {d && d.screenshots.length > 1 ? (
                 <Button icon="camera" onClick={() => setShot((shot + 1) % d.screenshots.length)}>
                   Screenshot {shot + 1}/{d.screenshots.length}

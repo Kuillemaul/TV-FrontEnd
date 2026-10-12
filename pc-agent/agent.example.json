@@ -2,56 +2,28 @@
   "port": 47800,
   "token": "change-me",
   "rescanMinutes": 10,
-  "launchbox": {
-    "path": "C:/Users/You/LaunchBox",
-    "favoritesOnly": true,
-    "platforms": [],
-    "includeHidden": false
-  },
   "playnite": {
     "enabled": true,
     "exportPath": "",
-    "kbmTags": [
-      "Hearth: KBM"
-    ],
-    "controllerTags": [
-      "Hearth: Controller"
-    ]
+    "kbmTags": ["Hearth: KBM"],
+    "controllerTags": ["Hearth: Controller"]
+  },
+  "launchbox": {
+    "path": "",
+    "favoritesOnly": true,
+    "platforms": [],
+    "includeHidden": false
   },
   "steam": {
     "enabled": false,
     "controllerLookup": true
   },
-  "kbm": {
-    "Factorio": true,
-    "Hades II": false
+  "apollo": {
+    "url": "https://localhost:47990",
+    "username": "",
+    "password": ""
   },
-  "games": [
-    {
-      "id": "fortnite",
-      "title": "Fortnite",
-      "uri": "com.epicgames.launcher://apps/Fortnite?action=launch&silent=true",
-      "art": "https://cdn2.unrealengine.com/fortnite-logo.jpg",
-      "controller": "full",
-      "processDir": "C:/Program Files/Epic Games/Fortnite"
-    },
-    {
-      "id": "minecraft",
-      "title": "Minecraft Java",
-      "command": [
-        "C:/XboxGames/Minecraft Launcher/Content/Minecraft.exe"
-      ],
-      "requiresKbm": true
-    },
-    {
-      "id": "forza-horizon-5-gamepass",
-      "title": "Forza Horizon 5",
-      "command": [
-        "explorer.exe",
-        "shell:AppsFolder\\Microsoft.624F8B84B80_8wekyb3d8bbwe!ForzaHorizon5"
-      ],
-      "controller": "full"
-    }
-  ],
+  "kbm": {},
+  "games": [],
   "emulators": []
 }

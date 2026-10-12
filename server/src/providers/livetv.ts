@@ -158,6 +158,33 @@ export class TvheadendProvider implements LiveTvProvider {
   }
 }
 
+/** No tuner set up yet: an empty guide (the Live TV page explains how to add one). */
+export class NoTvProvider implements LiveTvProvider {
+  readonly demo = false;
+  async channels(): Promise<Channel[]> {
+    return [];
+  }
+  async guide(): Promise<Programme[]> {
+    return [];
+  }
+  streamUrl(): string {
+    throw new Error('Live TV isn’t set up yet – add a tvheadend section to config.yaml');
+  }
+  async recordings(): Promise<Recording[]> {
+    return [];
+  }
+  recordingUrl(): string {
+    throw new Error('Live TV isn’t set up yet');
+  }
+  async record(): Promise<void> {
+    throw new Error('Live TV isn’t set up yet');
+  }
+  async recordSeries(): Promise<void> {
+    throw new Error('Live TV isn’t set up yet');
+  }
+  async deleteRecording(): Promise<void> {}
+}
+
 /* ------------------------------------------------------------------ */
 /* Demo data so the UI is fully navigable before a tuner is set up      */
 /* ------------------------------------------------------------------ */

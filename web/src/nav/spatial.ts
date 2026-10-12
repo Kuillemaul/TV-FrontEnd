@@ -8,12 +8,13 @@
  *
  * Inputs:
  *   keyboard / IR / CEC remotes  → arrows, Enter, Escape/Backspace/BrowserBack
- *   game controllers             → D-pad/stick, A = select, B = back, Y = voice, Start = home
+ *   game controllers             → D-pad/stick, A = select, B = back, X = menu (pin), Y = voice, Start = home
+ *   keyboard Menu key / P / right-click → menu (pin to Home)
  *   mouse                        → hover focuses, click activates
  */
 
 export type Dir = 'up' | 'down' | 'left' | 'right';
-export type NavCommand = 'back' | 'voice' | 'home';
+export type NavCommand = 'back' | 'voice' | 'home' | 'menu';
 
 const SELECTOR = '[data-nav]:not([disabled])';
 const groupMemory = new WeakMap<Element, HTMLElement>();
@@ -140,6 +141,7 @@ const KEY_DIRS: Record<string, Dir> = { ArrowUp: 'up', ArrowDown: 'down', ArrowL
 const BACK_KEYS = new Set(['Escape', 'BrowserBack', 'GoBack', 'Backspace']);
 const HOME_KEYS = new Set(['BrowserHome', 'GoHome']);
 const VOICE_KEYS = new Set(['F2', 'MicrophoneToggle', 'VoiceDial', 'LaunchAssistant']);
+const MENU_KEYS = new Set(['ContextMenu', 'Props', 'F3']);
 
 function onKeyDown(e: KeyboardEvent): void {
   markInput();
@@ -161,6 +163,9 @@ function onKeyDown(e: KeyboardEvent): void {
   } else if (VOICE_KEYS.has(e.key) || (!typing && (e.key === 'm' || e.key === 'M'))) {
     e.preventDefault();
     emit('voice');
+  } else if (MENU_KEYS.has(e.key) || (!typing && (e.key === 'p' || e.key === 'P'))) {
+    e.preventDefault();
+    emit('menu');
   } else if (e.key === 'Enter' && !typing && el instanceof HTMLElement && !(el instanceof HTMLButtonElement) && el.hasAttribute('data-nav')) {
     e.preventDefault();
     el.click();
@@ -172,6 +177,7 @@ function onKeyDown(e: KeyboardEvent): void {
 const enum Btn {
   A = 0,
   B = 1,
+  X = 2,
   Y = 3,
   Back = 8,
   Start = 9,
@@ -230,6 +236,7 @@ function poll(now: number): void {
       if (edge(Btn.A)) activate();
       if (edge(Btn.B) || edge(Btn.Back)) emit('back');
       if (edge(Btn.Y)) emit('voice');
+      if (edge(Btn.X)) emit('menu');
       if (edge(Btn.Start)) emit('home');
 
       const dir = padDir(gp);
@@ -270,6 +277,15 @@ function onMouseOver(e: MouseEvent): void {
   if (target && target !== document.activeElement && focusables().includes(target)) target.focus({ preventScroll: true });
 }
 
+/** Right-click opens the same menu as the controller's X button, for whatever is under the pointer. */
+function onContextMenu(e: MouseEvent): void {
+  const target = (e.target as Element).closest<HTMLElement>(SELECTOR);
+  if (!target) return;
+  e.preventDefault();
+  target.focus({ preventScroll: true });
+  emit('menu');
+}
+
 function onFocusIn(e: FocusEvent): void {
   const el = e.target as HTMLElement;
   const group = el.closest('[data-nav-group]');
@@ -282,6 +298,7 @@ export function installNavigation(): () => void {
   document.addEventListener('mousemove', onMouseMove);
   document.addEventListener('mouseover', onMouseOver);
   document.addEventListener('focusin', onFocusIn);
+  document.addEventListener('contextmenu', onContextMenu);
   if (navigator.getGamepads().some(Boolean)) startPolling();
   return () => {
     window.removeEventListener('keydown', onKeyDown);
@@ -289,6 +306,7 @@ export function installNavigation(): () => void {
     document.removeEventListener('mousemove', onMouseMove);
     document.removeEventListener('mouseover', onMouseOver);
     document.removeEventListener('focusin', onFocusIn);
+    document.removeEventListener('contextmenu', onContextMenu);
   };
 }
 

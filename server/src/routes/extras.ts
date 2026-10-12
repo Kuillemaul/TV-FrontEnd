@@ -106,6 +106,35 @@ export function registerExtras(app: FastifyInstance, ctx: ExtrasContext): void {
   app.post<{ Body: { percent: number } }>('/api/audio/volume', async (req) => run(() => audio.setVolume(Number(req.body.percent))));
   app.post<{ Body: { channel: number } }>('/api/audio/test', async (req) => run(() => audio.test(Number(req.body.channel))));
 
+  /* ---------------- Moonlight ---------------- */
+
+  // Pair with a PC. Moonlight's pairing window takes the screen; a Hearth panel above it shows the
+  // PIN, a QR code for the PC's Apollo/Sunshine PIN page, and progress.
+  app.post<{ Params: { hostId: string } }>('/api/games/:hostId/pair', async (req) =>
+    run(async () => {
+      requireParent();
+      let overlay = '';
+      const { pin, host, webUi } = games.pair(req.params.hostId, {
+        onStarted: () => setTimeout(() => launcher.showOverlay(overlay, 180), 1200),
+        onDone: () => setTimeout(() => launcher.closeOverlay(), 4000),
+      });
+      overlay = `http://127.0.0.1:${config.server.port}/pair?${new URLSearchParams({ host: req.params.hostId, name: host, pin, webUi })}`;
+      return { pin, webUi };
+    }),
+  );
+  app.post('/api/moonlight/open', async () =>
+    run(async () => {
+      requireParent();
+      await launcher.launch('app:moonlight', 'Moonlight', { type: 'command', command: games.moonlightBase() });
+    }),
+  );
+  app.post('/api/moonlight/cancel', async () =>
+    run(async () => {
+      launcher.closeOverlay();
+      if (launcher.session?.id.startsWith('pair:')) await launcher.stop();
+    }),
+  );
+
   /* ---------------- alerts & doorbell ---------------- */
 
   app.get<{ Params: { id: string } }>('/api/alerts/:id', async (req, reply) => alerts.get(req.params.id) ?? reply.code(404).send());
@@ -146,7 +175,7 @@ export function registerExtras(app: FastifyInstance, ctx: ExtrasContext): void {
   /* ---------------- Plex: continue watching ---------------- */
 
   app.get('/api/plex/ondeck', async () => {
-    if (!plex) return { demo: true, items: DEMO_ON_DECK };
+    if (!plex) return { demo: config.demo, items: config.demo ? DEMO_ON_DECK : [] };
     try {
       return { demo: false, items: await plex.onDeck() };
     } catch (err) {

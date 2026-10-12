@@ -147,6 +147,11 @@ export class HomeAssistant {
     return this.states.get(id);
   }
 
+  /** False for entities HA doesn't have (e.g. an example id left in config.yaml); true until states load. */
+  known(id: string): boolean {
+    return this.states.size === 0 || this.states.has(id);
+  }
+
   entities(ids: string[]): HaEntity[] {
     return ids.map((id) => this.states.get(id) ?? { entity_id: id, state: 'unavailable', attributes: {} });
   }

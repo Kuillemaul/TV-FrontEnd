@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 
@@ -198,8 +198,10 @@ export interface HearthConfig {
     poweroff: string[];
   };
   stateDir: string;
-  /** True when no config file was found and demo data is in use. */
+  /** True when no config file was found (or demo: true): sample data fills the empty sections. */
   demo: boolean;
+  /** Untouched example entries that were skipped (see stripExamples). */
+  ignoredExamples: string[];
 }
 
 const TV_UA =
@@ -266,6 +268,7 @@ function defaults(): HearthConfig {
     },
     stateDir: join(homedir(), '.local', 'state', 'hearth'),
     demo: true,
+    ignoredExamples: [],
   };
 }
 
@@ -280,7 +283,7 @@ function normaliseHost(h: any, i: number): GameHostConfig {
     token: String(h.token ?? ''),
     moonlightHost: String(h.moonlightHost ?? new URL(h.agent).hostname),
     moonlightApp: String(h.moonlightApp ?? 'Desktop'),
-    mac: h.mac ? String(h.mac) : undefined,
+    mac: h.mac && !isPlaceholder(h.mac) ? String(h.mac) : undefined,
     quitOnExit: h.quitOnExit ?? true,
     virtualDisplay: h.virtualDisplay ?? false,
     endStreamOnGameExit: h.endStreamOnGameExit ?? true,
@@ -293,11 +296,67 @@ export function resolveConfigPath(): string {
   return resolve(process.env.HEARTH_CONFIG ?? fileURLToPath(new URL('../../config/config.yaml', import.meta.url)));
 }
 
+/** Values in config.example.yaml that mean "not filled in yet". */
+const PLACEHOLDER = /^(YOUR_|PASTE_|SAME_TOKEN|change-me$)|AA:BB:CC:DD/i;
+export const isPlaceholder = (v: unknown) => typeof v === 'string' && PLACEHOLDER.test(v);
+
+const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * config.yaml usually starts as a copy of config.example.yaml. Drop the example entries that were
+ * never changed (the sample Proxmox, washer alert, Xbox input…) so they don't show up as broken
+ * tiles. Anything you edited, even slightly, is kept.
+ */
+export function stripExamples(raw: any, example: any): string[] {
+  const dropped: string[] = [];
+  const lists: Array<[string, (r: any) => any[] | undefined, (r: any, v: any[]) => void]> = [
+    ['lab.services', (r) => r.lab?.services, (r, v) => (r.lab.services = v)],
+    ['lab.sensors', (r) => r.lab?.sensors, (r, v) => (r.lab.sensors = v)],
+    ['lab.actions', (r) => r.lab?.actions, (r, v) => (r.lab.actions = v)],
+    ['scenes', (r) => r.scenes, (r, v) => (r.scenes = v)],
+    ['alerts.rules', (r) => r.alerts?.rules, (r, v) => (r.alerts.rules = v)],
+    ['tv.inputs', (r) => r.tv?.inputs, (r, v) => (r.tv.inputs = v)],
+    ['gaming.hosts', (r) => r.gaming?.hosts, (r, v) => (r.gaming.hosts = v)],
+    ['homeassistant.favorites', (r) => r.homeassistant?.favorites, (r, v) => (r.homeassistant.favorites = v)],
+    ['homeassistant.dashboard', (r) => r.homeassistant?.dashboard, (r, v) => (r.homeassistant.dashboard = v)],
+  ];
+  for (const [name, get, set] of lists) {
+    const mine = get(raw);
+    const theirs = get(example);
+    if (!Array.isArray(mine) || !Array.isArray(theirs)) continue;
+    const kept = mine.filter((x) => !theirs.some((e) => same(e, x)));
+    if (kept.length !== mine.length) dropped.push(`${name} (${mine.length - kept.length})`);
+    set(raw, kept);
+  }
+  if (raw.alerts?.doorbell && same(raw.alerts.doorbell, example.alerts?.doorbell)) {
+    delete raw.alerts.doorbell;
+    dropped.push('alerts.doorbell');
+  }
+  const kbm = raw.gaming?.kbmOverrides;
+  if (kbm && example.gaming?.kbmOverrides) {
+    for (const [k, v] of Object.entries(example.gaming.kbmOverrides)) {
+      if (kbm[k] === v) {
+        delete kbm[k];
+        dropped.push(`gaming.kbmOverrides "${k}"`);
+      }
+    }
+  }
+  return dropped;
+}
+
 export function loadConfig(path = resolveConfigPath()): HearthConfig {
   const cfg = defaults();
   if (!existsSync(path)) return cfg;
 
   const raw: any = parse(readFileSync(path, 'utf8')) ?? {};
+  const examplePath = join(dirname(path), 'config.example.yaml');
+  if (existsSync(examplePath) && resolve(examplePath) !== resolve(path)) {
+    try {
+      cfg.ignoredExamples = stripExamples(raw, parse(readFileSync(examplePath, 'utf8')) ?? {});
+    } catch {
+      /* example unreadable: use the config as is */
+    }
+  }
   cfg.demo = Boolean(raw.demo ?? false);
   Object.assign(cfg.server, raw.server);
   Object.assign(cfg.ui, raw.ui);
@@ -321,7 +380,7 @@ export function loadConfig(path = resolveConfigPath()): HearthConfig {
   }
 
   const ha = raw.homeassistant;
-  if (ha?.url && ha?.token) {
+  if (ha?.url && ha?.token && !isPlaceholder(ha.token)) {
     cfg.homeassistant = {
       url: String(ha.url).replace(/\/$/, ''),
       token: String(ha.token),
@@ -350,13 +409,14 @@ export function loadConfig(path = resolveConfigPath()): HearthConfig {
     Object.assign(cfg.tv.commands, raw.tv.commands);
     cfg.tv.inputs = (raw.tv.inputs ?? []).map((x: any, i: number) => ({ id: x.id ?? `input${i}`, ...x }));
   }
-  if (raw.plex?.url && raw.plex?.token) cfg.plex = { url: String(raw.plex.url).replace(/\/$/, ''), token: raw.plex.token, webUrl: raw.plex.webUrl };
+  if (raw.plex?.url && raw.plex?.token && !isPlaceholder(raw.plex.token)) cfg.plex = { url: String(raw.plex.url).replace(/\/$/, ''), token: raw.plex.token, webUrl: raw.plex.webUrl };
   Object.assign(cfg.screensaver, raw.screensaver);
   if (Array.isArray(raw.remote?.keyCommand)) cfg.remote.keyCommand = raw.remote.keyCommand;
 
   if (raw.gaming) {
     if (Array.isArray(raw.gaming.moonlight)) cfg.gaming.moonlight = raw.gaming.moonlight;
-    cfg.gaming.hosts = (raw.gaming.hosts ?? []).map(normaliseHost);
+    // A PC whose token was never filled in can't be talked to; leave it out until it is.
+    cfg.gaming.hosts = (raw.gaming.hosts ?? []).filter((h: any) => !isPlaceholder(h?.token)).map(normaliseHost);
     cfg.gaming.kbmOverrides = raw.gaming.kbmOverrides ?? {};
   }
 

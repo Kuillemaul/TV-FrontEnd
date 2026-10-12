@@ -4,6 +4,7 @@ import { Icon } from './components/Icon';
 import { AlertStack } from './components/Alerts';
 import { AppOrderEditor } from './components/AppOrderEditor';
 import { GameDetailsModal } from './components/GameDetails';
+import { PinMenu, pinOf } from './components/Pins';
 import { Screensaver } from './components/Screensaver';
 import { TimeLeftChip, TimesUp } from './components/ScreenTime';
 import { KbmPrompt } from './components/KbmPrompt';
@@ -18,7 +19,10 @@ import {
   type Alert,
   type Game,
   type Info,
+  type MutationResult,
   type PageId,
+  type Pin,
+  pinKey,
   type Profile,
   type ProfilesState,
   type ScreenTimeStatus,
@@ -46,7 +50,7 @@ const TABS: Array<{ id: PageId; label: string; icon: string }> = [
 /** Pages a kid profile can reach. */
 const kidPages = (p: Profile): PageId[] => ['home', ...(p.liveTv ? (['tv'] as PageId[]) : []), 'apps', 'games'];
 
-type Overlay = null | { type: 'menu' } | { type: 'theme' } | { type: 'apps' } | { type: 'editProfile'; id: string } | { type: 'game'; game: Game };
+type Overlay = null | { type: 'pin'; pin: Pin; label?: string } | { type: 'menu' } | { type: 'theme' } | { type: 'apps' } | { type: 'editProfile'; id: string } | { type: 'game'; game: Game };
 
 interface Toast {
   id: number;
@@ -199,6 +203,17 @@ export function App() {
       editApps: () => setOverlay({ type: 'apps' }),
       openTheme: () => setOverlay({ type: 'theme' }),
       openGame: (game) => setOverlay({ type: 'game', game }),
+      togglePin: async (pin) => {
+        const res = await post<MutationResult>('/api/pins', { pin });
+        if (!res.ok) return toast(res.error ?? 'Couldn’t pin that', 'error');
+        if (res.profiles) setProfiles(res as ProfilesState);
+        const nowPinned = res.profiles?.find((p) => p.id === res.activeId)?.pins?.some((p) => pinKey(p) === pinKey(pin));
+        toast(nowPinned ? 'Pinned to Home' : 'Removed from Home');
+      },
+      movePin: async (key, delta) => {
+        const res = await post<MutationResult>('/api/pins/move', { key, delta });
+        if (res.ok && res.profiles) setProfiles(res as ProfilesState);
+      },
     }),
     [info, page, navigate, toast, startGame, profiles, profile, isKid],
   );
@@ -266,6 +281,11 @@ export function App() {
     () =>
       onNavCommand((cmd) => {
         if (cmd === 'voice') setVoiceOpen(true);
+        if (cmd === 'menu' && !document.querySelector('[data-nav-scope]')) {
+          const el = document.activeElement;
+          const pin = pinOf(el);
+          if (pin) setOverlay({ type: 'pin', pin, label: el?.querySelector('.tile-title, .tile-wordmark')?.textContent ?? undefined });
+        }
         if (cmd === 'home') navigate('home');
         if (cmd === 'back' && !document.querySelector('[data-nav-scope]')) {
           const prev = history.current.pop();
@@ -401,6 +421,7 @@ export function App() {
         ) : null}
         {overlay?.type === 'editProfile' ? <ProfileEditor profileId={overlay.id} onClose={() => setOverlay(null)} /> : null}
         {overlay?.type === 'game' ? <GameDetailsModal game={overlay.game} onClose={() => setOverlay(null)} /> : null}
+        {overlay?.type === 'pin' ? <PinMenu pin={overlay.pin} label={overlay.label} onClose={() => setOverlay(null)} /> : null}
         {isKid && screenTime?.blocked ? (
           <TimesUp reason={screenTime.blocked} onSwitch={() => setPickerOpen(true)} onClose={loadScreenTime} />
         ) : null}

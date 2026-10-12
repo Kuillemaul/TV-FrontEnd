@@ -46,3 +46,19 @@ test('always keeps one parent', () => {
   assert.throws(() => store.remove('main'));
   assert.throws(() => store.update('main', { kind: 'kid' }));
 });
+
+test('pins: toggle, order and per-profile', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'hearth-pins-'));
+  const store = new ProfileStore(dir);
+  assert.equal(store.togglePin({ kind: 'app', id: 'plex' }), true);
+  assert.equal(store.togglePin({ kind: 'game', hostId: 'pc', gameId: 'g1', title: 'Hades', extra: 'ignored' }), true);
+  assert.equal(store.togglePin({ kind: 'channel', id: 'c7', name: 'ABC' }), true);
+  store.movePin('channel:c7', -1);
+  assert.deepEqual(store.active.pins?.map((p) => p.kind), ['app', 'channel', 'game']);
+  assert.ok(!('extra' in (store.active.pins?.[2] ?? {})));
+  assert.equal(store.togglePin({ kind: 'app', id: 'plex' }), false);
+  assert.equal(store.active.pins?.length, 2);
+  assert.throws(() => store.togglePin({ kind: 'nope' }));
+  // Saved to disk.
+  assert.equal(new ProfileStore(dir).active.pins?.length, 2);
+});

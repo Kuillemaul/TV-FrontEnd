@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { focusElement, focusFirst, onScopedBack } from '../nav/spatial';
+import type { Pin } from '../lib/api';
 import { Icon } from './Icon';
 
 /** A titled horizontal row of tiles; remembers its focused tile. */
@@ -28,13 +29,16 @@ interface TileProps {
   progress?: number;
   onSelect: () => void;
   autoFocus?: boolean;
+  /** Lets X / Menu / right-click pin this tile to Home. */
+  pin?: Pin;
 }
 
-export function Tile({ title, subtitle, image, color, shape = 'wide', badge, icon, progress, onSelect, autoFocus }: TileProps) {
+export function Tile({ title, subtitle, image, color, shape = 'wide', badge, icon, progress, onSelect, autoFocus, pin }: TileProps) {
   return (
     <button
       className={`tile tile-${shape}`}
       data-nav
+      data-pin={pin ? JSON.stringify(pin) : undefined}
       data-nav-default={autoFocus || undefined}
       onClick={onSelect}
       style={color ? ({ '--tile-color': color } as React.CSSProperties) : undefined}
@@ -121,6 +125,17 @@ export function Chip({ active, children, onClick, dot }: { active: boolean; chil
       {dot ? <span className={`dot dot-${dot}`} /> : null}
       {children}
     </button>
+  );
+}
+
+/** Shown in place of a section that hasn't been set up in config.yaml yet. */
+export function NotSetUp({ icon, title, children }: { icon: string; title: string; children: ReactNode }) {
+  return (
+    <div className="not-set-up">
+      <Icon name={icon} size="3rem" />
+      <div className="not-set-up-title">{title}</div>
+      <div className="not-set-up-text">{children}</div>
+    </div>
   );
 }
 

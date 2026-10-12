@@ -14,7 +14,7 @@ import { DemoHome } from './providers/demohome.js';
 import { GameService } from './providers/games.js';
 import { HomeAssistant, type HaEntity } from './providers/homeassistant.js';
 import { LabMonitor } from './providers/lab.js';
-import { DemoTvProvider, TvheadendProvider, type Channel, type LiveTvProvider } from './providers/livetv.js';
+import { DemoTvProvider, NoTvProvider, TvheadendProvider, type Channel, type LiveTvProvider } from './providers/livetv.js';
 import { PermissionError, ProfileStore, type Profile } from './profiles.js';
 import { AlertService, type Alert } from './alerts.js';
 import { SceneAutomation } from './automations.js';
@@ -36,11 +36,17 @@ const log = {
 const bus = new EventBus();
 const state = new StateStore(config.stateDir);
 const launcher = new Launcher(config, bus, log);
-const tv: LiveTvProvider = config.livetv.tvheadend ? new TvheadendProvider(config.livetv.tvheadend) : new DemoTvProvider();
-const games = new GameService(config.gaming, launcher, bus, state);
+// Sample data only when previewing without a config file; otherwise unset sections are just empty.
+const tv: LiveTvProvider = config.livetv.tvheadend
+  ? new TvheadendProvider(config.livetv.tvheadend)
+  : config.demo
+    ? new DemoTvProvider()
+    : new NoTvProvider();
+const games = new GameService(config.gaming, launcher, bus, state, join(config.stateDir, 'games-cache.json'));
+games.allowDemo = config.demo;
 const lab = new LabMonitor(config.lab);
 const ha = config.homeassistant ? new HomeAssistant(config.homeassistant, bus, log, config.lab.sensors) : undefined;
-const demoHome = ha ? undefined : new DemoHome(bus);
+const demoHome = ha || !config.demo ? undefined : new DemoHome(bus);
 
 const hotkeys = new HotkeyWatcher(
   config.homeKeys,
@@ -67,7 +73,7 @@ const pairing = new RemotePairing(state);
 async function callService(service: string, data: Record<string, unknown> = {}): Promise<void> {
   const [domain, name] = service.split('.');
   if (ha) await ha.callService(domain, name, data);
-  else demoHome!.callService(domain, name, data);
+  else demoHome?.callService(domain, name, data);
 }
 
 const scenes = new SceneAutomation(config.scenes, (c) => callService(c.service, c.data), () => state.settings.scenes, log);
@@ -178,7 +184,8 @@ app.addHook('onRequest', async (req, reply) => {
 app.get('/api/info', async () => ({
   name: config.ui.name,
   clock24h: config.ui.clock24h,
-  demo: { tv: tv.demo, homeassistant: !ha, games: games.demo },
+  demo: { tv: tv.demo, homeassistant: Boolean(demoHome), games: games.demo },
+  setup: { tv: Boolean(config.livetv.tvheadend) || tv.demo, homeassistant: Boolean(ha || demoHome), games: config.gaming.hosts.length > 0 || games.demo },
   session: launcher.session,
   configPath: resolveConfigPath(),
   features: {
@@ -188,6 +195,7 @@ app.get('/api/info', async () => ({
     labActions: config.lab.actions.length,
   },
   screensaver: config.screensaver,
+  ignoredExamples: config.ignoredExamples,
 }));
 
 app.get('/ws', { websocket: true }, (socket) => {
@@ -341,26 +349,29 @@ app.get<{ Params: { hostId: string; gameId: string } }>('/api/games/:hostId/art/
 /* ---------------- home assistant ---------------- */
 
 function entities(ids: string[]): HaEntity[] {
-  return ha ? ha.entities(ids) : demoHome!.entities(ids);
+  // Leave out entities Home Assistant doesn't have, rather than showing "unavailable" cards.
+  return ha ? ha.entities(ids.filter((id) => ha.known(id))) : (demoHome?.entities(ids) ?? []);
 }
 
 app.get('/api/ha/dashboard', async () => {
-  const sections = ha?.cfg.dashboard ?? demoHome!.dashboard;
+  const sections = ha?.cfg.dashboard ?? demoHome?.dashboard ?? [];
   return {
-    demo: !ha,
-    connected: ha ? ha.connected : true,
+    demo: Boolean(demoHome),
+    setup: Boolean(ha || demoHome),
+    connected: ha ? ha.connected : Boolean(demoHome),
     hasLovelace: Boolean(ha?.cfg.lovelacePath),
     sections: sections.map((s) => ({
       title: s.title,
-      entities: s.cards.map((c) => {
+      entities: s.cards.flatMap((c) => {
         const id = typeof c === 'string' ? c : c.entity;
         const e = entities([id])[0];
+        if (!e) return [];
         const name = typeof c === 'string' ? undefined : c.name;
-        return name ? { ...e, attributes: { ...e.attributes, friendly_name: name } } : e;
+        return [name ? { ...e, attributes: { ...e.attributes, friendly_name: name } } : e];
       }),
-    })),
-    favorites: entities(ha?.cfg.favorites ?? demoHome!.favorites),
-    weather: (ha?.cfg.weather ?? demoHome?.weather) ? entities([ha?.cfg.weather ?? demoHome!.weather])[0] : null,
+    })).filter((s) => s.entities.length > 0),
+    favorites: entities(ha?.cfg.favorites ?? demoHome?.favorites ?? []),
+    weather: (ha?.cfg.weather ?? demoHome?.weather) ? (entities([ha?.cfg.weather ?? demoHome!.weather])[0] ?? null) : null,
   };
 });
 
@@ -369,7 +380,8 @@ app.post<{ Body: { domain: string; service: string; data: Record<string, unknown
   try {
     if (isKid()) throw new PermissionError('Ask a parent to change that');
     if (ha) await ha.callService(domain, service, data);
-    else demoHome!.callService(domain, service, data);
+    else if (demoHome) demoHome.callService(domain, service, data);
+    else throw new Error('Home Assistant isn’t set up yet');
     return { ok: true };
   } catch (err) {
     return fail(err);
@@ -404,9 +416,9 @@ app.post('/api/ha/open-dashboard', async () => {
 /* ---------------- home lab ---------------- */
 
 app.get('/api/lab', async () => ({
-  demo: config.lab.services.length === 0,
-  services: config.lab.services.length ? lab.services : DEMO_SERVICES,
-  sensors: entities(ha ? config.lab.sensors : demoHome!.labSensors),
+  demo: config.demo && config.lab.services.length === 0,
+  services: config.lab.services.length ? lab.services : config.demo ? DEMO_SERVICES : [],
+  sensors: entities(ha ? config.lab.sensors : (demoHome?.labSensors ?? [])),
 }));
 
 app.post<{ Body: { index: number } }>('/api/lab/open', async (req) => {
@@ -476,6 +488,9 @@ app.put<{ Params: { id: string }; Body: Parameters<ProfileStore['update']>[1] }>
   mutate(() => profiles.update(req.params.id, req.body)),
 );
 app.delete<{ Params: { id: string } }>('/api/profiles/:id', async (req) => mutate(() => profiles.remove(req.params.id)));
+app.post<{ Body: { pin: unknown } }>('/api/pins', async (req) => mutate(() => profiles.togglePin(req.body.pin)));
+app.post<{ Body: { key: string; delta: number } }>('/api/pins/move', async (req) => mutate(() => profiles.movePin(String(req.body.key), Number(req.body.delta))));
+app.get<{ Querystring: { ids?: string } }>('/api/ha/entities', async (req) => (isKid() ? [] : entities((req.query.ids ?? '').split(',').filter(Boolean))));
 app.post<{ Body: { name: string; url: string; color?: string } }>('/api/custom-apps', async (req) =>
   mutate(() => profiles.addCustomApp(req.body)),
 );
@@ -506,6 +521,7 @@ lab.start();
 hotkeys.start();
 
 await app.listen({ port: config.server.port, host: config.server.host });
+if (config.ignoredExamples.length) log.info(`Skipped untouched example entries from config.yaml: ${config.ignoredExamples.join(', ')}`);
 log.info(`Hearth ready on http://${config.server.host}:${config.server.port}${config.demo ? ' (demo mode)' : ''}`);
 
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {

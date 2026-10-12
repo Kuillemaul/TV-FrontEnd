@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { EntityCard } from '../components/EntityCard';
+import { PinnedRow } from '../components/Pins';
 import { Icon } from '../components/Icon';
 import { Row, Tile } from '../components/Layout';
 import { formatTime, post, useApi, useServerEvents, type AppTile, type Dashboard, type GameLibrary, type Guide, type OnDeckItem } from '../lib/api';
@@ -25,9 +26,10 @@ export function HomePage() {
   const hearth = useHearth();
   const now = useNow();
   const apps = useApi<AppTile[]>('/api/apps');
-  const liveTv = hearth.profile?.liveTv ?? true;
+  const liveTv = (hearth.profile?.liveTv ?? true) && (hearth.info?.setup.tv ?? true);
   const guide = useApi<Guide>(liveTv ? '/api/tv/guide?hours=1' : null, 60_000);
   const library = useApi<GameLibrary>('/api/games');
+  useServerEvents((e) => e.type === 'games' && void library.reload());
   const dash = useApi<Dashboard>('/api/ha/dashboard');
   // Continue watching only for profiles that can see Plex.
   const hasPlex = apps.data?.some((a) => a.id === 'plex') ?? false;
@@ -79,6 +81,8 @@ export function HomePage() {
         ) : null}
       </section>
 
+      <PinnedRow apps={apps.data} library={library.data} />
+
       <Row title="Watch">
         {liveTv ? (
           <Tile
@@ -92,7 +96,7 @@ export function HomePage() {
           />
         ) : null}
         {apps.data?.map((a, i) => (
-          <Tile key={a.id} autoFocus={!liveTv && i === 0} shape="app" title={a.name} color={a.color} image={a.logo} onSelect={() => hearth.launchApp(a.id)} />
+          <Tile key={a.id} pin={{ kind: 'app', id: a.id }} autoFocus={!liveTv && i === 0} shape="app" title={a.name} color={a.color} image={a.logo} onSelect={() => hearth.launchApp(a.id)} />
         ))}
       </Row>
 
@@ -118,6 +122,7 @@ export function HomePage() {
           {onNow.map(({ ch, prog }) => (
             <Tile
               key={ch.id}
+              pin={{ kind: 'channel', id: ch.id, name: `${ch.number} ${ch.name}` }}
               title={prog?.title ?? 'No listing'}
               subtitle={`${ch.number} · ${ch.name}${prog ? ` · until ${formatTime(prog.end, h24)}` : ''}`}
               image={ch.icon}
@@ -136,6 +141,7 @@ export function HomePage() {
             return (
               <Tile
                 key={`${r.hostId}:${r.gameId}`}
+                pin={{ kind: 'game', hostId: r.hostId, gameId: r.gameId, title: r.title, art: r.art }}
                 shape="poster"
                 title={r.title}
                 image={r.art}
@@ -152,6 +158,7 @@ export function HomePage() {
           {library.data.games.slice(0, 12).map((g) => (
             <Tile
               key={`${g.hostId}:${g.id}`}
+              pin={{ kind: 'game', hostId: g.hostId, gameId: g.id, title: g.title, art: g.art }}
               shape="poster"
               title={g.title}
               subtitle={g.platform}

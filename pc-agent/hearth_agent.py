@@ -824,6 +824,45 @@ class Library:
 
 
 # --------------------------------------------------------------------------------------
+# Moonlight pairing: enter the TV's PIN into Apollo/Sunshine for you
+# --------------------------------------------------------------------------------------
+
+
+def apollo_pin(apollo: dict[str, Any], pin: str, name: str) -> dict[str, Any]:
+    """POST the PIN to Apollo/Sunshine's web API (https://localhost:47990/api/pin).
+
+    Needs the web UI login in agent.json ("apollo": {"username", "password"}). Without it the
+    TV shows the PIN and a QR code for the PIN page instead.
+    """
+    if not re.fullmatch(r"\d{4}", pin):
+        return {"ok": False, "error": "bad pin"}
+    user, password = apollo.get("username"), apollo.get("password")
+    if not user or not password:
+        return {"ok": False, "error": "no Apollo login in agent.json"}
+    import base64
+    import ssl
+
+    url = str(apollo.get("url") or "https://localhost:47990").rstrip("/") + "/api/pin"
+    auth = base64.b64encode(f"{user}:{password}".encode()).decode()
+    req = urllib.request.Request(
+        url,
+        data=json.dumps({"pin": pin, "name": name}).encode(),
+        headers={"Content-Type": "application/json", "Authorization": f"Basic {auth}"},
+        method="POST",
+    )
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE  # Apollo/Sunshine use a self-signed certificate on localhost
+    try:
+        with urllib.request.urlopen(req, timeout=8, context=ctx) as res:
+            reply = json.loads(res.read() or b"{}")
+            ok = str(reply.get("status", "true")).lower() == "true"
+            return {"ok": ok, "error": None if ok else "Apollo rejected the PIN"}
+    except Exception as err:  # noqa: BLE001
+        return {"ok": False, "error": str(err)}
+
+
+# --------------------------------------------------------------------------------------
 # Launching
 # --------------------------------------------------------------------------------------
 
@@ -1202,11 +1241,20 @@ def make_handler(cfg: dict[str, Any], library: Library, launcher: Launcher):
             if os.environ.get("HEARTH_AGENT_DEBUG"):
                 super().log_message(fmt, *args)
 
-        def _json(self, code: int, body: Any) -> None:
+        def _json(self, code: int, body: Any, etag: bool = False) -> None:
             data = json.dumps(body).encode()
+            tag = f'"{hashlib.sha1(data).hexdigest()[:20]}"' if etag else None
+            if tag and self.headers.get("If-None-Match") == tag:
+                # The TV already has this exact library: say so instead of sending it again.
+                self.send_response(304)
+                self.send_header("ETag", tag)
+                self.end_headers()
+                return
             self.send_response(code)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(data)))
+            if tag:
+                self.send_header("ETag", tag)
             self.end_headers()
             self.wfile.write(data)
 
@@ -1241,7 +1289,7 @@ def make_handler(cfg: dict[str, Any], library: Library, launcher: Launcher):
             url = urllib.parse.urlsplit(self.path)
             qs = {k: v[0] for k, v in urllib.parse.parse_qs(url.query).items()}
             if url.path == "/games":
-                return self._json(200, library.public())
+                return self._json(200, library.public(), etag=True)
             if url.path == "/browse/sources":
                 return self._json(200, library.browse_sources())
             if url.path == "/browse":
@@ -1261,6 +1309,9 @@ def make_handler(cfg: dict[str, Any], library: Library, launcher: Launcher):
             if not self._authed():
                 return
             try:
+                if self.path == "/pair":
+                    body = self._body()
+                    return self._json(200, apollo_pin(cfg.get("apollo") or {}, str(body.get("pin", "")), str(body.get("name", "Hearth TV"))))
                 if self.path == "/launch":
                     body = self._body()
                     gid = body.get("id", "")

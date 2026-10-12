@@ -25,6 +25,35 @@ export interface Profile {
   theme: Theme;
   /** Screen-time rules (kid profiles). */
   limits?: Limits;
+  /** Things pinned to the top of Home, in order. */
+  pins?: Pin[];
+}
+
+/** Something pinned to Home. */
+export type Pin =
+  | { kind: 'app'; id: string }
+  | { kind: 'game'; hostId: string; gameId: string; title: string; art?: string }
+  | { kind: 'channel'; id: string; name: string }
+  | { kind: 'entity'; id: string; name?: string };
+
+export const pinKey = (p: Pin) => (p.kind === 'game' ? `game:${p.hostId}:${p.gameId}` : `${p.kind}:${p.id}`);
+
+const MAX_PINS = 24;
+
+function cleanPin(raw: any): Pin {
+  const str = (v: unknown, max = 200) => String(v ?? '').slice(0, max);
+  switch (raw?.kind) {
+    case 'app':
+      return { kind: 'app', id: str(raw.id) };
+    case 'game':
+      return { kind: 'game', hostId: str(raw.hostId), gameId: str(raw.gameId), title: str(raw.title, 120), art: raw.art ? str(raw.art, 500) : undefined };
+    case 'channel':
+      return { kind: 'channel', id: str(raw.id), name: str(raw.name, 60) };
+    case 'entity':
+      return { kind: 'entity', id: str(raw.id), name: raw.name ? str(raw.name, 60) : undefined };
+    default:
+      throw new Error('Can’t pin that');
+  }
 }
 
 export interface Limits {
@@ -197,6 +226,30 @@ export class ProfileStore {
     this.requireAdmin();
     this.data.customApps = this.data.customApps.filter((a) => a.id !== id);
     for (const p of this.data.profiles) if (p.apps) p.apps = p.apps.filter((a) => a !== id);
+    this.save();
+  }
+
+  /** Pin to (or unpin from) the active profile's Home. Anyone can manage their own pins. */
+  togglePin(raw: unknown): boolean {
+    const pin = cleanPin(raw);
+    const p = this.active;
+    const key = pinKey(pin);
+    const pins = p.pins ?? [];
+    const pinned = !pins.some((x) => pinKey(x) === key);
+    if (pinned && pins.length >= MAX_PINS) throw new Error(`Home holds up to ${MAX_PINS} pins`);
+    p.pins = pinned ? [...pins, pin] : pins.filter((x) => pinKey(x) !== key);
+    this.save();
+    return pinned;
+  }
+
+  /** Move a pin left (-1) or right (+1) on Home. */
+  movePin(key: string, delta: number): void {
+    const pins = [...(this.active.pins ?? [])];
+    const i = pins.findIndex((x) => pinKey(x) === key);
+    const j = i + Math.sign(delta);
+    if (i < 0 || j < 0 || j >= pins.length) return;
+    [pins[i], pins[j]] = [pins[j], pins[i]];
+    this.active.pins = pins;
     this.save();
   }
 

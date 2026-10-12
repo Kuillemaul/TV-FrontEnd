@@ -1455,33 +1455,78 @@ code { color: var(--text); }
   height: 100%;
   object-fit: cover;
   opacity: 0;
-  transform: scale(1.04);
-  transition: opacity 2s ease, transform 14s linear;
+  transform: scale(var(--kb-from, 1.04));
+  transition: opacity 2.5s ease;
 }
 
-.saver-photo.shown { opacity: 1; transform: scale(1.12); }
+/* Ken Burns: each photo slowly zooms and pans towards its own corner while it's up. */
+.saver-photo.shown { opacity: 1; animation: ken-burns 14s linear forwards; }
+@keyframes ken-burns {
+  from { transform: scale(var(--kb-from, 1.04)); }
+  to { transform: scale(var(--kb-to, 1.14)); }
+}
 
-.saver-gradient {
+/* No photos: an aurora of soft colour clouds, each on its own slow path, with drifting motes of light. */
+.saver-aurora { position: absolute; inset: 0; overflow: hidden; background: var(--bg); animation: aurora-hue 90s linear infinite; }
+@keyframes aurora-hue { to { filter: hue-rotate(360deg); } }
+
+.aurora-blob {
   position: absolute;
-  inset: -20%;
-  background:
-    radial-gradient(40% 40% at 30% 30%, rgba(var(--accent-rgb), 0.35), transparent 70%),
-    radial-gradient(40% 40% at 70% 70%, rgba(var(--accent-2-rgb), 0.3), transparent 70%),
-    var(--bg);
-  animation: drift 40s ease-in-out infinite alternate;
+  width: 70vmax;
+  height: 70vmax;
+  border-radius: 50%;
+  filter: blur(6vmax);
+  mix-blend-mode: screen;
+  opacity: 0.55;
+}
+.aurora-blob.a1 { left: -20vmax; top: -25vmax; background: radial-gradient(circle, rgba(var(--accent-rgb), 0.9), transparent 65%); animation: blob-1 38s ease-in-out infinite alternate; }
+.aurora-blob.a2 { right: -25vmax; top: -10vmax; background: radial-gradient(circle, rgba(var(--accent-2-rgb), 0.85), transparent 65%); animation: blob-2 46s ease-in-out infinite alternate; }
+.aurora-blob.a3 { left: 10vmax; bottom: -35vmax; background: radial-gradient(circle, rgba(61, 220, 151, 0.55), transparent 65%); animation: blob-3 54s ease-in-out infinite alternate; }
+.aurora-blob.a4 { right: 0; bottom: -30vmax; background: radial-gradient(circle, rgba(255, 120, 180, 0.45), transparent 65%); animation: blob-4 62s ease-in-out infinite alternate; }
+@keyframes blob-1 { 50% { transform: translate(25vw, 18vh) scale(1.15); } to { transform: translate(8vw, 40vh) scale(0.9); } }
+@keyframes blob-2 { 50% { transform: translate(-30vw, 25vh) scale(0.85); } to { transform: translate(-12vw, 45vh) scale(1.2); } }
+@keyframes blob-3 { 50% { transform: translate(30vw, -25vh) scale(1.2); } to { transform: translate(50vw, -10vh) scale(0.95); } }
+@keyframes blob-4 { 50% { transform: translate(-40vw, -30vh) scale(1.1); } to { transform: translate(-20vw, -50vh) scale(0.85); } }
+
+.saver-mote {
+  position: absolute;
+  bottom: -2rem;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0.8rem rgba(255, 255, 255, 0.9);
+  animation-name: mote-rise;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+@keyframes mote-rise {
+  0% { transform: translate(0, 0); }
+  25% { transform: translate(2vw, -27vh); }
+  50% { transform: translate(-1.5vw, -55vh); }
+  75% { transform: translate(1.5vw, -82vh); }
+  100% { transform: translate(0, -110vh); }
 }
 
-@keyframes drift { to { transform: translate(6%, -4%) rotate(8deg); } }
+.saver-vignette { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.55)); pointer-events: none; }
 
 .saver-info {
   position: absolute;
-  left: var(--gutter);
-  bottom: 4rem;
   text-shadow: 0 0.2rem 1.5rem rgba(0, 0, 0, 0.7);
+  transition: opacity 1.1s ease, transform 1.1s ease;
+  animation: saver-breathe 8s ease-in-out infinite alternate;
 }
+.saver-info.moving { opacity: 0; transform: translateY(1rem); }
+.saver-info.spot-bl { left: var(--gutter); bottom: 4rem; }
+.saver-info.spot-br { right: var(--gutter); bottom: 4rem; text-align: right; }
+.saver-info.spot-tr { right: var(--gutter); top: 4rem; text-align: right; }
+.saver-info.spot-tl { left: var(--gutter); top: 4rem; }
+@keyframes saver-breathe { from { filter: brightness(0.92); } to { filter: brightness(1.05); } }
 
 .saver-time { font-size: 6rem; font-weight: 700; letter-spacing: -0.03em; line-height: 1; }
 .saver-date { font-size: 1.6rem; color: rgba(255, 255, 255, 0.85); margin-top: 0.6rem; text-transform: capitalize; }
+
+@media (prefers-reduced-motion: reduce) {
+  .saver-photo.shown, .saver-aurora, .aurora-blob, .saver-mote, .saver-info { animation: none; }
+}
 
 /* ---------------- sparkline ---------------- */
 
@@ -1696,3 +1741,40 @@ body.is-alert { background: transparent; }
 .pad-exit { display: flex; align-items: center; gap: 0.7rem; margin-left: auto; color: var(--text-3); }
 .pad-exit-bar { width: 6rem; height: 0.4rem; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
 .pad-exit-bar span { display: block; height: 100%; background: var(--bad); }
+
+.not-set-up {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.8rem;
+  max-width: 44rem;
+  margin: 4rem auto;
+  padding: 2.4rem;
+  border-radius: 1.2rem;
+  border: 1px dashed var(--border);
+  background: var(--surface);
+  color: var(--text-3);
+  text-align: center;
+}
+.not-set-up-title { font-size: 1.5rem; font-weight: 650; color: var(--text); }
+.not-set-up-text { color: var(--text-2); line-height: 1.5; }
+.not-set-up code { color: var(--text); }
+
+/* ---------------- Moonlight pairing ---------------- */
+
+.pair { display: flex; gap: 2.4rem; align-items: center; }
+.pair-text { flex: 1; min-width: 0; }
+.pair-label { color: var(--text-2); font-size: 1.1rem; }
+.pair-pin { font-size: 6rem; font-weight: 800; letter-spacing: 0.3em; line-height: 1.1; margin: 0.4rem 0 1rem; font-variant-numeric: tabular-nums; }
+.pair-pin.ok { color: var(--good); letter-spacing: 0; }
+.pair-steps { margin: 0 0 1.2rem; padding-left: 1.4rem; color: var(--text-2); line-height: 1.6; font-size: 1.1rem; }
+.pair-steps b, .pair-steps code { color: var(--text); }
+.pair-status { color: var(--text-2); font-weight: 600; }
+.pair-status.good { color: var(--good); }
+.pair-status.bad { color: #ffb3ba; }
+.pair-qr { width: 15rem; height: 15rem; border-radius: 1rem; background: #fff; padding: 0.6rem; flex: none; }
+.pair-page { position: fixed; inset: 0; display: flex; flex-direction: column; justify-content: center; padding: 0 8rem; background: var(--bg); }
+.pair-hint { position: absolute; bottom: 3rem; left: 8rem; color: var(--text-3); }
+
+.modal-actions-column { flex-direction: column; align-items: stretch; }
+.modal-actions-column .btn { justify-content: flex-start; }

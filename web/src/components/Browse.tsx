@@ -58,6 +58,7 @@ function GameGrid({ games, total, loading, error, more, onSelect }: ReturnType<t
         {games.map((g, i) => (
           <Tile
             key={`${g.hostId}:${g.id}`}
+            pin={{ kind: 'game', hostId: g.hostId, gameId: g.id, title: g.title, art: g.art }}
             autoFocus={i === 0}
             shape="poster"
             title={g.title}
