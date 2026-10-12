@@ -220,6 +220,22 @@ export interface LabStatus {
   sensors: HaEntity[];
 }
 
+export interface AudioOutput {
+  id: string;
+  card: string;
+  label: string;
+  available: boolean;
+  layouts: Array<{ channels: number; label: string; profile: string }>;
+}
+
+export interface AudioStatus {
+  available: boolean;
+  error?: string;
+  outputs: AudioOutput[];
+  current: { outputId: string; channels: number } | null;
+  sink: { name: string; description: string; channels: string[]; volume: number; muted: boolean } | null;
+}
+
 export interface KbmStatus {
   keyboard: string | null;
   mouse: string | null;

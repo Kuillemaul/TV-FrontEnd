@@ -427,6 +427,8 @@ they close Netflix, Plex, mpv or Moonlight and bring you back. Change these keys
 
 | Symptom | Fix |
 | --- | --- |
+| No sound / wrong speakers | Settings → Sound: pick the HDMI port with the green dot, then Stereo / 5.1 / 7.1, and use **Test speakers**. |
+| A controller doesn't respond | Settings → Controllers → **Test controllers** shows every pad's buttons and sticks live (hold B to exit). |
 | Black screen after boot | Switch to tty2 (Ctrl+Alt+F2), log in, and as `tv` check `journalctl --user -u hearth -b`. Check that `cage` runs: `journalctl -b | grep cage`. |
 | Home key does nothing inside apps | `tv` must be in the `input` group (`id tv`). Log out and back in after changing it. |
 | Netflix says the browser isn't supported | Use `google-chrome-stable` (Widevine). Chromium from Debian/Ubuntu often lacks it. Expect 720p from Netflix and most paid services in a Linux browser (see [Streaming quality](#streaming-quality)). |

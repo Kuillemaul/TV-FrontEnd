@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import type { AlertService } from '../alerts.js';
+import { AudioControl } from '../audio.js';
 import type { EventBus } from '../bus.js';
 import { expand, type HearthConfig, type LabAction } from '../config.js';
 import type { Launcher } from '../launcher.js';
@@ -90,6 +91,20 @@ export function registerExtras(app: FastifyInstance, ctx: ExtrasContext): void {
       return state.settings;
     }),
   );
+
+  /* ---------------- sound output ---------------- */
+
+  const audio = new AudioControl();
+  app.get('/api/audio', async () => audio.status());
+  app.post<{ Body: { outputId: string; channels: number } }>('/api/audio/output', async (req) =>
+    run(async () => {
+      requireParent();
+      await audio.setOutput(String(req.body.outputId), Number(req.body.channels) || 2);
+      return audio.status();
+    }),
+  );
+  app.post<{ Body: { percent: number } }>('/api/audio/volume', async (req) => run(() => audio.setVolume(Number(req.body.percent))));
+  app.post<{ Body: { channel: number } }>('/api/audio/test', async (req) => run(() => audio.test(Number(req.body.channel))));
 
   /* ---------------- alerts & doorbell ---------------- */
 

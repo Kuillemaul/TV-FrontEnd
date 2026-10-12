@@ -189,6 +189,15 @@ interface PadState {
 
 const pads = new Map<number, PadState>();
 let polling = false;
+let padNavPaused = 0;
+
+/** Stop controllers from navigating (the controller tester reads them itself). Returns undo. */
+export function pauseGamepadNav(): () => void {
+  padNavPaused++;
+  return () => {
+    padNavPaused--;
+  };
+}
 
 function padDir(gp: Gamepad): Dir | null {
   const b = (i: number) => gp.buttons[i]?.pressed;
@@ -212,6 +221,10 @@ function poll(now: number): void {
       const prev = pads.get(gp.index) ?? { buttons: [], dir: null, nextRepeat: 0 };
       const pressed = gp.buttons.map((b) => b.pressed);
       if (pressed.some(Boolean) || padDir(gp)) markInput();
+      if (padNavPaused) {
+        pads.set(gp.index, { buttons: pressed, dir: padDir(gp), nextRepeat: prev.nextRepeat });
+        continue;
+      }
       const edge = (i: number) => pressed[i] && !prev.buttons[i];
 
       if (edge(Btn.A)) activate();

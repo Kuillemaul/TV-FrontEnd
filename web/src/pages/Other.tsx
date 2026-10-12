@@ -3,6 +3,8 @@ import { EntityCard } from '../components/EntityCard';
 import { AddProfile, Avatar, PinPad } from '../components/Profiles';
 import { Sparkline } from '../components/Sparkline';
 import { SettingsExtras } from '../components/SettingsExtras';
+import { SoundSettings } from '../components/SoundSettings';
+import { ControllerTest } from '../components/ControllerTest';
 import { Icon } from '../components/Icon';
 import { Button, DemoBanner, Modal, PageHeader, Tile } from '../components/Layout';
 import { post, useApi, useServerEvents, type AppTile, type Dashboard, type HaEntity, type LabStatus } from '../lib/api';
@@ -126,6 +128,7 @@ export function SettingsPage() {
   const hearth = useHearth();
   const [confirm, setConfirm] = useState<null | { action: string; label: string }>(null);
   const [adding, setAdding] = useState(false);
+  const [padTest, setPadTest] = useState(false);
   const sys = (action: string) => void post(`/api/system/${action}`);
 
   return (
@@ -158,12 +161,11 @@ export function SettingsPage() {
         </div>
       </section>
       <SettingsExtras />
+      <SoundSettings />
       <section className="settings-group">
-        <h2>Sound</h2>
+        <h2>Controllers</h2>
         <div className="settings-row" data-nav-group>
-          <Button icon="volumeDown" onClick={() => sys('volumeDown')}>Volume down</Button>
-          <Button icon="volumeUp" onClick={() => sys('volumeUp')}>Volume up</Button>
-          <Button icon="mute" onClick={() => sys('mute')}>Mute</Button>
+          <Button icon="gamepad" onClick={() => setPadTest(true)}>Test controllers</Button>
         </div>
       </section>
       <section className="settings-group">
@@ -196,6 +198,7 @@ export function SettingsPage() {
         </div>
       </section>
 
+      {padTest ? <ControllerTest onClose={() => setPadTest(false)} /> : null}
       {adding ? (
         <AddProfile
           onClose={() => setAdding(false)}
