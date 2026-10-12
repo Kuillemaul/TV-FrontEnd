@@ -59,6 +59,12 @@ The installer:
 - adds the Hearth boot splash (Plymouth), hides the boot menu and kernel text, and starts Chrome and the server
   side by side so the TV is ready sooner. Hold **Shift** or tap **Esc** while it boots to get the boot menu back.
 
+**Starting and leaving a game:** while a game loads, the TV shows its artwork instead of the PC's desktop, until the
+agent sees the game running (plus `revealSeconds`; Back shows the stream right away). When the stream ends (you
+quit the game, press Home, or Moonlight closes) Hearth closes the game and ends the session on the PC with Moonlight's
+*quit*, so Apollo removes its virtual display and your monitors come back on. With the Apollo login in `agent.json`
+the agent also ends it directly. Turn these off per PC with `loadingScreen: false` / `endSessionOnExit: false`.
+
 **Display:** Settings → Display picks the resolution (4K, 1080p…) and refresh rate (60/59.94/50/24 Hz). A new
 setting goes back by itself after 15 seconds unless you press *Keep*, so a mode the TV can't show never leaves you
 with a black screen. HDR isn't available on this setup yet: cage (the kiosk compositor in Debian 13) can't output

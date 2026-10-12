@@ -82,6 +82,8 @@ interface AgentHealth {
   playing?: string | null;
   /** true while the game runs, false once it exited, null/absent when the agent can't tell. */
   gameRunning?: boolean | null;
+  /** Apollo's virtual display exists (the stream is connected); null when the agent can't tell. */
+  streamDisplay?: boolean | null;
 }
 
 /** How often to ask a PC whether its library changed (a cheap "no changes" answer when it hasn't). */
@@ -136,6 +138,8 @@ export class GameService {
 
   /** Sample games only when previewing without a config file (config.demo). */
   allowDemo = false;
+  /** Where the loading screen page is served (set by the server), e.g. http://127.0.0.1:8787 */
+  uiBase = '';
 
   get demo(): boolean {
     return this.allowDemo && this.cfg.hosts.length === 0;
@@ -458,6 +462,62 @@ export class GameService {
    * otherwise stay on the PC's desktop. Poll the agent; when it says the game has exited,
    * end the stream so the TV comes straight back to Hearth.
    */
+  /**
+   * Stop the game on the PC and end the stream session there. With Apollo that removes the
+   * virtual display, so your real monitors switch back on. Moonlight's "quit" asks the host to end
+   * the app over the paired connection; the agent also asks Apollo directly when it has the login.
+   */
+  private async endSession(h: GameHostConfig): Promise<void> {
+    if (h.quitOnExit || h.endSessionOnExit) {
+      await this.agent(h, '/stop', { method: 'POST', body: JSON.stringify({ endSession: h.endSessionOnExit }) }).catch(() => undefined);
+    }
+    if (h.endSessionOnExit) {
+      await this.launcher.run([...this.moonlightBase(), 'quit', h.moonlightHost]).catch(() => undefined);
+    }
+  }
+
+  /**
+   * Show a Hearth loading screen above the stream while the game starts, so you don't watch the
+   * PC's desktop. It goes up once the stream window is showing and comes down a few seconds after
+   * the agent sees the game running (or on Back).
+   */
+  private async coverWhileLoading(
+    h: GameHostConfig,
+    sessionId: string,
+    info: { hostId: string; gameId: string; title: string; art?: string },
+    gameStarted: Promise<void>,
+  ): Promise<void> {
+    if (!h.loadingScreen || !this.uiBase) return;
+    const ours = () => this.launcher.session?.id === sessionId;
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    // Wait for the stream window: with Apollo, its virtual display appears when the stream connects.
+    const deadline = Date.now() + 25_000;
+    let display: boolean | null | undefined = h.virtualDisplay ? false : null;
+    while (h.virtualDisplay && display === false && Date.now() < deadline && ours()) {
+      display = (await this.health(h))?.streamDisplay;
+      if (display === false) await sleep(500);
+    }
+    await sleep(display ? 700 : 2500);
+    if (!ours()) return;
+    const q = new URLSearchParams({ host: info.hostId, game: info.gameId, title: info.title, ...(info.art ? { art: info.art } : {}) });
+    this.launcher.showOverlay(`${this.uiBase}/launching?${q}`, 180);
+
+    try {
+      await gameStarted;
+    } catch {
+      return; // launch() closes it and reports the error
+    }
+    const until = Date.now() + 90_000;
+    let running: boolean | null | undefined = false;
+    while (running === false && Date.now() < until && ours()) {
+      running = (await this.health(h))?.gameRunning;
+      if (running === false) await sleep(1000);
+    }
+    // Known running: give its window a moment. Unknown (agent can't tell): a fixed wait.
+    await sleep(running ? h.revealSeconds * 1000 : 10_000);
+    if (ours()) this.launcher.closeOverlay();
+  }
+
   private watchForGameExit(h: GameHostConfig, sessionId: string): void {
     if (!h.endStreamOnGameExit) return;
     const timer = setInterval(async () => {
@@ -501,7 +561,8 @@ export class GameService {
       const onStreamEnd = () => {
         this.state.addPlaytime(`${hostId}:${gameId}`, (Date.now() - started) / 60_000);
         if (!failed) this.status(hostId, gameId, 'ended', `${title} closed`);
-        if (h.quitOnExit) this.agent(h, '/stop', { method: 'POST', body: '{}' }).catch(() => {});
+        this.launcher.closeOverlay();
+        void this.endSession(h);
       };
       const startGame = async (waitForDisplay: boolean) => {
         const res = await this.agent(
@@ -519,10 +580,13 @@ export class GameService {
         // then the agent waits for it and starts the game on it.
         this.status(hostId, gameId, 'launching', `Connecting to ${h.name}…`);
         await this.launcher.launch(`game:${hostId}:${gameId}`, title, moonlight, onStreamEnd);
+        const gameStarting = startGame(true);
+        void this.coverWhileLoading(h, `game:${hostId}:${gameId}`, { hostId, gameId, title, art }, gameStarting);
         try {
-          await startGame(true);
+          await gameStarting;
         } catch (err) {
           failed = true;
+          this.launcher.closeOverlay();
           await this.launcher.stop();
           throw err;
         }
@@ -535,6 +599,7 @@ export class GameService {
         this.status(hostId, gameId, 'streaming', `Streaming ${title}`);
         this.state.addRecentGame({ hostId, gameId, title, art });
         await this.launcher.launch(`game:${hostId}:${gameId}`, title, moonlight, onStreamEnd);
+        void this.coverWhileLoading(h, `game:${hostId}:${gameId}`, { hostId, gameId, title, art }, Promise.resolve());
         this.watchForGameExit(h, `game:${hostId}:${gameId}`);
       }
     } catch (err) {

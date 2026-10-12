@@ -152,6 +152,8 @@ export function registerExtras(app: FastifyInstance, ctx: ExtrasContext): void {
       await launcher.launch('app:moonlight', 'Moonlight', { type: 'command', command: games.moonlightBase() });
     }),
   );
+  // Back on the game loading screen: just reveal the stream.
+  app.post('/api/games/loading/close', async () => run(() => launcher.closeOverlay()));
   app.post('/api/moonlight/cancel', async () =>
     run(async () => {
       launcher.closeOverlay();

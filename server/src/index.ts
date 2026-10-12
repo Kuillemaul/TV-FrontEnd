@@ -44,6 +44,7 @@ const tv: LiveTvProvider = config.livetv.tvheadend
     : new NoTvProvider();
 const games = new GameService(config.gaming, launcher, bus, state, join(config.stateDir, 'games-cache.json'));
 games.allowDemo = config.demo;
+games.uiBase = `http://127.0.0.1:${config.server.port}`;
 const lab = new LabMonitor(config.lab);
 const ha = config.homeassistant ? new HomeAssistant(config.homeassistant, bus, log, config.lab.sensors) : undefined;
 const demoHome = ha || !config.demo ? undefined : new DemoHome(bus);

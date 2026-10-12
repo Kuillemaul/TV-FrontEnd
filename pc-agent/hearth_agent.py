@@ -1201,6 +1201,36 @@ def wait_for_virtual_display(cfg: dict[str, Any], displays=active_displays, slee
     return False
 
 
+def stream_display_active(cfg: dict[str, Any], displays=active_displays) -> bool | None:
+    """True while Apollo's virtual display exists (a stream is connected); None where we can't tell."""
+    if not IS_WINDOWS and displays is active_displays:
+        return None
+    match = cfg.get("virtualDisplay", {}).get("match", "Virtual Display").lower()
+    return any(match in name.lower() for name in displays())
+
+
+def apollo_close(apollo: dict[str, Any]) -> bool:
+    """Ask Apollo/Sunshine to end the running app (and so the stream session). Needs the web login."""
+    user, password = apollo.get("username"), apollo.get("password")
+    if not user or not password:
+        return False
+    import base64
+    import ssl
+
+    url = str(apollo.get("url") or "https://localhost:47990").rstrip("/") + "/api/apps/close"
+    auth = base64.b64encode(f"{user}:{password}".encode()).decode()
+    req = urllib.request.Request(url, data=b"{}", headers={"Content-Type": "application/json", "Authorization": f"Basic {auth}"}, method="POST")
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    try:
+        with urllib.request.urlopen(req, timeout=8, context=ctx):
+            return True
+    except Exception as err:  # noqa: BLE001
+        log(f"Apollo close: {err}")
+        return False
+
+
 def uptime_seconds() -> int:
     try:
         if IS_WINDOWS:
@@ -1283,7 +1313,8 @@ def make_handler(cfg: dict[str, Any], library: Library, launcher: Launcher):
             if self.path == "/health":
                 current = launcher.current["title"] if launcher.current else None
                 running = launcher.game_running() if launcher.current else None
-                return self._json(200, {"ok": True, "host": socket.gethostname(), "uptime": uptime_seconds(), "playing": current, "gameRunning": running})
+                return self._json(200, {"ok": True, "host": socket.gethostname(), "uptime": uptime_seconds(), "playing": current,
+                                        "gameRunning": running, "streamDisplay": stream_display_active(cfg)})
             if not self._authed():
                 return
             url = urllib.parse.urlsplit(self.path)
@@ -1342,7 +1373,9 @@ def make_handler(cfg: dict[str, Any], library: Library, launcher: Launcher):
                     return self._json(200, {"ok": True})
                 if self.path == "/stop":
                     launcher.stop()
-                    return self._json(200, {"ok": True})
+                    # Ending the app in Apollo removes its virtual display, so the real monitors come back.
+                    closed = apollo_close(cfg.get("apollo") or {}) if self._body().get("endSession") else False
+                    return self._json(200, {"ok": True, "sessionEnded": closed})
                 if self.path == "/rescan":
                     library.scan()
                     return self._json(200, {"ok": True})

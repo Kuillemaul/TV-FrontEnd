@@ -151,6 +151,12 @@ export interface GameHostConfig {
   virtualDisplay: boolean;
   /** When you quit from inside the game, end the stream and return to Hearth. */
   endStreamOnGameExit: boolean;
+  /** Cover the stream with a Hearth loading screen until the game is up (hides the PC desktop). */
+  loadingScreen: boolean;
+  /** Seconds to keep the loading screen after the game's process starts (its window needs a moment). */
+  revealSeconds: number;
+  /** End the session on the PC when the stream ends (Apollo: switches your monitors back on). */
+  endSessionOnExit: boolean;
 }
 
 export interface GamingConfig {
@@ -287,6 +293,9 @@ function normaliseHost(h: any, i: number): GameHostConfig {
     quitOnExit: h.quitOnExit ?? true,
     virtualDisplay: h.virtualDisplay ?? false,
     endStreamOnGameExit: h.endStreamOnGameExit ?? true,
+    loadingScreen: h.loadingScreen ?? true,
+    revealSeconds: Number(h.revealSeconds ?? 5),
+    endSessionOnExit: h.endSessionOnExit ?? true,
   };
 }
 
