@@ -70,6 +70,30 @@ software DRM (Widevine L3), so in Chrome on Linux:
 No 4K, HDR, Dolby Vision or Atmos from paid services is possible on Linux. If that matters, connect a
 Google TV Streamer, Shield or Apple TV to another HDMI input for those services.
 
+### Profiles, apps and themes
+
+Everything here is done from the TV with the remote. No config file needed.
+
+- **Add your son's profile:** Settings → Profiles → **Add profile** → choose **★ Kid**. Kid profiles start empty.
+  In the editor that opens:
+  - **Apps:** add the tiles he should see and order them with ▲/▼.
+  - **Games:** tick the games he's allowed. The list covers every PC; search helps with big libraries.
+  - **Live TV:** on or off.
+  - **Theme:** a playful look (Candy background + Fredoka font is the kid default).
+- **What a kid profile can't do:** open Smart Home, Lab or Settings, start anything that isn't on his list (also
+  enforced by the server, so voice commands like "play Elden Ring" are refused), use Home Assistant voice
+  commands, or sleep/restart the TV. He can still change his own theme and switch profiles.
+- **Parent PIN:** Settings → Profiles → your profile → **PIN**. With a PIN set, switching from his profile back to
+  yours asks for it. The picker shows a 🔒 next to protected profiles.
+- **Switching:** the avatar in the top-right → **Switch profile**. "Who's watching?" also appears at start-up when
+  there's more than one profile.
+- **Arrange apps:** Apps → **Edit apps** (or Settings → Arrange apps) to reorder, hide, bring back, or **add a web
+  app** (any website, opened full screen like the others). This affects only the current profile.
+- **Theme:** avatar → **Change theme**, or Settings → Theme. Move across backgrounds, colour palettes and fonts and
+  the whole TV previews each one. Select to keep it, then **Save**. Back cancels.
+
+Profiles live in `~/.local/state/hearth/profiles.json` on the OptiPlex. Back it up if you like.
+
 ## 2. Live TV with a USB tuner
 
 Hearth uses **Tvheadend** for the tuner, channel scan, guide (EPG) and recordings. It works with nearly every

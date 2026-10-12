@@ -7,7 +7,9 @@ export type UiEvent =
   | { type: 'toast'; level: 'info' | 'error'; message: string }
   | { type: 'game-status'; hostId: string; gameId: string; stage: GameStage; message: string }
   | { type: 'ha-state'; entity: unknown }
-  | { type: 'ha-connection'; connected: boolean };
+  | { type: 'ha-connection'; connected: boolean }
+  /** Profiles or the active profile changed; UIs reload. */
+  | { type: 'profiles' };
 
 export type GameStage = 'waking' | 'launching' | 'streaming' | 'ended' | 'error';
 

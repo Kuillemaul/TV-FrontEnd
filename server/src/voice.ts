@@ -21,12 +21,14 @@ export class VoiceService {
   constructor(
     private readonly ha: HomeAssistant | undefined,
     private readonly catalog: () => Promise<IntentCatalog>,
+    private readonly allowHome: () => boolean = () => true,
   ) {}
 
   async process(text: string): Promise<VoiceResult> {
     const local = matchIntent(text, await this.catalog());
     if (local) return { text, speech: local.speech, action: local.action, audio: await this.tts(local.speech) };
 
+    if (!this.allowHome()) return { text, speech: "I can open your apps and games. Try “play” and a game's name." };
     if (!this.ha?.connected) {
       return { text, speech: this.ha ? 'Home Assistant is not connected right now.' : 'I can only control the TV until Home Assistant is set up.' };
     }

@@ -22,7 +22,38 @@ export interface AppTile {
   color?: string;
   logo?: string;
   kind: 'command' | 'web';
+  custom?: boolean;
 }
+
+export interface ThemeChoice {
+  background: string;
+  palette: string;
+  font: string;
+}
+
+export interface Profile {
+  id: string;
+  name: string;
+  color: string;
+  kind: 'admin' | 'kid';
+  hasPin: boolean;
+  /** Ordered app ids; null = every app. */
+  apps: string[] | null;
+  /** "<hostId>:<gameId>" keys; null = every game. */
+  games: string[] | null;
+  liveTv: boolean;
+  theme: ThemeChoice;
+}
+
+export interface ProfilesState {
+  activeId: string;
+  profiles: Profile[];
+  customApps: Array<{ id: string; name: string; url: string; color: string }>;
+}
+
+export type MutationResult = Partial<ProfilesState> & { ok: boolean; error?: string; permission?: boolean };
+
+export const gameKey = (g: { hostId: string; id: string }) => `${g.hostId}:${g.id}`;
 
 export interface Channel {
   id: string;
@@ -141,7 +172,8 @@ export type ServerEvent =
   | { type: 'toast'; level: 'info' | 'error'; message: string }
   | { type: 'game-status'; hostId: string; gameId: string; stage: 'waking' | 'launching' | 'streaming' | 'ended' | 'error'; message: string }
   | { type: 'ha-state'; entity: HaEntity }
-  | { type: 'ha-connection'; connected: boolean };
+  | { type: 'ha-connection'; connected: boolean }
+  | { type: 'profiles' };
 
 export async function get<T>(path: string): Promise<T> {
   const res = await fetch(path);

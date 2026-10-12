@@ -25,7 +25,8 @@ export function HomePage() {
   const hearth = useHearth();
   const now = useNow();
   const apps = useApi<AppTile[]>('/api/apps');
-  const guide = useApi<Guide>('/api/tv/guide?hours=1', 60_000);
+  const liveTv = hearth.profile?.liveTv ?? true;
+  const guide = useApi<Guide>(liveTv ? '/api/tv/guide?hours=1' : null, 60_000);
   const library = useApi<GameLibrary>('/api/games');
   const dash = useApi<Dashboard>('/api/ha/dashboard');
 
@@ -76,17 +77,19 @@ export function HomePage() {
       </section>
 
       <Row title="Watch">
-        <Tile
-          shape="app"
-          title="Live TV"
-          icon="tv"
-          color="#2b3cff"
-          autoFocus
-          badge={lastChannel ? <span className="badge">{lastChannel.number} {lastChannel.name}</span> : undefined}
-          onSelect={() => (lastChannel ? hearth.watchChannel(lastChannel.id) : hearth.navigate('tv'))}
-        />
-        {apps.data?.map((a) => (
-          <Tile key={a.id} shape="app" title={a.name} color={a.color} image={a.logo} onSelect={() => hearth.launchApp(a.id)} />
+        {liveTv ? (
+          <Tile
+            shape="app"
+            title="Live TV"
+            icon="tv"
+            color="#2b3cff"
+            autoFocus
+            badge={lastChannel ? <span className="badge">{lastChannel.number} {lastChannel.name}</span> : undefined}
+            onSelect={() => (lastChannel ? hearth.watchChannel(lastChannel.id) : hearth.navigate('tv'))}
+          />
+        ) : null}
+        {apps.data?.map((a, i) => (
+          <Tile key={a.id} autoFocus={!liveTv && i === 0} shape="app" title={a.name} color={a.color} image={a.logo} onSelect={() => hearth.launchApp(a.id)} />
         ))}
       </Row>
 
@@ -138,7 +141,7 @@ export function HomePage() {
         </Row>
       ) : null}
 
-      {dash.data?.favorites.length ? (
+      {!hearth.isKid && dash.data?.favorites.length ? (
         <Row title="Quick controls">
           {dash.data.favorites.map((e) => (
             <EntityCard key={e.entity_id} entity={e} compact />

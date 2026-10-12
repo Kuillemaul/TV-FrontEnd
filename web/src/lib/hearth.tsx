@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { Info, PageId } from './api';
+import type { Info, PageId, Profile, ProfilesState } from './api';
 
 export interface PlayRequest {
   hostId: string;
@@ -17,6 +17,15 @@ export interface Hearth {
   /** Starts a game; shows the keyboard/mouse prompt first when the game needs one. */
   playGame(game: PlayRequest): void;
   toast(message: string, level?: 'info' | 'error'): void;
+  profiles: ProfilesState | null;
+  /** The active profile ("who's watching"). */
+  profile: Profile | null;
+  isKid: boolean;
+  /** Open an editor overlay for a profile (Settings). */
+  editProfile(id: string): void;
+  /** Open the app order/visibility editor for the active profile. */
+  editApps(): void;
+  openTheme(): void;
 }
 
 export const HearthContext = createContext<Hearth | null>(null);

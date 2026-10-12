@@ -5,7 +5,7 @@ import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { EventBus } from './bus.js';
-import { expand, loadConfig, resolveConfigPath } from './config.js';
+import { expand, loadConfig, resolveConfigPath, type AppTile } from './config.js';
 import { HotkeyWatcher, kbmStatus } from './input.js';
 import type { IntentCatalog } from './intents.js';
 import { Launcher } from './launcher.js';
@@ -14,6 +14,7 @@ import { GameService } from './providers/games.js';
 import { HomeAssistant, type HaEntity } from './providers/homeassistant.js';
 import { LabMonitor } from './providers/lab.js';
 import { DemoTvProvider, TvheadendProvider, type Channel, type LiveTvProvider } from './providers/livetv.js';
+import { PermissionError, ProfileStore, type Profile } from './profiles.js';
 import { StateStore } from './state.js';
 import { VoiceService } from './voice.js';
 
@@ -50,15 +51,35 @@ async function channels(): Promise<Channel[]> {
   return channelCache.channels;
 }
 
+const profiles = new ProfileStore(config.stateDir);
+
+/** Apps from config plus web apps added from the TV. */
+function allApps(): AppTile[] {
+  return [
+    ...config.apps,
+    ...profiles.customApps.map((c) => ({ id: c.id, name: c.name, color: c.color, launch: { type: 'web' as const, url: c.url } })),
+  ];
+}
+
+/** What the active profile may see, in its order. */
+const visibleApps = () => ProfileStore.orderApps(profiles.active, allApps());
+const visibleGames = async (force = false) => {
+  const p = profiles.active;
+  return (await games.games(force)).filter((g) => ProfileStore.allowsGame(p, g.hostId, g.id));
+};
+const isKid = () => profiles.active.kind === 'kid';
+
 const catalog = async (): Promise<IntentCatalog> => ({
-  apps: config.apps.map((a) => ({ id: a.id, name: a.name })),
-  games: await games.games().catch(() => []),
-  channels: await channels().catch(() => []),
+  apps: visibleApps().map((a) => ({ id: a.id, name: a.name })),
+  games: await visibleGames().catch(() => []),
+  channels: profiles.active.liveTv ? await channels().catch(() => []) : [],
 });
-const voice = new VoiceService(ha, catalog);
+// Kid profiles get TV commands only, never Home Assistant.
+const voice = new VoiceService(ha, catalog, () => !isKid());
 
 const fail = (err: unknown) => {
   const message = (err as Error).message;
+  if (err instanceof PermissionError) return { ok: false, error: message, permission: true };
   bus.toast(message, 'error');
   return { ok: false, error: message };
 };
@@ -88,10 +109,13 @@ app.post('/api/session/stop', async () => {
 
 /* ---------------- apps ---------------- */
 
-app.get('/api/apps', async () => config.apps.map(({ id, name, color, logo, launch }) => ({ id, name, color, logo, kind: launch.type })));
+const publicApp = ({ id, name, color, logo, launch }: AppTile) => ({ id, name, color, logo, kind: launch.type, custom: id.startsWith('custom-') });
+
+// ?all=1 lists every app (for the editors); otherwise the active profile's curated, ordered list.
+app.get<{ Querystring: { all?: string } }>('/api/apps', async (req) => (req.query.all === '1' ? allApps() : visibleApps()).map(publicApp));
 
 app.post<{ Params: { id: string } }>('/api/apps/:id/launch', async (req) => {
-  const tile = config.apps.find((a) => a.id === req.params.id);
+  const tile = visibleApps().find((a) => a.id === req.params.id);
   if (!tile) return fail(new Error(`Unknown app ${req.params.id}`));
   try {
     await launcher.launch(`app:${tile.id}`, tile.name, tile.launch);
@@ -112,6 +136,7 @@ app.get<{ Querystring: { hours?: string } }>('/api/tv/guide', async (req) => {
 
 app.post<{ Body: { channelId: string } }>('/api/tv/watch', async (req) => {
   try {
+    if (!profiles.active.liveTv) throw new PermissionError('Live TV is off for this profile');
     const chs = await channels();
     const index = Math.max(0, chs.findIndex((c) => c.id === req.body.channelId));
     // A playlist of every channel lets CH+/CH- (PgUp/PgDn) zap inside mpv.
@@ -173,12 +198,18 @@ app.get<{ Querystring: { path: string } }>('/api/tv/icon', async (req, reply) =>
 
 /* ---------------- games ---------------- */
 
-app.get<{ Querystring: { refresh?: string } }>('/api/games', async (req) => {
-  const list = await games.games(req.query.refresh === '1');
-  return { demo: games.demo, hosts: await games.hosts(), games: list, recent: state.recentGames };
+app.get<{ Querystring: { refresh?: string; all?: string } }>('/api/games', async (req) => {
+  const force = req.query.refresh === '1';
+  const list = req.query.all === '1' ? await games.games(force) : await visibleGames(force);
+  const p = profiles.active;
+  const recent = state.recentGames.filter((r) => ProfileStore.allowsGame(p, r.hostId, r.gameId));
+  return { demo: games.demo, hosts: await games.hosts(), games: list, recent };
 });
 
 app.post<{ Params: { hostId: string; gameId: string } }>('/api/games/:hostId/:gameId/launch', async (req) => {
+  if (!ProfileStore.allowsGame(profiles.active, req.params.hostId, req.params.gameId)) {
+    return fail(new PermissionError('That game isn’t on this profile'));
+  }
   // Launch runs in the background; progress is pushed as game-status events.
   games.launch(req.params.hostId, req.params.gameId).catch((err) => log.warn(`game launch: ${err.message}`));
   return { ok: true };
@@ -223,6 +254,7 @@ app.get('/api/ha/dashboard', async () => {
 app.post<{ Body: { domain: string; service: string; data: Record<string, unknown> } }>('/api/ha/service', async (req) => {
   const { domain, service, data } = req.body;
   try {
+    if (isKid()) throw new PermissionError('Ask a parent to change that');
     if (ha) await ha.callService(domain, service, data);
     else demoHome!.callService(domain, service, data);
     return { ok: true };
@@ -293,12 +325,48 @@ app.post<{ Params: { action: SystemAction } }>('/api/system/:action', async (req
   const argv = config.system[req.params.action];
   if (!argv) return fail(new Error(`Unknown action ${req.params.action}`));
   try {
+    if (isKid() && !['volumeUp', 'volumeDown', 'mute'].includes(req.params.action)) throw new PermissionError('Ask a parent to do that');
     await launcher.run(argv);
     return { ok: true };
   } catch (err) {
     return fail(err);
   }
 });
+
+/* ---------------- profiles & themes ---------------- */
+
+const profilesView = () => ({
+  activeId: profiles.active.id,
+  profiles: profiles.all.map(ProfileStore.toPublic),
+  customApps: profiles.customApps,
+});
+
+/** Run a profile mutation, broadcast the change, and report errors without throwing. */
+async function mutate(fn: () => unknown) {
+  try {
+    fn();
+    bus.emit({ type: 'profiles' });
+    return { ok: true, ...profilesView() };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+app.get('/api/profiles', async () => profilesView());
+app.post<{ Body: { id: string; pin?: string } }>('/api/profiles/active', async (req) =>
+  mutate(() => profiles.setActive(req.body.id, req.body.pin)),
+);
+app.post<{ Body: { name: string; kind: Profile['kind']; color?: string } }>('/api/profiles', async (req) =>
+  mutate(() => profiles.create(req.body)),
+);
+app.put<{ Params: { id: string }; Body: Parameters<ProfileStore['update']>[1] }>('/api/profiles/:id', async (req) =>
+  mutate(() => profiles.update(req.params.id, req.body)),
+);
+app.delete<{ Params: { id: string } }>('/api/profiles/:id', async (req) => mutate(() => profiles.remove(req.params.id)));
+app.post<{ Body: { name: string; url: string; color?: string } }>('/api/custom-apps', async (req) =>
+  mutate(() => profiles.addCustomApp(req.body)),
+);
+app.delete<{ Params: { id: string } }>('/api/custom-apps/:id', async (req) => mutate(() => profiles.removeCustomApp(req.params.id)));
 
 /* ---------------- voice ---------------- */
 

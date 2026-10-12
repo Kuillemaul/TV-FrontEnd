@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GameLaunch, type LaunchProgress } from './components/GameLaunch';
 import { Icon } from './components/Icon';
+import { AppOrderEditor } from './components/AppOrderEditor';
 import { KbmPrompt } from './components/KbmPrompt';
+import { Avatar, ProfileEditor, ProfileMenu, ProfilePicker, saveProfile } from './components/Profiles';
+import { ThemeMenu } from './components/ThemeMenu';
 import { VoiceOverlay } from './components/VoiceOverlay';
-import { formatTime, get, post, useServerEvents, type Info, type PageId, type UiAction } from './lib/api';
+import { formatTime, get, post, useServerEvents, type Info, type PageId, type Profile, type ProfilesState, type UiAction } from './lib/api';
+import { applyTheme } from './lib/theme';
 import { HearthContext, type Hearth, type PlayRequest } from './lib/hearth';
 import { ensureFocus, focusFirst, installNavigation, onNavCommand } from './nav/spatial';
 import { GamesPage } from './pages/Games';
@@ -19,6 +23,11 @@ const TABS: Array<{ id: PageId; label: string; icon: string }> = [
   { id: 'smarthome', label: 'Smart Home', icon: 'bulb' },
   { id: 'lab', label: 'Lab', icon: 'server' },
 ];
+
+/** Pages a kid profile can reach. */
+const kidPages = (p: Profile): PageId[] => ['home', ...(p.liveTv ? (['tv'] as PageId[]) : []), 'apps', 'games'];
+
+type Overlay = null | { type: 'menu' } | { type: 'theme' } | { type: 'apps' } | { type: 'editProfile'; id: string };
 
 interface Toast {
   id: number;
@@ -36,6 +45,35 @@ export function App() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const mainRef = useRef<HTMLElement>(null);
   const now = useNow();
+  const [profiles, setProfiles] = useState<ProfilesState | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [overlay, setOverlay] = useState<Overlay>(null);
+  const profile = profiles?.profiles.find((p) => p.id === profiles.activeId) ?? null;
+  const isKid = profile?.kind === 'kid';
+  const allowed: PageId[] | null = profile && isKid ? kidPages(profile) : null;
+
+  const loadProfiles = useCallback(async (initial = false) => {
+    const next = await get<ProfilesState>('/api/profiles');
+    setProfiles((prev) => {
+      if (prev && prev.activeId !== next.activeId) {
+        history.current = [];
+        setPage('home');
+      }
+      return next;
+    });
+    const active = next.profiles.find((p) => p.id === next.activeId);
+    if (active) applyTheme(active.theme);
+    if (initial && next.profiles.length > 1) setPickerOpen(true);
+  }, []);
+
+  useEffect(() => {
+    void loadProfiles(true);
+  }, [loadProfiles]);
+
+  // A kid profile can't stay on a page it isn't allowed to see.
+  useEffect(() => {
+    if (allowed && !allowed.includes(page)) setPage('home');
+  }, [allowed, page]);
 
   useEffect(() => installNavigation(), []);
   useEffect(() => {
@@ -89,8 +127,14 @@ export function App() {
       launchApp: (id) => void post(`/api/apps/${encodeURIComponent(id)}/launch`),
       watchChannel: (id) => void post('/api/tv/watch', { channelId: id }),
       playGame: (g) => (g.requiresKbm ? setKbmFor(g) : startGame(g)),
+      profiles,
+      profile,
+      isKid,
+      editProfile: (id) => setOverlay({ type: 'editProfile', id }),
+      editApps: () => setOverlay({ type: 'apps' }),
+      openTheme: () => setOverlay({ type: 'theme' }),
     }),
-    [info, page, navigate, toast, startGame],
+    [info, page, navigate, toast, startGame, profiles, profile, isKid],
   );
 
   const runAction = useCallback(
@@ -115,6 +159,8 @@ export function App() {
     switch (e.type) {
       case 'toast':
         return toast(e.message, e.level);
+      case 'profiles':
+        return void loadProfiles();
       case 'home':
         setVoiceOpen(false);
         setKbmFor(null);
@@ -160,7 +206,7 @@ export function App() {
             {info?.name ?? 'Hearth'}
           </div>
           <div className="tabs">
-            {TABS.map((t) => (
+            {TABS.filter((t) => !allowed || allowed.includes(t.id)).map((t) => (
               <button key={t.id} className={`tab ${page === t.id ? 'tab-active' : ''}`} data-nav onClick={() => navigate(t.id)}>
                 <Icon name={t.icon} size="1.2em" />
                 <span>{t.label}</span>
@@ -171,14 +217,22 @@ export function App() {
             <button className="icon-btn" data-nav onClick={() => setVoiceOpen(true)} aria-label="Voice">
               <Icon name="mic" />
             </button>
-            <button className={`icon-btn ${page === 'settings' ? 'tab-active' : ''}`} data-nav onClick={() => navigate('settings')} aria-label="Settings">
-              <Icon name="settings" />
-            </button>
+            {!isKid ? (
+              <button className={`icon-btn ${page === 'settings' ? 'tab-active' : ''}`} data-nav onClick={() => navigate('settings')} aria-label="Settings">
+                <Icon name="settings" />
+              </button>
+            ) : null}
+            {profile ? (
+              <button className="icon-btn avatar-btn" data-nav onClick={() => setOverlay({ type: 'menu' })} aria-label={`Profile: ${profile.name}`}>
+                <Avatar profile={profile} size="sm" />
+              </button>
+            ) : null}
             <div className="clock">{formatTime(now, info?.clock24h ?? false)}</div>
           </div>
         </nav>
 
-        <main className="main" ref={mainRef}>
+        {/* Remount pages when the profile or its curation changes so they refetch. */}
+        <main className="main" ref={mainRef} key={profile ? `${profile.id}|${profile.apps}|${profile.games}|${profile.liveTv}` : 'none'}>
           {page === 'home' && <HomePage />}
           {page === 'tv' && <LiveTvPage />}
           {page === 'apps' && <AppsPage />}
@@ -209,6 +263,38 @@ export function App() {
         ) : null}
         {launch ? <GameLaunch progress={launch} onClose={() => setLaunch(null)} /> : null}
         {voiceOpen ? <VoiceOverlay onAction={runAction} onClose={closeVoice} /> : null}
+
+        {overlay?.type === 'menu' ? (
+          <ProfileMenu
+            onClose={() => setOverlay(null)}
+            onSwitch={() => {
+              setOverlay(null);
+              setPickerOpen(true);
+            }}
+            onTheme={() => setOverlay({ type: 'theme' })}
+          />
+        ) : null}
+        {overlay?.type === 'theme' && profile ? (
+          <ThemeMenu
+            title={`${profile.name}'s theme`}
+            initial={profile.theme}
+            onSave={(theme) => {
+              void saveProfile(profile.id, { theme });
+              setOverlay(null);
+            }}
+            onClose={() => setOverlay(null)}
+          />
+        ) : null}
+        {overlay?.type === 'apps' && profile ? (
+          <AppOrderEditor
+            title={`${profile.name}'s apps`}
+            order={profile.apps}
+            onChange={(apps) => void saveProfile(profile.id, { apps })}
+            onClose={() => setOverlay(null)}
+          />
+        ) : null}
+        {overlay?.type === 'editProfile' ? <ProfileEditor profileId={overlay.id} onClose={() => setOverlay(null)} /> : null}
+        {pickerOpen ? <ProfilePicker canClose={Boolean(profile)} onDone={() => setPickerOpen(false)} /> : null}
       </div>
     </HearthContext.Provider>
   );

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { EntityCard } from '../components/EntityCard';
+import { AddProfile, Avatar } from '../components/Profiles';
 import { Icon } from '../components/Icon';
 import { Button, DemoBanner, Modal, PageHeader, Tile } from '../components/Layout';
 import { post, useApi, useServerEvents, type AppTile, type Dashboard, type HaEntity, type LabStatus } from '../lib/api';
@@ -10,7 +11,14 @@ export function AppsPage() {
   const { data } = useApi<AppTile[]>('/api/apps');
   return (
     <div className="page">
-      <PageHeader title="Apps" />
+      <PageHeader title="Apps">
+        {!hearth.isKid ? (
+          <Button icon="apps" onClick={hearth.editApps}>
+            Edit apps
+          </Button>
+        ) : null}
+      </PageHeader>
+      {data && data.length === 0 ? <div className="empty">No apps on this profile yet.</div> : null}
       <div className="grid grid-apps">
         {data?.map((a, i) => (
           <Tile key={a.id} shape="app" title={a.name} color={a.color} image={a.logo} autoFocus={i === 0} onSelect={() => hearth.launchApp(a.id)} />
@@ -113,11 +121,38 @@ export function LabPage() {
 export function SettingsPage() {
   const hearth = useHearth();
   const [confirm, setConfirm] = useState<null | { action: string; label: string }>(null);
+  const [adding, setAdding] = useState(false);
   const sys = (action: string) => void post(`/api/system/${action}`);
 
   return (
     <div className="page">
       <PageHeader title="Settings" />
+      <section className="settings-group">
+        <h2>Profiles</h2>
+        <div className="profile-cards" data-nav-group>
+          {hearth.profiles?.profiles.map((p) => (
+            <button key={p.id} className="profile-card" data-nav onClick={() => hearth.editProfile(p.id)}>
+              <Avatar profile={p} />
+              <span className="profile-card-name">{p.name}</span>
+              <span className="profile-card-sub">
+                {p.kind === 'kid' ? `★ Kid · ${p.apps?.length ?? 'all'} apps · ${p.games?.length ?? 'all'} games` : `Parent${p.hasPin ? ' · PIN' : ''}`}
+              </span>
+            </button>
+          ))}
+          <button className="profile-card profile-card-add" data-nav onClick={() => setAdding(true)}>
+            <span className="avatar avatar-md avatar-add">+</span>
+            <span className="profile-card-name">Add profile</span>
+            <span className="profile-card-sub">For the kids, or another adult</span>
+          </button>
+        </div>
+      </section>
+      <section className="settings-group">
+        <h2>Look & apps</h2>
+        <div className="settings-row" data-nav-group>
+          <Button icon="bulb" onClick={hearth.openTheme}>Theme</Button>
+          <Button icon="apps" onClick={hearth.editApps}>Arrange apps</Button>
+        </div>
+      </section>
       <section className="settings-group">
         <h2>Sound</h2>
         <div className="settings-row" data-nav-group>
@@ -156,6 +191,15 @@ export function SettingsPage() {
         </div>
       </section>
 
+      {adding ? (
+        <AddProfile
+          onClose={() => setAdding(false)}
+          onCreated={(id) => {
+            setAdding(false);
+            hearth.editProfile(id);
+          }}
+        />
+      ) : null}
       {confirm ? (
         <Modal title={`${confirm.label}?`} onClose={() => setConfirm(null)}>
           <div className="modal-actions">
