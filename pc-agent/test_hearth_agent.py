@@ -349,5 +349,35 @@ class LibraryTests(unittest.TestCase):
             self.assertEqual(list(entries), ["pn-p1"])
 
 
+class ConfigUpgradeTests(unittest.TestCase):
+    def test_creates_repairs_and_adds_new_settings(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            example = Path(tmp) / "agent.example.json"
+            example.write_text(json.dumps({"token": "change-me", "playnite": {"enabled": True}, "apollo": {"username": ""}}))
+            cfg = Path(tmp) / "agent.json"
+            ok, notes = agent.upgrade_config(cfg, example)
+            self.assertTrue(ok)
+            token = json.loads(cfg.read_text())["token"]
+            self.assertNotEqual(token, "change-me")
+            self.assertIn(f"TOKEN={token}", notes)
+
+            # A hand-edited file with single backslashes (invalid JSON) next to a correct double one.
+            raw = '{"token": "abc", "playnite": {"exportPath": "C:\\Hearth\\x", "uri": "shell:AppsFolder\\\\Microsoft"}}'
+            cfg.write_text(raw)
+            ok, notes = agent.upgrade_config(cfg, example)
+            self.assertTrue(ok, notes)
+            data = json.loads(cfg.read_text())
+            self.assertEqual(data["token"], "abc")
+            self.assertEqual(data["playnite"]["exportPath"], "C:/Hearth/x")
+            self.assertEqual(data["playnite"]["uri"], "shell:AppsFolder\\Microsoft")
+            self.assertIn("apollo", data)
+            self.assertTrue((Path(tmp) / "agent.json.bak").exists())
+
+            cfg.write_text('{"token": "abc",, }')
+            ok, notes = agent.upgrade_config(cfg, example)
+            self.assertFalse(ok)
+            self.assertIn("line 1", notes[0])
+
+
 if __name__ == "__main__":
     unittest.main()

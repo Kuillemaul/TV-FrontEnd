@@ -1370,13 +1370,56 @@ def check_title(title: str) -> None:
     print(f"Matched appid {appid}: controller={info['controller']} rating={info.get('rating')} -> {'KEYBOARD & MOUSE prompt' if kbm else 'no prompt'}")
 
 
+def upgrade_config(cfg_path: Path, example_path: Path) -> tuple[bool, list[str]]:
+    """Create or repair agent.json for the installer: make it from the example with a fresh token,
+    fix Windows paths written with single backslashes, and add settings new versions introduced.
+    Your own values are never changed. Returns (ok, messages)."""
+    import secrets
+
+    notes: list[str] = []
+    example = json.loads(example_path.read_text(encoding="utf-8"))
+    if not cfg_path.exists():
+        cfg: dict[str, Any] = dict(example)
+        cfg["token"] = secrets.token_hex(16)
+        notes.append("Created agent.json")
+    else:
+        text = cfg_path.read_text(encoding="utf-8-sig")
+        try:
+            cfg = json.loads(text)
+        except json.JSONDecodeError as err:
+            # The usual mistake: "C:\Games\x" typed as "C:\Games\x" with single backslashes.
+            fixed = re.sub(r'\\(["\\/bfnrt]|u[0-9a-fA-F]{4})|\\', lambda m: m.group(0) if m.group(1) else "/", text)
+            try:
+                cfg = json.loads(fixed)
+            except json.JSONDecodeError:
+                return False, [f"agent.json has a mistake on line {err.lineno}, column {err.colno}: {err.msg}"]
+            cfg_path.with_name("agent.json.bak").write_text(text, encoding="utf-8")
+            notes.append("Fixed single backslashes in paths (old file saved as agent.json.bak)")
+        if not cfg.get("token") or cfg["token"] == "change-me":
+            cfg["token"] = secrets.token_hex(16)
+            notes.append("Made a new token")
+        for key, value in example.items():
+            if key not in cfg:
+                cfg[key] = value
+                notes.append(f'Added new setting "{key}"')
+    if notes:
+        cfg_path.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
+    notes.append(f"TOKEN={cfg['token']}")
+    return True, notes
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Hearth PC agent")
     parser.add_argument("--config", default=str(Path(__file__).with_name("agent.json")))
     parser.add_argument("--list", action="store_true", help="print the detected library and exit")
     parser.add_argument("--check", metavar="TITLE", help="look a game up on the Steam store now and show the keyboard/mouse decision")
     parser.add_argument("--displays", action="store_true", help="list active displays (run while streaming to see Apollo's virtual display)")
+    parser.add_argument("--upgrade-config", action="store_true", help="create/repair agent.json and add new settings (used by the installer)")
     args = parser.parse_args()
+    if args.upgrade_config:
+        ok, notes = upgrade_config(Path(args.config), Path(__file__).with_name("agent.example.json"))
+        print("\n".join(notes))
+        sys.exit(0 if ok else 1)
     if args.displays:
         print("\n".join(active_displays()) or "No displays found (this only works on Windows)")
         return

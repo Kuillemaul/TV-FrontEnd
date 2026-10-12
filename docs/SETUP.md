@@ -194,10 +194,16 @@ The TV runs **Moonlight** to show the stream.
 1. **Install Apollo** (https://github.com/ClassicOldSong/Apollo), or Sunshine. In its web UI
    (`https://localhost:47990`), keep the default **Desktop** app. Hearth starts the game itself and streams the
    desktop, so any game works without adding each one to Apollo. See [Apollo](#apollo-virtual-display) below.
-2. **Install Python 3.9+** (Windows: from python.org, tick "Add to PATH").
-3. **Install the agent:** copy the `pc-agent/` folder to the PC, then:
-   - Windows: `powershell -ExecutionPolicy Bypass -File install-windows.ps1`. This creates `agent.json` with a random
-     token, starts the agent at logon, and opens port 47800 on private networks.
+2. **Install the agent** (Windows), in PowerShell:
+   ```powershell
+   git clone -b claude/eager-ptolemy-skr759 https://github.com/Kuillemaul/TV-FrontEnd.git $env:TEMP\hearth-setup
+   & $env:TEMP\hearth-setup\pc-agent\setup-windows.ps1
+   ```
+   It asks for administrator rights, installs Git and Python if needed, puts Hearth in `C:\Hearth` (a folder from a
+   ZIP download is converted where it is), creates `agent.json` with a random token (or keeps and repairs yours),
+   installs the Playnite extension, starts the agent at logon, opens port 47800 on private networks, and installs
+   updates by itself every night at 4am (`%LOCALAPPDATA%\Hearth\update.log`). At the end it prints the block to paste
+   into the TV's `config.yaml`. Run `C:\Hearth\pc-agent\setup-windows.ps1` again any time to update or repair.
    - Linux: copy `agent.example.json` to `agent.json`, set a token, and run
      `python3 hearth_agent.py` from a systemd user service or your autostart.
 4. **Edit `agent.json`** to choose where games come from. You can combine sources:
