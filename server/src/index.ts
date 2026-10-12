@@ -15,6 +15,12 @@ import { HomeAssistant, type HaEntity } from './providers/homeassistant.js';
 import { LabMonitor } from './providers/lab.js';
 import { DemoTvProvider, TvheadendProvider, type Channel, type LiveTvProvider } from './providers/livetv.js';
 import { PermissionError, ProfileStore, type Profile } from './profiles.js';
+import { AlertService, type Alert } from './alerts.js';
+import { SceneAutomation } from './automations.js';
+import { PlexClient } from './providers/plex.js';
+import { cookieToken, isLoopback, RemotePairing } from './remote.js';
+import { registerExtras } from './routes/extras.js';
+import { ScreenTime } from './screentime.js';
 import { StateStore } from './state.js';
 import { VoiceService } from './voice.js';
 
@@ -52,12 +58,69 @@ async function channels(): Promise<Channel[]> {
 }
 
 const profiles = new ProfileStore(config.stateDir);
+const screenTime = new ScreenTime(config.stateDir);
+const plex = config.plex ? new PlexClient(config.plex) : undefined;
+const pairing = new RemotePairing(state);
 
-/** Apps from config plus web apps added from the TV. */
+/** Call a Home Assistant service ("scene.turn_on") — or the demo home when HA isn't set up. */
+async function callService(service: string, data: Record<string, unknown> = {}): Promise<void> {
+  const [domain, name] = service.split('.');
+  if (ha) await ha.callService(domain, name, data);
+  else demoHome!.callService(domain, name, data);
+}
+
+const scenes = new SceneAutomation(config.scenes, (c) => callService(c.service, c.data), () => state.settings.scenes, log);
+launcher.onSession((event, s) => scenes.handle(event, s));
+
+const alerts = new AlertService(config.alerts, (alert: Alert) => {
+  bus.emit({ type: 'alert', alert });
+  // Over Plex, a game or Live TV the shell isn't visible, so pop a window above it.
+  if (launcher.session && state.settings.alertsOverApps) {
+    launcher.showOverlay(`http://127.0.0.1:${config.server.port}/alert?id=${alert.id}`, alert.seconds);
+  }
+});
+ha?.onStateChange((e, old) => alerts.onState(e, old));
+lab.onChange = (svc) => alerts.onLabChange(svc.name, Boolean(svc.up));
+
+/** Kid profiles: refuse to start anything once today's time is used up, or at bedtime. */
+function assertCanStart(): void {
+  const st = screenTime.status(profiles.active);
+  if (st.blocked === 'limit') throw new PermissionError('Screen time is used up for today');
+  if (st.blocked === 'bedtime') throw new PermissionError('It’s bedtime. See you in the morning!');
+}
+
+// Count screen time while something is playing; stop it when time runs out.
+let lastTick = Date.now();
+let warned = '';
+setInterval(() => {
+  const now = Date.now();
+  const p = profiles.active;
+  if (launcher.session && p.kind === 'kid') {
+    screenTime.addUsage(p.id, (now - lastTick) / 60_000);
+    const st = screenTime.status(p);
+    if (st.blocked) {
+      void launcher.stop();
+      bus.emit({ type: 'timesup', reason: st.blocked });
+    } else if (st.remainingMinutes !== null && st.remainingMinutes <= 5 && warned !== `${p.id}:${new Date().toDateString()}`) {
+      warned = `${p.id}:${new Date().toDateString()}`;
+      alerts.raise({ kind: 'warning', title: `${st.remainingMinutes} minutes left`, message: 'Time to find a good place to stop.', seconds: 10 });
+    }
+    bus.emit({ type: 'screentime' });
+  }
+  lastTick = now;
+}, 30_000);
+
+/** Apps from config, web apps added from the TV, and other HDMI inputs (switched over CEC). */
 function allApps(): AppTile[] {
   return [
     ...config.apps,
     ...profiles.customApps.map((c) => ({ id: c.id, name: c.name, color: c.color, launch: { type: 'web' as const, url: c.url } })),
+    ...config.tv.inputs.map((i) => ({
+      id: `input-${i.id}`,
+      name: i.name,
+      color: i.color ?? '#30343f',
+      launch: { type: 'command' as const, command: expand(config.tv.commands.input, { addr: i.physAddr }) },
+    })),
   ];
 }
 
@@ -73,6 +136,9 @@ const catalog = async (): Promise<IntentCatalog> => ({
   apps: visibleApps().map((a) => ({ id: a.id, name: a.name })),
   games: await visibleGames().catch(() => []),
   channels: profiles.active.liveTv ? await channels().catch(() => []) : [],
+  inputs: visibleApps()
+    .filter((a) => a.id.startsWith('input-'))
+    .map((a) => ({ id: a.id, name: a.name })),
 });
 // Kid profiles get TV commands only, never Home Assistant.
 const voice = new VoiceService(ha, catalog, () => !isKid());
@@ -86,6 +152,16 @@ const fail = (err: unknown) => {
 
 await app.register(fastifyWebsocket);
 
+// Only the TV itself (localhost) and paired phone remotes may use Hearth.
+const PUBLIC_PATHS = [/^\/remote/, /^\/assets\//, /^\/api\/remote\/pair$/, /^\/favicon/, /^\/$/];
+app.addHook('onRequest', async (req, reply) => {
+  if (isLoopback(req.ip)) return;
+  if (pairing.valid(cookieToken(req.headers.cookie))) return;
+  const path = req.url.split('?')[0];
+  if (PUBLIC_PATHS.some((re) => re.test(path))) return;
+  return reply.code(401).send({ error: 'Pair this device first: open /remote and enter the code shown on the TV.' });
+});
+
 /* ---------------- shell ---------------- */
 
 app.get('/api/info', async () => ({
@@ -94,6 +170,13 @@ app.get('/api/info', async () => ({
   demo: { tv: tv.demo, homeassistant: !ha, games: games.demo },
   session: launcher.session,
   configPath: resolveConfigPath(),
+  features: {
+    plex: Boolean(plex),
+    tvInputs: config.tv.inputs.length,
+    wakeWordAvailable: Boolean(ha),
+    labActions: config.lab.actions.length,
+  },
+  screensaver: config.screensaver,
 }));
 
 app.get('/ws', { websocket: true }, (socket) => {
@@ -118,6 +201,12 @@ app.post<{ Params: { id: string } }>('/api/apps/:id/launch', async (req) => {
   const tile = visibleApps().find((a) => a.id === req.params.id);
   if (!tile) return fail(new Error(`Unknown app ${req.params.id}`));
   try {
+    if (tile.id.startsWith('input-') && tile.launch.type === 'command') {
+      // Switching the TV to another HDMI device: a one-shot CEC command, not a foreground app.
+      await launcher.run(tile.launch.command);
+      return { ok: true };
+    }
+    assertCanStart();
     await launcher.launch(`app:${tile.id}`, tile.name, tile.launch);
     return { ok: true };
   } catch (err) {
@@ -137,6 +226,7 @@ app.get<{ Querystring: { hours?: string } }>('/api/tv/guide', async (req) => {
 app.post<{ Body: { channelId: string } }>('/api/tv/watch', async (req) => {
   try {
     if (!profiles.active.liveTv) throw new PermissionError('Live TV is off for this profile');
+    assertCanStart();
     const chs = await channels();
     const index = Math.max(0, chs.findIndex((c) => c.id === req.body.channelId));
     // A playlist of every channel lets CH+/CH- (PgUp/PgDn) zap inside mpv.
@@ -158,10 +248,11 @@ app.post<{ Body: { channelId: string } }>('/api/tv/watch', async (req) => {
 
 app.get('/api/tv/recordings', async () => ({ demo: tv.demo, recordings: await tv.recordings() }));
 
-app.post<{ Body: { programmeId: string } }>('/api/tv/record', async (req) => {
+app.post<{ Body: { programmeId: string; series?: boolean } }>('/api/tv/record', async (req) => {
   try {
-    await tv.record(req.body.programmeId);
-    bus.toast('Recording scheduled');
+    if (req.body.series) await tv.recordSeries(req.body.programmeId);
+    else await tv.record(req.body.programmeId);
+    bus.toast(req.body.series ? 'Every episode will be recorded' : 'Recording scheduled');
     return { ok: true };
   } catch (err) {
     return fail(err);
@@ -170,6 +261,7 @@ app.post<{ Body: { programmeId: string } }>('/api/tv/record', async (req) => {
 
 app.post<{ Params: { id: string } }>('/api/tv/recordings/:id/play', async (req) => {
   try {
+    assertCanStart();
     await launcher.launch('recording', 'Recording', {
       type: 'command',
       command: expand(config.livetv.recordingPlayer, { url: tv.recordingUrl(req.params.id) }),
@@ -206,14 +298,23 @@ app.get<{ Querystring: { refresh?: string; all?: string } }>('/api/games', async
   return { demo: games.demo, hosts: await games.hosts(), games: list, recent };
 });
 
-app.post<{ Params: { hostId: string; gameId: string } }>('/api/games/:hostId/:gameId/launch', async (req) => {
-  if (!ProfileStore.allowsGame(profiles.active, req.params.hostId, req.params.gameId)) {
-    return fail(new PermissionError('That game isn’t on this profile'));
-  }
-  // Launch runs in the background; progress is pushed as game-status events.
-  games.launch(req.params.hostId, req.params.gameId).catch((err) => log.warn(`game launch: ${err.message}`));
-  return { ok: true };
-});
+app.post<{ Params: { hostId: string; gameId: string }; Body: { title?: string; art?: string } }>(
+  '/api/games/:hostId/:gameId/launch',
+  async (req) => {
+    if (!ProfileStore.allowsGame(profiles.active, req.params.hostId, req.params.gameId)) {
+      return fail(new PermissionError('That game isn’t on this profile'));
+    }
+    try {
+      assertCanStart();
+    } catch (err) {
+      bus.emit({ type: 'game-status', hostId: req.params.hostId, gameId: req.params.gameId, stage: 'error', message: (err as Error).message });
+      return fail(err);
+    }
+    // Launch runs in the background; progress is pushed as game-status events.
+    games.launch(req.params.hostId, req.params.gameId, req.body ?? {}).catch((err) => log.warn(`game launch: ${err.message}`));
+    return { ok: true };
+  },
+);
 
 app.get<{ Params: { hostId: string; gameId: string } }>('/api/games/:hostId/art/:gameId', async (req, reply) => {
   try {
@@ -368,6 +469,11 @@ app.post<{ Body: { name: string; url: string; color?: string } }>('/api/custom-a
 );
 app.delete<{ Params: { id: string } }>('/api/custom-apps/:id', async (req) => mutate(() => profiles.removeCustomApp(req.params.id)));
 
+registerExtras(app, {
+  config, bus, state, launcher, games, profiles, screenTime, alerts, plex, pairing, ha, demoHome, lab,
+  callService, fail, isKid,
+});
+
 /* ---------------- voice ---------------- */
 
 app.post<{ Body: { text: string } }>('/api/voice/text', async (req) => voice.process(req.body.text));
@@ -394,6 +500,7 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   process.on(sig, async () => {
     hotkeys.stop();
     lab.stop();
+    launcher.closeOverlay();
     await launcher.stop();
     await app.close();
     process.exit(0);

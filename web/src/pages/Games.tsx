@@ -1,15 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Browse } from '../components/Browse';
+import { RatingBadge } from '../components/GameDetails';
 import { Icon } from '../components/Icon';
 import { Button, Chip, DemoBanner, PageHeader, Tile } from '../components/Layout';
+import { PcsPanel } from '../components/PcsPanel';
 import { useApi, type GameLibrary } from '../lib/api';
 import { useHearth } from '../lib/hearth';
 
 /** Tiles drawn at once. Big libraries page in so the TV stays responsive to the remote. */
 const PAGE_SIZE = 120;
 
+type Tab = 'mine' | 'pc' | 'emu';
+
 export function GamesPage() {
   const hearth = useHearth();
   const { data, reload } = useApi<GameLibrary>('/api/games');
+  const [tab, setTab] = useState<Tab>('mine');
+  const [pcs, setPcs] = useState(false);
   const [host, setHost] = useState<string>('all');
   const [platform, setPlatform] = useState<string>('all');
   const [query, setQuery] = useState('');
@@ -39,66 +46,88 @@ export function GamesPage() {
   return (
     <div className="page">
       <PageHeader title="Games">
-        <label className="search" data-nav-group>
-          <Icon name="search" size="1.2em" />
-          <input data-nav value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search" />
-        </label>
-        <Button icon="refresh" variant="ghost" onClick={() => void refresh()} />
+        {!hearth.isKid ? (
+          <div className="chips tabs-inline" data-nav-group>
+            <Chip active={tab === 'mine'} onClick={() => setTab('mine')}>★ My games</Chip>
+            <Chip active={tab === 'pc'} onClick={() => setTab('pc')}>Browse PC</Chip>
+            <Chip active={tab === 'emu'} onClick={() => setTab('emu')}>Browse emulated</Chip>
+          </div>
+        ) : null}
+        {tab === 'mine' ? (
+          <label className="search" data-nav-group>
+            <Icon name="search" size="1.2em" />
+            <input data-nav value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search" />
+          </label>
+        ) : null}
+        <Button icon="power" variant="ghost" onClick={() => setPcs(true)}>
+          PCs
+        </Button>
+        {tab === 'mine' ? <Button icon="refresh" variant="ghost" onClick={() => void refresh()} /> : null}
       </PageHeader>
 
       {data?.demo ? <DemoBanner>Demo library. Install the Hearth PC agent on your gaming and emulator PCs to see your real games.</DemoBanner> : null}
 
-      <div className="chips" data-nav-group>
-        <Chip active={host === 'all'} onClick={() => { setHost('all'); setPlatform('all'); }}>All PCs</Chip>
-        {data?.hosts.map((h) => (
-          <Chip key={h.id} active={host === h.id} dot={h.online ? 'on' : 'off'} onClick={() => { setHost(h.id); setPlatform('all'); }}>
-            {h.name}
-          </Chip>
-        ))}
-      </div>
-      {platforms.length > 1 ? (
-        <div className="chips" data-nav-group>
-          <Chip active={platform === 'all'} onClick={() => setPlatform('all')}>All platforms</Chip>
-          {platforms.map((p) => (
-            <Chip key={p} active={platform === p} onClick={() => setPlatform(p)}>{p}</Chip>
-          ))}
-        </div>
-      ) : null}
+      {tab !== 'mine' ? (
+        <Browse mode={tab} onSelect={hearth.openGame} />
+      ) : (
+        <>
+          <div className="chips" data-nav-group>
+            <Chip active={host === 'all'} onClick={() => { setHost('all'); setPlatform('all'); }}>All PCs</Chip>
+            {data?.hosts.map((h) => (
+              <Chip key={h.id} active={host === h.id} dot={h.online ? 'on' : 'off'} onClick={() => { setHost(h.id); setPlatform('all'); }}>
+                {h.name}
+              </Chip>
+            ))}
+          </div>
+          {platforms.length > 1 ? (
+            <div className="chips" data-nav-group>
+              <Chip active={platform === 'all'} onClick={() => setPlatform('all')}>All platforms</Chip>
+              {platforms.map((p) => (
+                <Chip key={p} active={platform === p} onClick={() => setPlatform(p)}>{p}</Chip>
+              ))}
+            </div>
+          ) : null}
 
-      {data && games.length === 0 ? <div className="empty">No games match.</div> : null}
-      <div className="grid grid-posters">
-        {games.slice(0, limit).map((g, i) => (
-          <Tile
-            autoFocus={i === 0}
-            key={`${g.hostId}:${g.id}`}
-            shape="poster"
-            title={g.title}
-            subtitle={`${g.store || g.platform} · ${g.hostName}`}
-            image={g.art}
-            badge={
-              g.requiresKbm ? (
-                <span className="badge badge-kbm" title="Needs keyboard & mouse">
-                  <Icon name="keyboard" size="1em" />
-                  <Icon name="mouse" size="1em" />
-                </span>
-              ) : g.controller === 'full' ? (
-                <span className="badge" title="Full controller support">
-                  <Icon name="gamepad" size="1em" />
-                </span>
-              ) : undefined
-            }
-            onSelect={() => hearth.playGame({ hostId: g.hostId, gameId: g.id, title: g.title, requiresKbm: g.requiresKbm })}
-          />
-        ))}
-        {games.length > limit ? (
-          <Tile
-            shape="poster"
-            title={`Show ${Math.min(PAGE_SIZE, games.length - limit)} more`}
-            subtitle={`${games.length - limit} not shown · search or filter to narrow`}
-            onSelect={() => setLimit((l) => l + PAGE_SIZE)}
-          />
-        ) : null}
-      </div>
+          {data && games.length === 0 ? <div className="empty">{hearth.isKid ? 'No games here yet. Ask a parent to add some!' : 'No games match.'}</div> : null}
+          <div className="grid grid-posters">
+            {games.slice(0, limit).map((g, i) => (
+              <Tile
+                autoFocus={i === 0}
+                key={`${g.hostId}:${g.id}`}
+                shape="poster"
+                title={g.title}
+                subtitle={`${g.store || g.platform} · ${g.hostName}`}
+                image={g.art}
+                badge={
+                  <>
+                    {g.requiresKbm ? (
+                      <span className="badge badge-kbm" title="Needs keyboard & mouse">
+                        <Icon name="keyboard" size="1em" />
+                        <Icon name="mouse" size="1em" />
+                      </span>
+                    ) : g.controller === 'full' ? (
+                      <span className="badge" title="Full controller support">
+                        <Icon name="gamepad" size="1em" />
+                      </span>
+                    ) : null}
+                    <RatingBadge rating={g.rating} />
+                  </>
+                }
+                onSelect={() => hearth.openGame(g)}
+              />
+            ))}
+            {games.length > limit ? (
+              <Tile
+                shape="poster"
+                title={`Show ${Math.min(PAGE_SIZE, games.length - limit)} more`}
+                subtitle={`${games.length - limit} not shown · search or filter to narrow`}
+                onSelect={() => setLimit((l) => l + PAGE_SIZE)}
+              />
+            ) : null}
+          </div>
+        </>
+      )}
+      {pcs ? <PcsPanel onClose={() => setPcs(false)} /> : null}
     </div>
   );
 }

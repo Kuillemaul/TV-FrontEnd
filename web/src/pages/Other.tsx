@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { EntityCard } from '../components/EntityCard';
-import { AddProfile, Avatar } from '../components/Profiles';
+import { AddProfile, Avatar, PinPad } from '../components/Profiles';
+import { Sparkline } from '../components/Sparkline';
+import { SettingsExtras } from '../components/SettingsExtras';
 import { Icon } from '../components/Icon';
 import { Button, DemoBanner, Modal, PageHeader, Tile } from '../components/Layout';
 import { post, useApi, useServerEvents, type AppTile, type Dashboard, type HaEntity, type LabStatus } from '../lib/api';
@@ -95,6 +97,7 @@ export function LabPage() {
                     <div style={{ width: `${Math.min(100, pct)}%` }} />
                   </div>
                 ) : null}
+                <Sparkline entity={s.entity_id} unit={s.attributes.unit_of_measurement} />
               </div>
             );
           })}
@@ -114,6 +117,7 @@ export function LabPage() {
           </button>
         ))}
       </div>
+      <LabActions />
     </div>
   );
 }
@@ -153,6 +157,7 @@ export function SettingsPage() {
           <Button icon="apps" onClick={hearth.editApps}>Arrange apps</Button>
         </div>
       </section>
+      <SettingsExtras />
       <section className="settings-group">
         <h2>Sound</h2>
         <div className="settings-row" data-nav-group>
@@ -211,5 +216,46 @@ export function SettingsPage() {
         </Modal>
       ) : null}
     </div>
+  );
+}
+
+/** One-button homelab actions (restart a container, reboot a Pi…). Parents only, PIN-confirmed. */
+function LabActions() {
+  const hearth = useHearth();
+  const { data } = useApi<{ demo: boolean; actions: Array<{ index: number; name: string }> }>(hearth.isKid ? null : '/api/lab/actions');
+  const [pending, setPending] = useState<{ index: number; name: string } | null>(null);
+  const [error, setError] = useState('');
+  if (!data?.actions.length) return null;
+
+  const runAction = async (index: number, pin?: string) => {
+    const res = await post(`/api/lab/actions/${index}`, { pin });
+    if (res.ok) setPending(null);
+    else setError(res.error ?? 'Failed');
+  };
+  const needsPin = Boolean(hearth.profile?.hasPin);
+
+  return (
+    <section className="lab-actions settings-group">
+      <h2>Actions</h2>
+      <div className="settings-row" data-nav-group>
+        {data.actions.map((a) => (
+          <Button key={a.index} icon="refresh" onClick={() => { setError(''); setPending(a); }}>
+            {a.name}
+          </Button>
+        ))}
+      </div>
+      {pending && needsPin ? (
+        <PinPad title={`PIN to run “${pending.name}”`} error={error} onClose={() => setPending(null)} onSubmit={(pin) => void runAction(pending.index, pin)} />
+      ) : pending ? (
+        <Modal title={`${pending.name}?`} onClose={() => setPending(null)}>
+          <p className="modal-text">Tip: set a PIN on your profile so this always asks for it.</p>
+          {error ? <div className="form-error">{error}</div> : null}
+          <div className="modal-actions">
+            <Button variant="primary" autoFocus onClick={() => void runAction(pending.index)}>Run it</Button>
+            <Button onClick={() => setPending(null)}>Cancel</Button>
+          </div>
+        </Modal>
+      ) : null}
+    </section>
   );
 }

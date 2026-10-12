@@ -11,12 +11,16 @@ export type UiAction =
   | { type: 'launch-app'; id: string; name: string }
   | { type: 'launch-game'; hostId: string; gameId: string; title: string; requiresKbm: boolean }
   | { type: 'watch-channel'; id: string; name: string }
+  | { type: 'tv-power'; on: boolean }
+  | { type: 'tv-input'; id: string; name: string }
   | { type: 'stop' };
 
 export interface IntentCatalog {
   apps: Array<{ id: string; name: string }>;
   games: Array<{ id: string; hostId: string; title: string; requiresKbm: boolean }>;
   channels: Array<{ id: string; number: number; name: string }>;
+  /** Other HDMI inputs (Xbox, Apple TV…) the TV can switch to. */
+  inputs?: Array<{ id: string; name: string }>;
 }
 
 export interface IntentMatch {
@@ -86,6 +90,18 @@ function best<T>(query: string, items: T[], title: (t: T) => string, min = 0.45)
 export function matchIntent(text: string, catalog: IntentCatalog): IntentMatch | null {
   const t = normalise(text).replace(/^(hey |ok |okay )?(hearth |tv )?(please )?/, '').replace(/ please$/, '');
   if (!t) return null;
+
+  const power = t.match(/^(?:turn|switch|power) (?:the )?(?:tv|television|screen) (on|off)$|^(?:turn|switch|power) (on|off) (?:the )?(?:tv|television|screen)$/);
+  if (power) {
+    const on = (power[1] ?? power[2]) === 'on';
+    return { action: { type: 'tv-power', on }, speech: on ? 'Turning the TV on' : 'Turning the TV off' };
+  }
+
+  const input = t.match(/^(?:switch|change|go) (?:the tv )?(?:over )?to (?:the )?(.+?)(?: input)?$/);
+  if (input && catalog.inputs?.length) {
+    const hit = best(input[1], catalog.inputs, (i) => i.name, 0.6);
+    if (hit) return { action: { type: 'tv-input', id: hit.id, name: hit.name }, speech: `Switching to ${hit.name}` };
+  }
 
   if (/^(stop|exit|quit|close)( (it|this|that|the app|the game|watching|playing))?$/.test(t) || t === 'go back home') {
     return { action: { type: 'stop' }, speech: 'Closing' };

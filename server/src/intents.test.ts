@@ -54,3 +54,11 @@ test('leaves home automation to Home Assistant', () => {
 test('stop closes the foreground app', () => {
   assert.deepEqual(matchIntent('stop', catalog)?.action, { type: 'stop' });
 });
+
+test('tv power and inputs', () => {
+  const withInputs = { ...catalog, inputs: [{ id: 'xbox', name: 'Xbox' }, { id: 'appletv', name: 'Apple TV' }] };
+  assert.deepEqual(matchIntent('turn off the tv', withInputs)?.action, { type: 'tv-power', on: false });
+  assert.deepEqual(matchIntent('turn the TV on', withInputs)?.action, { type: 'tv-power', on: true });
+  assert.deepEqual(matchIntent('switch to the xbox', withInputs)?.action, { type: 'tv-input', id: 'xbox', name: 'Xbox' });
+  assert.equal(matchIntent('switch to channel 4', withInputs)?.action.type, 'watch-channel');
+});

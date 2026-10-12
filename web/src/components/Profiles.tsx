@@ -7,6 +7,7 @@ import { AppOrderEditor } from './AppOrderEditor';
 import { GamePicker } from './GamePicker';
 import { Icon } from './Icon';
 import { Button, Chip, Modal, useBack } from './Layout';
+import { LimitsEditor } from './ScreenTime';
 import { ThemeMenu } from './ThemeMenu';
 
 export const PROFILE_COLORS = ['#7b8cff', '#ff7a45', '#ffc93c', '#3ddc97', '#4cc9f0', '#ff5d8f', '#c77dff', '#d9dde4'];
@@ -221,7 +222,7 @@ function ColorRow({ value, onChange }: { value: string; onChange: (c: string) =>
   );
 }
 
-type Sub = null | 'apps' | 'games' | 'theme' | 'pin' | 'delete';
+type Sub = null | 'apps' | 'games' | 'theme' | 'pin' | 'delete' | 'limits';
 
 export function ProfileEditor({ profileId, onClose }: { profileId: string; onClose: () => void }) {
   const { profiles, profile: active } = useHearth();
@@ -262,6 +263,17 @@ export function ProfileEditor({ profileId, onClose }: { profileId: string; onClo
         <EditorCard icon="gamepad" title="Games" detail={gameCount} onClick={() => setSub('games')} />
         <EditorCard icon="tv" title="Live TV" detail={p.liveTv ? 'Allowed' : 'Hidden'} onClick={() => void save({ liveTv: !p.liveTv })} toggled={p.liveTv} />
         <EditorCard icon="bulb" title="Theme" detail="Background, colours, font" onClick={() => setSub('theme')} />
+        {p.kind === 'kid' ? (
+          <EditorCard
+            icon="moon"
+            title="Screen time"
+            detail={
+              [p.limits?.dailyMinutes ? `${p.limits.dailyMinutes} min a day` : null, p.limits?.bedtime ? `bed ${p.limits.bedtime}` : null].filter(Boolean).join(' · ') ||
+              'No limits'
+            }
+            onClick={() => setSub('limits')}
+          />
+        ) : null}
         <EditorCard
           icon="lock"
           title="Type"
@@ -294,6 +306,7 @@ export function ProfileEditor({ profileId, onClose }: { profileId: string; onClo
           onClose={() => setSub(null)}
         />
       ) : null}
+      {sub === 'limits' ? <LimitsEditor profile={p} onClose={() => setSub(null)} /> : null}
       {sub === 'pin' ? (
         <PinMenu
           hasPin={p.hasPin}

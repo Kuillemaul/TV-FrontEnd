@@ -30,6 +30,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.parse
 import urllib.request
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -37,7 +38,7 @@ from pathlib import Path
 from typing import Any
 
 IS_WINDOWS = sys.platform == "win32"
-STEAM_STORE = "https://store.steampowered.com/api/appdetails?appids={appid}&filters=categories"
+STEAM_STORE = "https://store.steampowered.com/api/appdetails?appids={appid}&l=english"
 STEAM_ART = "https://cdn.cloudflare.steamstatic.com/steam/apps/{appid}/library_600x900.jpg"
 # Steam store category ids
 CAT_FULL_CONTROLLER = 28
@@ -128,29 +129,37 @@ def steam_games(root: Path) -> list[dict[str, Any]]:
     return list(games.values())
 
 
-class ControllerCache:
-    """Looks up Steam controller support in the background and caches it on disk."""
+class SteamStoreCache:
+    """
+    Looks up each Steam game's store page once, in the background, and caches it on disk:
+    controller support, age rating, description, screenshots, genres and release year.
+    """
 
     def __init__(self, path: Path, enabled: bool) -> None:
         self.path = path
         self.enabled = enabled
-        self.data: dict[str, str] = {}
+        self.data: dict[str, dict[str, Any]] = {}
         self.pending: list[int] = []
         self.lock = threading.Lock()
         try:
-            self.data = json.loads(path.read_text())
+            raw = json.loads(path.read_text())
+            # Older caches stored just the controller string.
+            self.data = {k: (v if isinstance(v, dict) else {"controller": v}) for k, v in raw.items()}
         except (OSError, ValueError):
             pass
         if enabled:
             threading.Thread(target=self._worker, daemon=True).start()
 
-    def get(self, appid: int) -> str:
+    def info(self, appid: int) -> dict[str, Any]:
         value = self.data.get(str(appid))
-        if value is None and self.enabled:
+        if (value is None or "description" not in value) and self.enabled:
             with self.lock:
                 if appid not in self.pending:
                     self.pending.append(appid)
-        return value or "unknown"
+        return value or {}
+
+    def get(self, appid: int) -> str:
+        return self.info(appid).get("controller", "unknown")
 
     def _worker(self) -> None:
         while True:
@@ -162,19 +171,35 @@ class ControllerCache:
             try:
                 with urllib.request.urlopen(STEAM_STORE.format(appid=appid), timeout=10) as res:
                     body = json.load(res).get(str(appid), {})
-                cats = {c.get("id") for c in body.get("data", {}).get("categories", [])} if body.get("success") else set()
-                support = "full" if CAT_FULL_CONTROLLER in cats else "partial" if CAT_PARTIAL_CONTROLLER in cats else "none"
-                if not body.get("success"):
-                    support = "unknown"
-                self.data[str(appid)] = support
+                self.data[str(appid)] = parse_steam_store(body)
                 self.path.parent.mkdir(parents=True, exist_ok=True)
                 self.path.write_text(json.dumps(self.data, indent=1))
             except Exception as err:  # network hiccup or rate limit: retry later
-                log(f"controller lookup {appid} failed: {err}")
+                log(f"store lookup {appid} failed: {err}")
                 time.sleep(30)
                 with self.lock:
                     self.pending.append(appid)
             time.sleep(1.6)  # stay well under the store API rate limit
+
+
+def parse_steam_store(body: dict[str, Any]) -> dict[str, Any]:
+    if not body.get("success"):
+        return {"controller": "unknown", "description": ""}
+    d = body.get("data", {})
+    cats = {c.get("id") for c in d.get("categories", [])}
+    controller = "full" if CAT_FULL_CONTROLLER in cats else "partial" if CAT_PARTIAL_CONTROLLER in cats else "none"
+    esrb = (d.get("ratings") or {}).get("esrb", {}).get("rating") or ""
+    age = int(d.get("required_age") or 0)
+    rating = norm_rating(esrb) or ("M" if age >= 17 else "T" if age >= 13 else None)
+    year = re.search(r"(19|20)\d\d", (d.get("release_date") or {}).get("date", ""))
+    return {
+        "controller": controller,
+        "rating": rating,
+        "description": re.sub(r"<[^>]+>", "", d.get("short_description", "")).strip(),
+        "screenshots": [x["path_full"] for x in d.get("screenshots", [])[:4] if x.get("path_full")],
+        "genres": [g["description"] for g in d.get("genres", [])][:3],
+        "year": int(year.group(0)) if year else None,
+    }
 
 
 # --------------------------------------------------------------------------------------
@@ -192,6 +217,29 @@ def clean_rom_title(stem: str) -> str:
 
 def norm_title(title: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", title.lower())
+
+
+# Checked in order: "E10+ - Everyone 10+" must hit E10 before the plain "Everyone" rule.
+RATING_PATTERNS = [
+    ("E10", re.compile(r"E10|everyone 10", re.I)),
+    ("M", re.compile(r"\b(AO|M|M17|mature|adults only|PEGI ?16|PEGI ?18)\b", re.I)),
+    ("T", re.compile(r"\b(T|teen|PEGI ?12)\b", re.I)),
+    ("E", re.compile(r"\b(E|EC|everyone|early childhood|K-A|PEGI ?3|PEGI ?7)\b", re.I)),
+]
+
+
+def norm_rating(text: str | None) -> str | None:
+    """ESRB/PEGI text ("E - Everyone", "Teen", "PEGI 12", "e10") -> E | E10 | T | M, or None."""
+    if not text:
+        return None
+    return next((rating for rating, pattern in RATING_PATTERNS if pattern.search(text)), None)
+
+
+def page(items: list[dict[str, Any]], q: str, offset: int, limit: int) -> dict[str, Any]:
+    if q:
+        ql = q.lower()
+        items = [g for g in items if ql in g["title"].lower()]
+    return {"total": len(items), "games": items[offset : offset + limit]}
 
 
 def is_true(value: str | None) -> bool:
@@ -229,7 +277,10 @@ class LaunchBoxSource:
         self.pc_platforms = set(cfg.get("pcPlatforms", ["Windows", "MS-DOS", "Windows 3.X", "ScummVM"]))
         self.cache_key: tuple[float, ...] | None = None
         self.cache: dict[str, dict[str, Any]] = {}
-        self.art_index: dict[str, dict[str, Path]] = {}
+        self.art_index: dict[tuple[str, str], dict[str, list[Path]]] = {}
+        self.counts: dict[str, int] = {}
+        self.id_platform: dict[str, Path] = {}
+        self.browse_cache: tuple[Any, list[dict[str, Any]]] | None = None
 
     def _files(self) -> list[Path]:
         data = self.root / "Data"
@@ -266,6 +317,7 @@ class LaunchBoxSource:
         return str(p if p.is_absolute() else (self.root / p).resolve())
 
     def entries(self) -> dict[str, dict[str, Any]]:
+        """Favourites (by default) across all platforms. Also counts every platform for Browse."""
         files = self._files()
         key = mtimes(files)
         if key == self.cache_key:
@@ -275,26 +327,67 @@ class LaunchBoxSource:
 
         emulators, platform_args = self._emulators()
         out: dict[str, dict[str, Any]] = {}
+        counts: dict[str, int] = {}
         for xml_file in files[1:]:
             for _, el in ET.iterparse(xml_file, events=("end",)):
                 if el.tag != "Game":
                     continue
                 platform = el.findtext("Platform", "")
-                keep = (
-                    (not self.favorites_only or is_true(el.findtext("Favorite")))
-                    and (not self.platforms or platform in self.platforms)
-                    and (self.include_hidden or not is_true(el.findtext("Hide")))
-                    and not is_true(el.findtext("Broken"))
-                )
+                visible = (self.include_hidden or not is_true(el.findtext("Hide"))) and not is_true(el.findtext("Broken"))
+                if visible:
+                    counts[platform] = counts.get(platform, 0) + 1
+                    self.id_platform[el.findtext("ID", "")] = xml_file
+                keep = visible and (not self.favorites_only or is_true(el.findtext("Favorite"))) and (not self.platforms or platform in self.platforms)
                 if keep:
                     entry = self._entry(el, platform, emulators, platform_args)
                     if entry:
                         out[entry["id"]] = entry
                 el.clear()  # keep memory flat on huge platform files
 
-        self.cache, self.cache_key = out, key
-        log(f"LaunchBox: {len(out)} games ({'favourites' if self.favorites_only else 'all'})")
+        self.cache, self.cache_key, self.counts = out, key, counts
+        log(f"LaunchBox: {len(out)} games ({'favourites' if self.favorites_only else 'all'}), {sum(counts.values())} in library")
         return out
+
+    def platform_counts(self) -> list[dict[str, Any]]:
+        self.entries()
+        return [{"name": k, "count": v} for k, v in sorted(self.counts.items()) if v]
+
+    def _load_platform(self, xml_file: Path) -> list[dict[str, Any]]:
+        """Every game of one platform. Only one platform is kept in memory at a time."""
+        mt = mtimes([xml_file])
+        if self.browse_cache and self.browse_cache[0] == (xml_file, mt):
+            return self.browse_cache[1]
+        import xml.etree.ElementTree as ET
+
+        emulators, platform_args = self._emulators()
+        games = []
+        for _, el in ET.iterparse(xml_file, events=("end",)):
+            if el.tag == "Game":
+                if (self.include_hidden or not is_true(el.findtext("Hide"))) and not is_true(el.findtext("Broken")):
+                    entry = self._entry(el, el.findtext("Platform", ""), emulators, platform_args)
+                    if entry:
+                        games.append(entry)
+                el.clear()
+        games.sort(key=lambda g: g["title"].lower())
+        self.browse_cache = ((xml_file, mt), games)
+        return games
+
+    def browse(self, platform: str, q: str = "", offset: int = 0, limit: int = 120) -> dict[str, Any]:
+        xml_file = self.root / "Data" / "Platforms" / f"{platform}.xml"
+        if not xml_file.exists():  # file names normally match the platform name; fall back to the index
+            xml_file = next((f for f in set(self.id_platform.values()) if f.stem.lower() == platform.lower()), xml_file)
+        if not xml_file.exists():
+            return {"total": 0, "games": []}
+        return page(self._load_platform(xml_file), q, offset, limit)
+
+    def find(self, gid: str) -> dict[str, Any] | None:
+        """Look up any LaunchBox game (not just favourites) by id, e.g. one launched from Browse."""
+        if gid in self.cache:
+            return self.cache[gid]
+        xml_file = self.id_platform.get(gid.removeprefix("lb-"))
+        if not xml_file:
+            return None
+        return next((g for g in self._load_platform(xml_file) if g["id"] == gid), None)
 
     def _entry(self, el: Any, platform: str, emulators: dict[str, dict[str, Any]], platform_args: dict[tuple[str, str], str]) -> dict[str, Any] | None:
         lb_id = el.findtext("ID", "")
@@ -321,6 +414,7 @@ class LaunchBoxSource:
             launch = {"file": target, "args": game_args}
             process_dir = str(Path(target).parent) if Path(target).suffix.lower() == ".exe" else None
 
+        year = re.match(r"(\d{4})", el.findtext("ReleaseDate", "") or "")
         return {
             "id": f"lb-{lb_id}",
             "title": title,
@@ -329,23 +423,42 @@ class LaunchBoxSource:
             "art": True,
             "controller": "unknown" if is_pc else "full",
             "requiresKbm": False,
+            "rating": norm_rating(el.findtext("Rating")),
+            "favorite": is_true(el.findtext("Favorite")),
+            "installed": True,
             "_launch": launch,
             "_processDir": process_dir,
             "_artLookup": (platform, title),
+            "_details": {
+                "description": (el.findtext("Notes", "") or "").strip()[:1500],
+                "year": int(year.group(1)) if year else None,
+                "genres": [g.strip() for g in (el.findtext("Genre", "") or "").split(";") if g.strip()][:3],
+                "playtimeMinutes": int(int(el.findtext("PlayTime", "0") or 0) / 60),
+            },
         }
+
+    def _image_index(self, platform: str, folder: str) -> dict[str, list[Path]]:
+        key = (platform, folder)
+        if key not in self.art_index:
+            index: dict[str, list[Path]] = {}
+            root = self.root / "Images" / platform / folder
+            if root.is_dir():
+                for f in sorted(root.rglob("*")):
+                    m = re.match(r"^(.*)-\d\d$", f.stem)
+                    if m and f.suffix.lower() in (".png", ".jpg", ".jpeg"):
+                        index.setdefault(m.group(1).lower(), []).append(f)
+            self.art_index[key] = index
+        return self.art_index[key]
 
     def art(self, platform: str, title: str) -> Path | None:
         """Box-front image, matching LaunchBox's "<Title>-01.png" naming (region subfolders included)."""
-        if platform not in self.art_index:
-            index: dict[str, Path] = {}
-            folder = self.root / "Images" / platform / "Box - Front"
-            if folder.is_dir():
-                for f in sorted(folder.rglob("*")):
-                    m = re.match(r"^(.*)-\d\d$", f.stem)
-                    if m and f.suffix.lower() in (".png", ".jpg", ".jpeg"):
-                        index.setdefault(m.group(1).lower(), f)
-            self.art_index[platform] = index
-        return self.art_index[platform].get(LB_ILLEGAL.sub("_", title).lower())
+        found = self._image_index(platform, "Box - Front").get(LB_ILLEGAL.sub("_", title).lower())
+        return found[0] if found else None
+
+    def screenshots(self, platform: str, title: str) -> list[Path]:
+        key = LB_ILLEGAL.sub("_", title).lower()
+        shots = self._image_index(platform, "Screenshot - Gameplay").get(key, []) + self._image_index(platform, "Fanart - Background").get(key, [])
+        return shots[:4]
 
 
 # ---- Playnite -------------------------------------------------------------------------
@@ -353,53 +466,78 @@ class LaunchBoxSource:
 
 class PlayniteSource:
     """
-    Reads the favourites list that the Hearth Exporter Playnite extension writes
-    (see pc-agent/playnite/). Playnite covers Epic, GOG, Xbox / Game Pass, EA, Ubisoft,
-    Battle.net, itch, Steam and anything you've added by hand, so one source gives you all of it.
-    Games launch through Playnite itself (playnite://playnite/start/<id>).
+    Reads the library file that the Hearth Exporter Playnite extension writes (see
+    pc-agent/playnite/). Favourites are the main list; the whole library (installed or not)
+    is available to Browse. Playnite covers Epic, GOG, Xbox / Game Pass, EA, Ubisoft,
+    Battle.net, itch, Steam and anything added by hand. Games launch through Playnite
+    (playnite://playnite/start/<id>), which also offers to install uninstalled ones.
     """
 
     def __init__(self, cfg: dict[str, Any]) -> None:
-        default = Path(os.environ.get("APPDATA", str(Path.home()))) / "Playnite" / "ExtensionsData" / "hearth-favorites.json"
+        data = Path(os.environ.get("APPDATA", str(Path.home()))) / "Playnite" / "ExtensionsData"
+        default = data / "hearth-library.json"
+        if not default.exists() and (data / "hearth-favorites.json").exists():
+            default = data / "hearth-favorites.json"  # older exporter: favourites only
         self.path = Path(cfg.get("exportPath") or default)
         self.kbm_tags = {t.lower() for t in cfg.get("kbmTags", ["Hearth: KBM", "Keyboard & Mouse"])}
         self.pad_tags = {t.lower() for t in cfg.get("controllerTags", ["Hearth: Controller"])}
         self.cache_key: tuple[float, ...] | None = None
-        self.cache: dict[str, dict[str, Any]] = {}
+        self.all: list[dict[str, Any]] = []
 
-    def entries(self) -> dict[str, dict[str, Any]]:
+    def _load(self) -> list[dict[str, Any]]:
         key = mtimes([self.path])
         if key == self.cache_key:
-            return self.cache
-        out: dict[str, dict[str, Any]] = {}
+            return self.all
         try:
             games = json.loads(self.path.read_text(encoding="utf-8-sig"))
         except (OSError, ValueError) as err:
             log(f"Playnite export not readable yet ({self.path}): {err}")
             games = []
-        for g in games:
-            features = {f.lower() for f in g.get("features") or []}
-            tags = {t.lower() for t in g.get("tags") or []}
-            controller = "full" if "full controller support" in features else "partial" if "partial controller support" in features else "unknown"
-            requires_kbm = bool(tags & self.kbm_tags) and not (tags & self.pad_tags)
-            cover = g.get("cover")
-            platforms = g.get("platforms") or []
-            out[f"pn-{g['id']}"] = {
-                "id": f"pn-{g['id']}",
-                "title": g.get("name") or "Unknown",
-                "platform": platforms[0] if platforms else "PC",
-                "source": "playnite",
-                "store": g.get("source") or "",
-                "art": bool(cover),
-                "controller": controller,
-                "requiresKbm": requires_kbm,
-                "_launch": {"uri": f"playnite://playnite/start/{g['id']}"},
-                "_processDir": g.get("installDirectory") or None,
-                "_artPath": cover,
-            }
-        self.cache, self.cache_key = out, key
-        log(f"Playnite: {len(out)} games")
-        return out
+        legacy = self.path.name == "hearth-favorites.json"
+        self.all = sorted((self._entry(g, legacy) for g in games if g.get("id")), key=lambda e: e["title"].lower())
+        self.cache_key = key
+        log(f"Playnite: {len(self.all)} games, {sum(e['favorite'] for e in self.all)} favourites")
+        return self.all
+
+    def _entry(self, g: dict[str, Any], legacy: bool) -> dict[str, Any]:
+        features = {f.lower() for f in g.get("features") or []}
+        tags = {t.lower() for t in g.get("tags") or []}
+        controller = "full" if "full controller support" in features else "partial" if "partial controller support" in features else "unknown"
+        cover = g.get("cover")
+        platforms = g.get("platforms") or []
+        ratings = g.get("ageRatings") or []
+        return {
+            "id": f"pn-{g['id']}",
+            "title": g.get("name") or "Unknown",
+            "platform": platforms[0] if platforms else "PC",
+            "source": "playnite",
+            "store": g.get("source") or "",
+            "art": bool(cover),
+            "controller": controller,
+            "requiresKbm": bool(tags & self.kbm_tags) and not (tags & self.pad_tags),
+            "rating": next((r for r in map(norm_rating, ratings) if r), None),
+            "favorite": legacy or bool(g.get("favorite")),
+            "installed": g.get("installed", True) is not False,
+            "_launch": {"uri": f"playnite://playnite/start/{g['id']}"},
+            "_processDir": g.get("installDirectory") or None,
+            "_artPath": cover,
+            "_shots": [x for x in [g.get("background")] if x],
+            "_details": {
+                "description": re.sub(r"<[^>]+>", " ", g.get("description") or "").strip()[:1500],
+                "year": g.get("releaseYear"),
+                "genres": (g.get("genres") or [])[:3],
+                "playtimeMinutes": int((g.get("playtime") or 0) / 60),
+            },
+        }
+
+    def entries(self) -> dict[str, dict[str, Any]]:
+        return {e["id"]: e for e in self._load() if e["favorite"]}
+
+    def browse(self, q: str = "", offset: int = 0, limit: int = 120) -> dict[str, Any]:
+        return page(self._load(), q, offset, limit)
+
+    def find(self, gid: str) -> dict[str, Any] | None:
+        return next((e for e in self._load() if e["id"] == gid), None)
 
 
 # ---- ROM folders ----------------------------------------------------------------------
@@ -455,7 +593,7 @@ class Library:
         steam_cfg = cfg.get("steam", {})
         self.steam_enabled = steam_cfg.get("enabled", True)
         self.steam_path = steam_cfg.get("path")
-        self.controllers = ControllerCache(cache_dir / "controller-support.json", steam_cfg.get("controllerLookup", True) and self.steam_enabled)
+        self.controllers = SteamStoreCache(cache_dir / "steam-store.json", steam_cfg.get("controllerLookup", True) and self.steam_enabled)
         self.launchbox = LaunchBoxSource(cfg["launchbox"]) if cfg.get("launchbox", {}).get("path") else None
         self.playnite = PlayniteSource(cfg["playnite"]) if cfg.get("playnite", {}).get("enabled") else None
         self.roms = RomFolderSource(cfg.get("emulators", []))
@@ -501,7 +639,53 @@ class Library:
             return entries
 
     def get(self, gid: str) -> dict[str, Any] | None:
-        return self.entries.get(gid) or self.scan().get(gid)
+        """Any launchable game: favourites first, then the full LaunchBox/Playnite libraries (Browse)."""
+        found = self.entries.get(gid)
+        if not found and gid.startswith("lb-") and self.launchbox:
+            found = self.launchbox.find(gid)
+        if not found and gid.startswith("pn-") and self.playnite:
+            found = self.playnite.find(gid)
+        return found or self.scan().get(gid)
+
+    # ---- Browse ------------------------------------------------------------------------
+
+    def browse_sources(self) -> dict[str, Any]:
+        pc = len(self.playnite._load()) if self.playnite else len(self._steam())
+        return {"pc": pc, "platforms": self.launchbox.platform_counts() if self.launchbox else []}
+
+    def browse(self, source: str, platform: str, q: str, offset: int, limit: int) -> dict[str, Any]:
+        if source == "platform" and self.launchbox:
+            result = self.launchbox.browse(platform, q, offset, limit)
+        elif source == "pc":
+            result = self.playnite.browse(q, offset, limit) if self.playnite else page(sorted(self._steam().values(), key=lambda g: g["title"].lower()), q, offset, limit)
+        else:
+            result = {"total": 0, "games": []}
+        return {"total": result["total"], "games": [self._public(e) for e in result["games"]]}
+
+    def details(self, gid: str) -> dict[str, Any] | None:
+        e = self.get(gid)
+        if not e:
+            return None
+        info = dict(e.get("_details") or {})
+        shots: list[str] = []
+        if e.get("_appid"):
+            store = self.controllers.info(e["_appid"])
+            info = {**info, **{k: store.get(k) for k in ("description", "year", "genres") if store.get(k)}}
+            shots = list(store.get("screenshots", []))
+        local = self._local_shots(e)
+        shots += [f"/shot/{gid}/{i}" for i in range(len(local))]
+        return {**self._public(e), "description": info.get("description", ""), "year": info.get("year"), "genres": info.get("genres", []),
+                "playtimeMinutes": info.get("playtimeMinutes"), "screenshots": shots}
+
+    def _local_shots(self, e: dict[str, Any]) -> list[str]:
+        if e.get("_artLookup") and self.launchbox:
+            return [str(p) for p in self.launchbox.screenshots(*e["_artLookup"])]
+        return [p for p in e.get("_shots", []) if p and Path(p).is_file()]
+
+    def shot_path(self, gid: str, n: int) -> str | None:
+        e = self.get(gid)
+        shots = self._local_shots(e) if e else []
+        return shots[n] if 0 <= n < len(shots) else None
 
     def _steam(self) -> dict[str, dict[str, Any]]:
         root = steam_root(self.steam_path) if self.steam_enabled else None
@@ -543,7 +727,7 @@ class Library:
         return out
 
     def art_path(self, gid: str) -> str | None:
-        e = self.entries.get(gid)
+        e = self.get(gid)
         if not e:
             return None
         if e.get("_artLookup") and self.launchbox:
@@ -551,18 +735,22 @@ class Library:
             return str(found) if found else None
         return e.get("_artPath")
 
-    def public(self) -> list[dict[str, Any]]:
+    def _public(self, e: dict[str, Any]) -> dict[str, Any]:
+        item = {k: v for k, v in e.items() if not k.startswith("_")}
+        item.setdefault("favorite", True)
+        item.setdefault("installed", True)
+        if e.get("_appid"):  # Steam controller support and rating are looked up in the background
+            store = self.controllers.info(e["_appid"])
+            item["controller"] = store.get("controller", "unknown")
+            item["requiresKbm"] = item["controller"] == "none"
+            item["rating"] = store.get("rating")
         overrides: dict[str, bool] = self.cfg.get("kbm", {})
-        games = []
-        for e in list(self.entries.values()):
-            item = {k: v for k, v in e.items() if not k.startswith("_")}
-            if e.get("_appid"):  # Steam controller support is looked up in the background
-                item["controller"] = self.controllers.get(e["_appid"])
-                item["requiresKbm"] = item["controller"] == "none"
-            if e["title"] in overrides:
-                item["requiresKbm"] = overrides[e["title"]]
-            games.append(item)
-        return sorted(games, key=lambda g: g["title"].lower())
+        if e["title"] in overrides:
+            item["requiresKbm"] = overrides[e["title"]]
+        return item
+
+    def public(self) -> list[dict[str, Any]]:
+        return sorted((self._public(e) for e in list(self.entries.values())), key=lambda g: g["title"].lower())
 
 
 # --------------------------------------------------------------------------------------
@@ -657,6 +845,31 @@ class Launcher:
         self.current = None
 
 
+def uptime_seconds() -> int:
+    try:
+        if IS_WINDOWS:
+            import ctypes
+
+            return int(ctypes.windll.kernel32.GetTickCount64() / 1000)  # type: ignore[attr-defined]
+        return int(float(Path("/proc/uptime").read_text().split()[0]))
+    except Exception:
+        return 0
+
+
+POWER_COMMANDS = {
+    "shutdown": (["shutdown", "/s", "/t", "5"], ["systemctl", "poweroff"]),
+    "restart": (["shutdown", "/r", "/t", "5"], ["systemctl", "reboot"]),
+    "sleep": (["rundll32.exe", "powrprof.dll,SetSuspendState", "0,1,0"], ["systemctl", "suspend"]),
+}
+
+
+def power(action: str) -> None:
+    win, nix = POWER_COMMANDS[action]
+    log(f"power: {action}")
+    # Give the HTTP reply a moment to go out before the PC goes away.
+    threading.Timer(1.0, lambda: subprocess.Popen(win if IS_WINDOWS else nix)).start()
+
+
 # --------------------------------------------------------------------------------------
 # HTTP
 # --------------------------------------------------------------------------------------
@@ -686,29 +899,44 @@ def make_handler(cfg: dict[str, Any], library: Library, launcher: Launcher):
             self._json(401, {"error": "unauthorized"})
             return False
 
+        def _file(self, path: str | None) -> None:
+            if not path or not Path(path).is_file():
+                return self._json(404, {"error": "no image"})
+            data = Path(path).read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", mimetypes.guess_type(path)[0] or "image/jpeg")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "max-age=604800")
+            self.end_headers()
+            self.wfile.write(data)
+
         def _body(self) -> dict[str, Any]:
             length = int(self.headers.get("Content-Length") or 0)
             return json.loads(self.rfile.read(length) or b"{}") if length else {}
 
         def do_GET(self) -> None:  # noqa: N802
             if self.path == "/health":
-                return self._json(200, {"ok": True, "host": socket.gethostname()})
+                current = launcher.current["title"] if launcher.current else None
+                return self._json(200, {"ok": True, "host": socket.gethostname(), "uptime": uptime_seconds(), "playing": current})
             if not self._authed():
                 return
-            if self.path.split("?")[0] == "/games":
+            url = urllib.parse.urlsplit(self.path)
+            qs = {k: v[0] for k, v in urllib.parse.parse_qs(url.query).items()}
+            if url.path == "/games":
                 return self._json(200, library.public())
+            if url.path == "/browse/sources":
+                return self._json(200, library.browse_sources())
+            if url.path == "/browse":
+                return self._json(200, library.browse(qs.get("source", "pc"), qs.get("platform", ""), qs.get("q", ""),
+                                                      int(qs.get("offset", 0)), min(int(qs.get("limit", 120)), 500)))
+            if url.path.startswith("/details/"):
+                found = library.details(urllib.parse.unquote(url.path[9:]))
+                return self._json(200, found) if found else self._json(404, {"error": "unknown game"})
+            if url.path.startswith("/shot/"):
+                gid, _, n = urllib.parse.unquote(url.path[6:]).rpartition("/")
+                return self._file(library.shot_path(gid, int(n or 0)))
             if self.path.startswith("/art/"):
-                path = library.art_path(urllib.request.unquote(self.path[5:]))
-                if not path or not Path(path).is_file():
-                    return self._json(404, {"error": "no art"})
-                data = Path(path).read_bytes()
-                self.send_response(200)
-                self.send_header("Content-Type", mimetypes.guess_type(path)[0] or "image/jpeg")
-                self.send_header("Content-Length", str(len(data)))
-                self.send_header("Cache-Control", "max-age=604800")
-                self.end_headers()
-                self.wfile.write(data)
-                return
+                return self._file(library.art_path(urllib.parse.unquote(url.path[5:])))
             self._json(404, {"error": "not found"})
 
         def do_POST(self) -> None:  # noqa: N802
@@ -721,6 +949,12 @@ def make_handler(cfg: dict[str, Any], library: Library, launcher: Launcher):
                     if not entry:
                         return self._json(404, {"error": f"unknown game {gid}"})
                     launcher.launch(entry)
+                    return self._json(200, {"ok": True})
+                if self.path == "/power":
+                    action = self._body().get("action", "")
+                    if not cfg.get("allowPower", True) or action not in POWER_COMMANDS:
+                        return self._json(403, {"error": "power control is off"})
+                    power(action)
                     return self._json(200, {"ok": True})
                 if self.path == "/stop":
                     launcher.stop()

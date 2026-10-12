@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { EntityCard } from '../components/EntityCard';
 import { Icon } from '../components/Icon';
 import { Row, Tile } from '../components/Layout';
-import { formatTime, useApi, useServerEvents, type AppTile, type Dashboard, type GameLibrary, type Guide } from '../lib/api';
+import { formatTime, post, useApi, useServerEvents, type AppTile, type Dashboard, type GameLibrary, type Guide, type OnDeckItem } from '../lib/api';
 import { useHearth } from '../lib/hearth';
 
 function greeting(h: number): string {
@@ -29,6 +29,9 @@ export function HomePage() {
   const guide = useApi<Guide>(liveTv ? '/api/tv/guide?hours=1' : null, 60_000);
   const library = useApi<GameLibrary>('/api/games');
   const dash = useApi<Dashboard>('/api/ha/dashboard');
+  // Continue watching only for profiles that can see Plex.
+  const hasPlex = apps.data?.some((a) => a.id === 'plex') ?? false;
+  const deck = useApi<{ demo: boolean; items: OnDeckItem[] }>(hasPlex ? '/api/plex/ondeck' : null, 5 * 60_000);
 
   useServerEvents((e) => {
     if (e.type !== 'ha-state' || !dash.data) return;
@@ -93,6 +96,23 @@ export function HomePage() {
         ))}
       </Row>
 
+      {hasPlex && deck.data?.items.length ? (
+        <Row title="Continue watching">
+          {deck.data.items.map((item) => (
+            <Tile
+              key={item.id}
+              title={item.title}
+              subtitle={item.subtitle}
+              image={item.thumb}
+              icon="play"
+              color="#1f1a10"
+              progress={item.progress}
+              onSelect={() => void post(`/api/plex/open/${encodeURIComponent(item.id)}`)}
+            />
+          ))}
+        </Row>
+      ) : null}
+
       {onNow.length ? (
         <Row title="On now">
           {onNow.map(({ ch, prog }) => (
@@ -120,7 +140,9 @@ export function HomePage() {
                 title={r.title}
                 image={r.art}
                 badge={g?.requiresKbm ? <span className="badge"><Icon name="keyboard" size="1em" /></span> : undefined}
-                onSelect={() => hearth.playGame({ hostId: r.hostId, gameId: r.gameId, title: r.title, requiresKbm: g?.requiresKbm ?? false })}
+                onSelect={() =>
+                  g ? hearth.openGame(g) : hearth.playGame({ hostId: r.hostId, gameId: r.gameId, title: r.title, requiresKbm: false, art: r.art })
+                }
               />
             );
           })}
@@ -135,7 +157,7 @@ export function HomePage() {
               subtitle={g.platform}
               image={g.art}
               badge={g.requiresKbm ? <span className="badge"><Icon name="keyboard" size="1em" /></span> : undefined}
-              onSelect={() => hearth.playGame({ hostId: g.hostId, gameId: g.id, title: g.title, requiresKbm: g.requiresKbm })}
+              onSelect={() => hearth.openGame(g)}
             />
           ))}
         </Row>

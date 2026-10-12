@@ -1,11 +1,12 @@
 import { createContext, useContext } from 'react';
-import type { Info, PageId, Profile, ProfilesState } from './api';
+import type { Game, Info, PageId, Profile, ProfilesState } from './api';
 
 export interface PlayRequest {
   hostId: string;
   gameId: string;
   title: string;
   requiresKbm: boolean;
+  art?: string;
 }
 
 export interface Hearth {
@@ -26,6 +27,8 @@ export interface Hearth {
   /** Open the app order/visibility editor for the active profile. */
   editApps(): void;
   openTheme(): void;
+  /** Show a game's details (screenshot, description, play time) with a Play button. */
+  openGame(game: Game): void;
 }
 
 export const HearthContext = createContext<Hearth | null>(null);

@@ -144,11 +144,59 @@ class PlayniteTests(unittest.TestCase):
         self.assertEqual(agent.PlayniteSource({"exportPath": "/nope/x.json"}).entries(), {})
 
 
+class BrowseTests(unittest.TestCase):
+    def test_launchbox_browses_one_platform_with_paging_and_search(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "LaunchBox"
+            write_launchbox(root, games_per_platform=300, favourite_every=100)
+            lib = agent.Library({"token": "t", "steam": {"enabled": False}, "launchbox": {"path": str(root)}}, Path(tmp))
+            lib.scan()
+            sources = lib.browse_sources()
+            self.assertIn({"name": "Nintendo 64", "count": 300}, sources["platforms"])
+            first = lib.browse("platform", "Nintendo 64", "", 0, 120)
+            self.assertEqual((first["total"], len(first["games"])), (300, 120))
+            self.assertEqual({g["platform"] for g in first["games"]}, {"Nintendo 64"})
+            self.assertFalse(all(g["favorite"] for g in first["games"]))
+            hit = lib.browse("platform", "Nintendo 64", "game 299", 0, 50)
+            self.assertEqual([g["title"] for g in hit["games"]], ["Ninte Game 299"])
+            # A non-favourite found through Browse can be launched and has details.
+            self.assertIsNotNone(lib.get("lb-Nin-00299"))
+            details = lib.details("lb-Nin-00299")
+            self.assertIn("long description", details["description"])
+            self.assertTrue(all(not k.startswith("_") for k in details))
+
+    def test_playnite_library_favourites_and_uninstalled(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            export = Path(tmp) / "hearth-library.json"
+            export.write_text(json.dumps([
+                {"id": "a", "name": "Fortnite", "source": "Epic", "favorite": True, "installed": True, "ageRatings": ["ESRB Teen"],
+                 "description": "<p>Battle <b>royale</b></p>", "playtime": 7260, "releaseYear": 2017, "genres": ["Shooter"]},
+                {"id": "b", "name": "Halo Infinite", "source": "Xbox", "favorite": False, "installed": False, "ageRatings": ["M - Mature"]},
+                {"id": "c", "name": "Minecraft", "source": "Xbox", "favorite": False, "installed": True, "ageRatings": ["E10+ - Everyone 10+"]},
+            ]))
+            lib = agent.Library({"token": "t", "steam": {"enabled": False}, "playnite": {"enabled": True, "exportPath": str(export)}}, Path(tmp))
+            self.assertEqual(list(lib.scan()), ["pn-a"])
+            browse = lib.browse("pc", "", "", 0, 50)
+            self.assertEqual(browse["total"], 3)
+            halo = next(g for g in browse["games"] if g["title"] == "Halo Infinite")
+            self.assertEqual((halo["installed"], halo["favorite"], halo["rating"], halo["store"]), (False, False, "M", "Xbox"))
+            d = lib.details("pn-a")
+            self.assertEqual((d["description"].split(), d["playtimeMinutes"], d["year"], d["rating"]), (["Battle", "royale"], 121, 2017, "T"))
+            self.assertEqual(lib.get("pn-b")["_launch"], {"uri": "playnite://playnite/start/b"})
+
+    def test_steam_store_parsing(self) -> None:
+        info = agent.parse_steam_store({"success": True, "data": {
+            "categories": [{"id": 28}], "ratings": {"esrb": {"rating": "e10"}}, "short_description": "Farm <i>life</i>",
+            "screenshots": [{"path_full": "https://x/1.jpg"}], "genres": [{"description": "Indie"}], "release_date": {"date": "26 Feb, 2016"}}})
+        self.assertEqual(info, {"controller": "full", "rating": "E10", "description": "Farm life",
+                                "screenshots": ["https://x/1.jpg"], "genres": ["Indie"], "year": 2016})
+
+
 class LibraryTests(unittest.TestCase):
     def test_frontend_entry_replaces_duplicate_steam_entry(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             export = Path(tmp) / "export.json"
-            export.write_text(json.dumps([{"id": "p1", "name": "ELDEN RING", "source": "Steam"}]))
+            export.write_text(json.dumps([{"id": "p1", "name": "ELDEN RING", "source": "Steam", "favorite": True}]))
             lib = agent.Library({"token": "t", "steam": {"enabled": False}, "playnite": {"enabled": True, "exportPath": str(export)}}, Path(tmp))
             lib._steam = lambda: {"steam-1245620": {"id": "steam-1245620", "title": "Elden Ring", "source": "steam"}}  # type: ignore[method-assign]
             entries = lib.scan()

@@ -62,12 +62,38 @@ export class VoiceService {
       }
     };
 
+    // Wake-word mode: the UI streams the mic continuously; Home Assistant listens for the
+    // wake word and the UI then opens the normal voice panel.
+    let wake: ReturnType<HomeAssistant['runStt']> | null = null;
+    let wakeOn = false;
+    const listenForWake = () => {
+      if (!wakeOn || socket.readyState !== socket.OPEN || !this.ha?.connected) return;
+      try {
+        wake = this.ha.runStt((type, d) => {
+          if (type === 'wake_word-end' && d?.wake_word_output?.wake_word_id) send({ type: 'wake-detected' });
+          if (type === 'run-end' || type === 'error') {
+            wake = null;
+            setTimeout(listenForWake, type === 'error' ? 5000 : 300);
+          }
+        }, 'wake_word');
+      } catch {
+        setTimeout(listenForWake, 5000);
+      }
+    };
+
     socket.on('message', (data, isBinary) => {
       if (isBinary) {
-        run?.sendAudio(data as Buffer);
+        if (wakeOn) wake?.sendAudio(data as Buffer);
+        else run?.sendAudio(data as Buffer);
         return;
       }
       const msg = JSON.parse(data.toString());
+      if (msg.type === 'wake-start') {
+        if (!this.ha?.connected) return send({ type: 'error', message: 'Wake word needs Home Assistant with a wake word engine.' });
+        wakeOn = true;
+        listenForWake();
+        return;
+      }
       if (msg.type === 'text') void finish(String(msg.text ?? ''));
       if (msg.type === 'stop') run?.end();
       if (msg.type === 'start') {
@@ -91,6 +117,10 @@ export class VoiceService {
         }
       }
     });
-    socket.on('close', () => run?.end());
+    socket.on('close', () => {
+      wakeOn = false;
+      wake?.end();
+      run?.end();
+    });
   }
 }

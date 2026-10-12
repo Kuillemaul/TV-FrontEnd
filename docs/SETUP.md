@@ -6,8 +6,9 @@ You can do these in any order. Each part falls back to demo data until it's conf
 2. [Live TV with a USB tuner](#2-live-tv-with-a-usb-tuner)
 3. [Home Assistant dashboard and voice](#3-home-assistant-dashboard-and-voice)
 4. [Gaming PC and emulator PC](#4-gaming-pc-and-emulator-pc)
-5. [Remotes, controllers and HDMI-CEC](#5-remotes-controllers-and-hdmi-cec)
-6. [Troubleshooting](#6-troubleshooting)
+5. [Family, automations and extras](#5-family-automations-and-extras)
+6. [Remotes, controllers and HDMI-CEC](#6-remotes-controllers-and-hdmi-cec)
+7. [Troubleshooting](#7-troubleshooting)
 
 ---
 
@@ -223,16 +224,33 @@ with a "Show more" tile. Search, the platform chips and voice ("play Chrono Trig
 1. Copy `pc-agent/playnite/HearthExporter` into Playnite's `Extensions` folder
    (`%APPDATA%\Playnite\Extensions\`, or `Extensions\` next to `Playnite.DesktopApp.exe` for the portable version),
    then restart Playnite.
-2. Star the games you want on the TV (*Favorite*). The extension writes them to
-   `%APPDATA%\Playnite\ExtensionsData\hearth-favorites.json` when Playnite starts or closes, after a library update,
-   after you play something, and when you choose *Extensions → Hearth → Export favourites now*.
+2. Star the games you want in **My games** on the TV (*Favorite*). The extension writes your whole library (with
+   favourite and installed flags) to `%APPDATA%\Playnite\ExtensionsData\hearth-library.json` when Playnite starts
+   or closes, after a library update, after you play something, and when you choose
+   *Extensions → Hearth → Send library to Hearth*. Unfavourited and uninstalled games appear under **Browse PC**.
 3. Set `"playnite": {"enabled": true}` in `agent.json`. For portable Playnite, also set `exportPath`
-   (Playnite's `ExtensionsData` folder + `hearth-favorites.json`).
+   (Playnite's `ExtensionsData` folder + `hearth-library.json`).
 
 Games launch **through Playnite** (`playnite://playnite/start/<id>`), so Epic, Game Pass and every other store
 and emulator works exactly as it does in Playnite. Keep Playnite running (it can start minimised).
 Cover art comes from Playnite. Controller support comes from Playnite's *Features* ("Full Controller Support").
 Tag a game **`Hearth: KBM`** to get the keyboard & mouse prompt, or **`Hearth: Controller`** to suppress it.
+
+### Browsing everything else
+
+**Games → Browse PC** lists every game in your Playnite library: unfavourited ones, and **uninstalled** ones marked
+*Not installed*. Picking an uninstalled game asks Playnite to install it. **Games → Browse emulated** shows your
+LaunchBox platforms with game counts. Pick one platform and you get its full list (paged, with search). Only that
+platform is loaded at a time, so a 20,000-ROM collection stays quick. Browse is parents-only; kid profiles only ever
+see their hand-picked games.
+
+Selecting any game opens its **details** first: a screenshot, description, rating, genres and how long you've played
+(Playnite/LaunchBox's count, plus time streamed on the TV). Steam details come from the Steam store; LaunchBox
+uses its Notes and *Screenshot - Gameplay* images; Playnite uses its description and background.
+
+**Games → PCs** shows which PCs are on, for how long, what they're running, and how long they usually take to wake.
+From there you can wake, sleep, restart or shut them down (`"allowPower": false` in `agent.json` turns power
+control off).
 
 ### On the TV
 
@@ -250,7 +268,61 @@ agent closes the game (`quitOnExit`).
 If a game needs a **keyboard and mouse**, Hearth first shows **"Get your keyboard & mouse ready"**, with live
 ✓ marks once they're connected to the TV, before it launches. Moonlight forwards them to the PC.
 
-## 5. Remotes, controllers and HDMI-CEC
+## 5. Family, automations and extras
+
+### Screen time
+Settings → Profiles → your son's profile → **Screen time**: a daily allowance (30 min to 3 h) and a **bedtime**
+(e.g. 20:00 until 07:00). Time counts only while something is playing (apps, Live TV, games). The top bar shows
+how much is left, there's a pop-up at 5 minutes, and when time runs out whatever is playing closes and a
+"That's all for today" screen appears. A parent can add **+15/+30 minutes** right there with their PIN, or from
+Settings → Screen time. Bonus time also works during bedtime, for that one late movie night. Adding time from the
+kid's screen needs a parent PIN, so set one.
+
+### Movie-time lights
+List scenes under `scenes:` in config.yaml (see the example): e.g. dim the lights when Plex or Live TV starts and
+bring them back when it stops, or set the TV backlight for games. Toggle it in Settings → *Movie-time lights*.
+
+### Alerts and the doorbell
+Under `alerts:` set your doorbell entity and camera, and any rules ("washer finished", "garage opened"). Servers
+listed in the Lab raise an alert when they go down. Alerts appear as cards with a chime and a **live camera**. If Plex,
+a game or Live TV is on screen, Hearth briefly opens the alert on top and then returns you to what you were
+watching. Under the kiosk compositor that window is full screen; the game keeps streaming behind it. Test it from
+Settings → *Test doorbell*.
+
+### Plex: continue watching
+Add your server under `plex:` (URL + token) to get a **Continue watching** row on Home. Selecting an item opens it
+in Plex Web, full screen, ready to resume.
+
+### Recording a whole series
+In the guide, select a show → **Record series** (Tvheadend's "autorec" records every episode).
+
+### TV power and other inputs
+With a Pulse-Eight USB-CEC adapter (see below), Settings has **Turn TV off/on** and **Switch TV to Hearth**, and
+"turn off the TV" works by voice. Add other HDMI devices under `tv.inputs` and they appear as app tiles; "switch to
+the Xbox" works by voice too.
+
+### Wake word
+Install the **openWakeWord** add-on in Home Assistant and pick a wake word in your Assist pipeline. Then turn on
+Settings → *Wake word*. Say it, wait for the panel to appear, then speak your command.
+
+### Home lab charts and actions
+Every Lab sensor shows a 24-hour chart from Home Assistant history. Add `lab.actions` for one-button jobs like
+restarting a container: a Home Assistant service (e.g. a Portainer/Proxmox `button`) or a webhook URL. Actions are
+parents-only and ask for your PIN.
+
+### Phone remote
+Set `server.host: 0.0.0.0`, restart, and open Settings → **Phone remote**. Scan the QR code with your phone, enter
+the 4-digit code, and you get a D-pad, OK/back/home, voice, volume and **typing** (it types into the selected box on
+the TV, or runs as a command like "play Mario Kart"). Inside Plex, browser apps or Moonlight, the presses are sent as
+real key presses through `ydotool` (installed by `install.sh`). Unpaired devices can't use Hearth at all. The code
+changes every 10 minutes and after 5 wrong tries.
+
+### Screensaver and "Who's watching?"
+After `screensaver.idleMinutes` with nothing playing, a photo slideshow (from `screensaver.photosDir`) with the clock
+and weather fades in. Any button wakes it. If it's been idle longer than `pickerAfterMinutes`, waking asks
+"Who's watching?" so the right profile (and its limits) applies.
+
+## 6. Remotes, controllers and HDMI-CEC
 
 - **Air-mouse / Bluetooth / 2.4 GHz remotes** (e.g. G20S Pro) show up as a keyboard. Arrows, OK, Back and Home work as is, and
   many include a mic.
@@ -269,7 +341,7 @@ If a game needs a **keyboard and mouse**, Hearth first shows **"Get your keyboar
 **Home key from anywhere:** Hearth reads `KEY_HOMEPAGE` and the controller guide button straight from `/dev/input`, so
 they close Netflix, Plex, mpv or Moonlight and bring you back. Change these keys under `homeKeys` in the config.
 
-## 6. Troubleshooting
+## 7. Troubleshooting
 
 | Symptom | Fix |
 | --- | --- |

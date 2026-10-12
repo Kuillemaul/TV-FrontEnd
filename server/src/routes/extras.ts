@@ -1,0 +1,340 @@
+import type { FastifyInstance } from 'fastify';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { extname, join } from 'node:path';
+import type { AlertService } from '../alerts.js';
+import type { EventBus } from '../bus.js';
+import { expand, type HearthConfig, type LabAction } from '../config.js';
+import type { Launcher } from '../launcher.js';
+import { PermissionError, ProfileStore } from '../profiles.js';
+import type { DemoHome } from '../providers/demohome.js';
+import type { GameService, PowerAction } from '../providers/games.js';
+import type { HomeAssistant } from '../providers/homeassistant.js';
+import { DEMO_ON_DECK, type PlexClient } from '../providers/plex.js';
+import type { LabMonitor } from '../providers/lab.js';
+import { isLoopback, lanAddress, REMOTE_KEYS, type RemoteCommand, type RemotePairing } from '../remote.js';
+import type { ScreenTime } from '../screentime.js';
+import type { StateStore } from '../state.js';
+
+export interface ExtrasContext {
+  config: HearthConfig;
+  bus: EventBus;
+  state: StateStore;
+  launcher: Launcher;
+  games: GameService;
+  profiles: ProfileStore;
+  screenTime: ScreenTime;
+  alerts: AlertService;
+  plex?: PlexClient;
+  pairing: RemotePairing;
+  ha?: HomeAssistant;
+  demoHome?: DemoHome;
+  lab: LabMonitor;
+  callService: (service: string, data?: Record<string, unknown>) => Promise<void>;
+  fail: (err: unknown) => { ok: boolean; error: string };
+  isKid: () => boolean;
+}
+
+const PHOTO_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp']);
+
+/**
+ * Routes for screen time, settings, alerts, TV control, Plex, lab history/actions,
+ * game browsing/details/power, the screensaver and the phone remote.
+ */
+export function registerExtras(app: FastifyInstance, ctx: ExtrasContext): void {
+  const { config, bus, state, launcher, games, profiles, screenTime, alerts, plex, pairing, ha, fail, isKid } = ctx;
+
+  const requireParent = () => {
+    if (isKid()) throw new PermissionError('Ask a parent to do that');
+  };
+  const run = async (fn: () => unknown | Promise<unknown>) => {
+    try {
+      const result = await fn();
+      return { ok: true, ...(result && typeof result === 'object' ? result : {}) };
+    } catch (err) {
+      return fail(err);
+    }
+  };
+  const relay = async (reply: import('fastify').FastifyReply, res: Response, cache = 'no-store') => {
+    reply.header('Cache-Control', cache).type(res.headers.get('content-type') ?? 'application/octet-stream');
+    return reply.code(res.status).send(Buffer.from(await res.arrayBuffer()));
+  };
+
+  /* ---------------- screen time ---------------- */
+
+  app.get('/api/screentime', async () => ({
+    active: screenTime.status(profiles.active),
+    profiles: profiles.all.filter((p) => p.kind === 'kid').map((p) => ({ ...screenTime.status(p), name: p.name, limits: p.limits ?? null })),
+  }));
+
+  // From a parent profile, or on the kid's "time's up" screen with a parent's PIN (never without one).
+  app.post<{ Params: { id: string }; Body: { minutes: number; parentId?: string; pin?: string } }>('/api/screentime/:id/bonus', async (req) =>
+    run(() => {
+      if (isKid()) {
+        const parent = profiles.all.find((p) => p.id === req.body.parentId && p.kind === 'admin');
+        if (!parent?.pinHash || !profiles.checkPin(parent.id, req.body.pin)) throw new PermissionError('Wrong PIN');
+      }
+      screenTime.addBonus(req.params.id, Math.max(0, Math.min(240, Number(req.body.minutes) || 0)));
+      bus.emit({ type: 'screentime' });
+    }),
+  );
+
+  /* ---------------- TV-wide settings ---------------- */
+
+  app.get('/api/settings', async () => state.settings);
+  app.put<{ Body: Partial<StateStore['settings']> }>('/api/settings', async (req) =>
+    run(() => {
+      requireParent();
+      const allowed = ['scenes', 'wakeWord', 'alertsOverApps'] as const;
+      state.updateSettings(Object.fromEntries(allowed.filter((k) => k in req.body).map((k) => [k, Boolean(req.body[k])])));
+      bus.emit({ type: 'settings' });
+      return state.settings;
+    }),
+  );
+
+  /* ---------------- alerts & doorbell ---------------- */
+
+  app.get<{ Params: { id: string } }>('/api/alerts/:id', async (req, reply) => alerts.get(req.params.id) ?? reply.code(404).send());
+  app.get('/api/alerts', async () => alerts.history);
+
+  app.post<{ Body: { kind: 'doorbell' | 'info' | 'warning' } }>('/api/alerts/test', async (req) =>
+    run(() => {
+      requireParent();
+      const kind = req.body.kind ?? 'doorbell';
+      const camera = config.alerts.doorbell?.camera;
+      if (kind === 'doorbell') alerts.raise({ kind, title: 'Someone’s at the door', camera, seconds: 20 });
+      else if (kind === 'warning') alerts.raise({ kind, title: 'Proxmox is down', message: 'Test alert from Settings.', seconds: 10 });
+      else alerts.raise({ kind, title: 'The washer is done', message: 'Test alert from Settings.', seconds: 10 });
+    }),
+  );
+
+  // Live camera (MJPEG) for the doorbell pop-up, proxied so the HA token stays here.
+  app.get<{ Params: { entity: string } }>('/api/camera/:entity/stream', async (req, reply) => {
+    if (!ha) return reply.code(404).send();
+    const res = await ha.fetch(`/api/camera_proxy_stream/${encodeURIComponent(req.params.entity)}`);
+    if (!res.ok || !res.body) return reply.code(res.status).send();
+    reply.header('Cache-Control', 'no-store').type(res.headers.get('content-type') ?? 'multipart/x-mixed-replace');
+    const { Readable } = await import('node:stream');
+    return reply.send(Readable.fromWeb(res.body as import('node:stream/web').ReadableStream));
+  });
+
+  /* ---------------- TV power & inputs (HDMI-CEC) ---------------- */
+
+  app.post<{ Params: { action: 'on' | 'off' | 'hearth' }; Body: { input?: string } }>('/api/tv-control/:action', async (req) =>
+    run(async () => {
+      const cmds = config.tv.commands;
+      if (req.params.action === 'on') await launcher.run(cmds.on);
+      else if (req.params.action === 'off') await launcher.run(cmds.off);
+      else await launcher.run(expand(cmds.hearth, { addr: '1.0.0.0' }));
+    }),
+  );
+
+  /* ---------------- Plex: continue watching ---------------- */
+
+  app.get('/api/plex/ondeck', async () => {
+    if (!plex) return { demo: true, items: DEMO_ON_DECK };
+    try {
+      return { demo: false, items: await plex.onDeck() };
+    } catch (err) {
+      return { demo: false, items: [], error: (err as Error).message };
+    }
+  });
+
+  app.get<{ Querystring: { path: string } }>('/api/plex/thumb', async (req, reply) => {
+    if (!plex) return reply.code(404).send();
+    return relay(reply, await plex.thumb(req.query.path), 'public, max-age=86400');
+  });
+
+  app.post<{ Params: { id: string } }>('/api/plex/open/:id', async (req) =>
+    run(async () => {
+      if (!plex) throw new Error('Demo mode: add your Plex server under "plex" in config.yaml');
+      const plexTile = ProfileStore.orderApps(profiles.active, config.apps).find((a) => a.id === 'plex');
+      if (isKid() && !plexTile) throw new PermissionError('Plex isn’t on this profile');
+      await launcher.launch('app:plex', 'Plex', { type: 'web', url: await plex.itemUrl(req.params.id) });
+    }),
+  );
+
+  /* ---------------- lab: history & actions ---------------- */
+
+  app.get<{ Querystring: { entity: string; hours?: string } }>('/api/lab/history', async (req) => {
+    const hours = Math.min(Number(req.query.hours ?? 24), 168);
+    if (!ha) return { points: demoSeries(req.query.entity, hours) };
+    try {
+      return { points: await ha.history(req.query.entity, hours) };
+    } catch {
+      return { points: [] };
+    }
+  });
+
+  app.get('/api/lab/actions', async () => {
+    const actions = config.lab.actions.length ? config.lab.actions : DEMO_ACTIONS;
+    return { demo: config.lab.actions.length === 0, actions: actions.map((a, i) => ({ index: i, name: a.name })) };
+  });
+
+  app.post<{ Params: { index: string }; Body: { pin?: string } }>('/api/lab/actions/:index', async (req) =>
+    run(async () => {
+      requireParent();
+      if (!profiles.checkPin(profiles.active.id, req.body?.pin)) throw new PermissionError('Wrong PIN');
+      const demo = config.lab.actions.length === 0;
+      const action = (demo ? DEMO_ACTIONS : config.lab.actions)[Number(req.params.index)];
+      if (!action) throw new Error('Unknown action');
+      if (demo) {
+        bus.toast(`Demo: “${action.name}” would run now`);
+        return;
+      }
+      if (action.ha) await ctx.callService(action.ha.service, action.ha.data);
+      if (action.http) {
+        const res = await fetch(action.http.url, {
+          method: action.http.method ?? 'POST',
+          headers: action.http.headers,
+          body: action.http.body,
+          signal: AbortSignal.timeout(15000),
+        });
+        if (!res.ok) throw new Error(`${action.name}: HTTP ${res.status}`);
+      }
+      bus.toast(`${action.name}: done`);
+    }),
+  );
+
+  /* ---------------- games: PCs, browse, details ---------------- */
+
+  app.post<{ Params: { hostId: string }; Body: { action: PowerAction } }>('/api/games/:hostId/power', async (req) =>
+    run(async () => {
+      if (req.body.action !== 'wake') requireParent();
+      await games.power(req.params.hostId, req.body.action);
+    }),
+  );
+
+  app.get('/api/games/browse/sources', async (_req, reply) => {
+    if (isKid()) return reply.code(403).send({ error: 'Browse is for parents' });
+    return games.browseSources();
+  });
+
+  app.get<{ Params: { hostId: string }; Querystring: { source: 'pc' | 'platform'; platform?: string; q?: string; offset?: string; limit?: string } }>(
+    '/api/games/browse/:hostId',
+    async (req, reply) => {
+      if (isKid()) return reply.code(403).send({ error: 'Browse is for parents' });
+      try {
+        return await games.browse(req.params.hostId, {
+          source: req.query.source,
+          platform: req.query.platform,
+          search: req.query.q,
+          offset: Number(req.query.offset ?? 0),
+          limit: Math.min(Number(req.query.limit ?? 120), 300),
+        });
+      } catch (err) {
+        return reply.code(502).send({ error: (err as Error).message });
+      }
+    },
+  );
+
+  app.get<{ Params: { hostId: string; gameId: string } }>('/api/games/:hostId/details/:gameId', async (req, reply) => {
+    if (!ProfileStore.allowsGame(profiles.active, req.params.hostId, req.params.gameId)) return reply.code(403).send();
+    try {
+      return await games.details(req.params.hostId, req.params.gameId);
+    } catch (err) {
+      return reply.code(502).send({ error: (err as Error).message });
+    }
+  });
+
+  app.get<{ Params: { hostId: string; gameId: string; n: string } }>('/api/games/:hostId/shot/:gameId/:n', async (req, reply) => {
+    try {
+      return await relay(reply, await games.shot(req.params.hostId, req.params.gameId, Number(req.params.n)), 'public, max-age=604800');
+    } catch {
+      return reply.code(404).send();
+    }
+  });
+
+  /* ---------------- screensaver ---------------- */
+
+  const photos = (): string[] => {
+    const dir = config.screensaver.photosDir;
+    if (!dir || !existsSync(dir)) return [];
+    try {
+      return readdirSync(dir)
+        .filter((f) => PHOTO_EXT.has(extname(f).toLowerCase()))
+        .slice(0, 500);
+    } catch {
+      return [];
+    }
+  };
+
+  app.get('/api/screensaver', async () => ({
+    ...config.screensaver,
+    photos: photos().map((_, i) => `/api/screensaver/photo/${i}`),
+  }));
+
+  app.get<{ Params: { n: string } }>('/api/screensaver/photo/:n', async (req, reply) => {
+    const file = photos()[Number(req.params.n)];
+    if (!file) return reply.code(404).send();
+    const ext = extname(file).toLowerCase().slice(1);
+    reply.header('Cache-Control', 'public, max-age=3600').type(`image/${ext === 'jpg' ? 'jpeg' : ext}`);
+    return reply.send(readFileSync(join(config.screensaver.photosDir!, file)));
+  });
+
+  /* ---------------- phone remote ---------------- */
+
+  app.get('/api/remote/pairing', async (req, reply) => {
+    if (!isLoopback(req.ip)) return reply.code(403).send();
+    const host = config.server.host;
+    const reachable = host === '0.0.0.0' || host === '::' || !isLoopback(host);
+    const ip = lanAddress();
+    return {
+      code: pairing.currentCode(),
+      url: ip ? `http://${ip}:${config.server.port}/remote` : null,
+      reachable,
+      paired: pairing.paired,
+    };
+  });
+
+  app.post<{ Body: { code: string; label?: string } }>('/api/remote/pair', async (req, reply) => {
+    const token = pairing.pair(String(req.body?.code ?? ''), req.body?.label ?? String(req.headers['user-agent'] ?? 'Phone'));
+    if (!token) return reply.code(401).send({ ok: false, error: 'That code didn’t match. Check the TV and try again.' });
+    reply.header('Set-Cookie', `hearth_remote=${token}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Strict`);
+    return { ok: true };
+  });
+
+  app.delete('/api/remote/tokens', async () =>
+    run(() => {
+      requireParent();
+      pairing.forgetAll();
+    }),
+  );
+
+  app.post<{ Body: { cmd: RemoteCommand; text?: string } }>('/api/remote/cmd', async (req) =>
+    run(async () => {
+      const { cmd, text } = req.body;
+      if (cmd === 'home') {
+        await launcher.stop();
+        bus.emit({ type: 'home' });
+        return;
+      }
+      if (cmd === 'volumeUp' || cmd === 'volumeDown' || cmd === 'mute') {
+        await launcher.run(config.system[cmd]);
+        return;
+      }
+      // While Plex/a browser/Moonlight has the screen, inject real key presses into it.
+      const key = REMOTE_KEYS[cmd];
+      if (launcher.session && key) {
+        await launcher.run(expand(config.remote.keyCommand, { key }));
+        return;
+      }
+      bus.emit({ type: 'remote', cmd, text });
+    }),
+  );
+}
+
+/* ---------------- demo data ---------------- */
+
+const DEMO_ACTIONS: LabAction[] = [{ name: 'Restart Plex container' }, { name: 'Reboot Pi-hole' }, { name: 'Start Minecraft server VM' }];
+
+/** A believable daily curve so charts have something to show in demo mode. */
+function demoSeries(entity: string, hours: number): Array<[number, number]> {
+  const seed = [...entity].reduce((a, c) => a + c.charCodeAt(0), 0);
+  const base = entity.includes('download') ? 700 : entity.includes('disk') ? 61 : entity.includes('ups') ? 18 : 25;
+  const now = Date.now();
+  return Array.from({ length: 48 }, (_, i) => {
+    const t = now - hours * 3600_000 + (i / 47) * hours * 3600_000;
+    const wave = Math.sin((t / 3600_000 / 24) * Math.PI * 2 + seed) * 0.25 + Math.sin(i * 1.7 + seed) * 0.08;
+    return [t, Math.max(0, Math.round(base * (1 + wave) * 10) / 10)] as [number, number];
+  });
+}

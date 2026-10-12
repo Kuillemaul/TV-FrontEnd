@@ -14,6 +14,9 @@ export class LabMonitor {
   private status: ServiceStatus[];
   private timer?: NodeJS.Timeout;
 
+  /** Called when a service goes from up to down, or recovers. */
+  onChange?: (svc: ServiceStatus, wasUp: boolean | null) => void;
+
   constructor(private readonly cfg: LabConfig) {
     this.status = cfg.services.map((s) => ({ name: s.name, url: s.url, open: Boolean(s.open), up: null, latencyMs: null, checkedAt: null }));
   }
@@ -44,12 +47,14 @@ export class LabMonitor {
         } catch {
           up = false;
         }
+        const wasUp = this.status[i].up;
         this.status[i] = {
           ...this.status[i],
           up,
           latencyMs: up ? Math.round(performance.now() - started) : null,
           checkedAt: Date.now(),
         };
+        if (wasUp !== null && wasUp !== up) this.onChange?.(this.status[i], wasUp);
       }),
     );
   }

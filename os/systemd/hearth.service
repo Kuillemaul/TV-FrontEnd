@@ -5,6 +5,8 @@ After=pipewire.service
 [Service]
 WorkingDirectory=/opt/hearth
 Environment=NODE_ENV=production
+# Phone remote key presses into other apps go through ydotoold (see install.sh).
+Environment=YDOTOOL_SOCKET=/run/ydotoold.socket
 Environment=HEARTH_CONFIG=/opt/hearth/config/config.yaml
 # Each watched input device holds a libuv thread while reading.
 Environment=UV_THREADPOOL_SIZE=32

@@ -29,6 +29,7 @@ export class HomeAssistant {
   private handlers = new Map<number, Handler>();
   private states = new Map<string, HaEntity>();
   private watched = new Set<string>();
+  private stateListeners = new Set<(entity: HaEntity, old: HaEntity | null) => void>();
   private retry = 1000;
   connected = false;
 
@@ -87,6 +88,8 @@ export class HomeAssistant {
     this.handlers.set(id, (msg) => {
       const next: HaEntity | null = msg.event?.data?.new_state;
       if (msg.type !== 'event' || !next) return;
+      const old: HaEntity | null = msg.event?.data?.old_state ?? null;
+      for (const fn of this.stateListeners) fn(next, old);
       this.states.set(next.entity_id, next);
       if (this.watched.has(next.entity_id)) this.bus.emit({ type: 'ha-state', entity: next });
     });
@@ -121,6 +124,25 @@ export class HomeAssistant {
     });
   }
 
+  /** Every state change in Home Assistant (alerts, doorbell). */
+  onStateChange(fn: (entity: HaEntity, old: HaEntity | null) => void): void {
+    this.stateListeners.add(fn);
+  }
+
+  /** Numeric history for one entity, downsampled to at most `points` values. */
+  async history(entityId: string, hours: number, points = 60): Promise<Array<[number, number]>> {
+    const start = new Date(Date.now() - hours * 3600_000).toISOString();
+    const res = await this.fetch(
+      `/api/history/period/${start}?filter_entity_id=${encodeURIComponent(entityId)}&minimal_response&no_attributes`,
+    );
+    if (!res.ok) throw new Error(`history ${entityId}: HTTP ${res.status}`);
+    const [rows = []] = (await res.json()) as Array<Array<{ state: string; last_changed: string }>>;
+    const series = rows
+      .map((r) => [Date.parse(r.last_changed), Number(r.state)] as [number, number])
+      .filter(([, v]) => Number.isFinite(v));
+    return downsample(series, points);
+  }
+
   entity(id: string): HaEntity | undefined {
     return this.states.get(id);
   }
@@ -148,17 +170,18 @@ export class HomeAssistant {
   /**
    * Run an Assist pipeline from speech-to-text only. Hearth then checks the transcript
    * against its own commands ("open Netflix", "play Halo") before handing it to HA.
+   * With stage "wake_word" it only listens for the wake word (openWakeWord in HA).
    */
-  runStt(onEvent: (type: string, data: any) => void): PipelineRun {
+  runStt(onEvent: (type: string, data: any) => void, stage: 'stt' | 'wake_word' = 'stt'): PipelineRun {
     let handlerId: number | null = null;
     let queued: Buffer[] = [];
     let ended = false;
 
     const id = this.send({
       type: 'assist_pipeline/run',
-      start_stage: 'stt',
-      end_stage: 'stt',
-      input: { sample_rate: 16000 },
+      start_stage: stage,
+      end_stage: stage,
+      input: stage === 'wake_word' ? { sample_rate: 16000, timeout: 3600 } : { sample_rate: 16000 },
       ...(this.cfg.voice.pipeline ? { pipeline: this.cfg.voice.pipeline } : {}),
     });
 
@@ -223,4 +246,16 @@ export class HomeAssistant {
     const { url } = (await res.json()) as { url: string };
     return new URL(url).pathname;
   }
+}
+
+/** Keep the shape of a series while cutting it to `points` buckets (bucket averages). */
+export function downsample(series: Array<[number, number]>, points: number): Array<[number, number]> {
+  if (series.length <= points) return series;
+  const size = series.length / points;
+  const out: Array<[number, number]> = [];
+  for (let i = 0; i < points; i++) {
+    const bucket = series.slice(Math.floor(i * size), Math.floor((i + 1) * size));
+    if (bucket.length) out.push([bucket[0][0], bucket.reduce((a, [, v]) => a + v, 0) / bucket.length]);
+  }
+  return out;
 }

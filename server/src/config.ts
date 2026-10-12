@@ -71,10 +71,61 @@ export interface LabService {
   open?: boolean;
 }
 
+/** A Home Assistant service call, e.g. { service: "scene.turn_on", data: { entity_id: "scene.movie_time" } }. */
+export interface ServiceCall {
+  service: string;
+  data?: Record<string, unknown>;
+}
+
+export interface LabAction {
+  name: string;
+  /** Call a Home Assistant service (e.g. button.press on a Proxmox/Portainer button). */
+  ha?: ServiceCall;
+  /** Or hit a URL (e.g. a Portainer/Unraid webhook). */
+  http?: { url: string; method?: string; headers?: Record<string, string>; body?: string };
+}
+
 export interface LabConfig {
   services: LabService[];
   /** Home Assistant sensor entities shown as stats (CPU, disk, UPS…). */
   sensors: string[];
+  /** One-button actions (restart a container/VM…). Parents only; asks for the PIN. */
+  actions: LabAction[];
+}
+
+/** Lights/scenes that follow what's on screen ("movie time"). */
+export interface SceneRule {
+  name: string;
+  /** Session ids to match: "app:plex", "livetv", "recording", "game:*", "app:*", "*". */
+  match: string[];
+  start?: ServiceCall;
+  stop?: ServiceCall;
+}
+
+export interface AlertRule {
+  entity: string;
+  /** Fire when the entity changes to this state (and optionally from this one). */
+  to?: string;
+  from?: string;
+  title: string;
+  message?: string;
+  camera?: string;
+  seconds?: number;
+}
+
+export interface AlertsConfig {
+  /** binary_sensor/event entity for the doorbell, and the camera to show. */
+  doorbell?: { entity: string; camera?: string; seconds: number };
+  rules: AlertRule[];
+  /** Raise an alert when a lab service goes down. */
+  labDown: boolean;
+}
+
+export interface TvControlConfig {
+  /** Commands for the TV itself (HDMI-CEC via cec-ctl by default). {addr} = physical address. */
+  commands: { on: string[]; off: string[]; hearth: string[]; input: string[] };
+  /** Other HDMI devices, shown as app tiles that switch the TV input. */
+  inputs: Array<{ id: string; name: string; physAddr: string; color?: string }>;
 }
 
 export interface GameHostConfig {
@@ -120,6 +171,15 @@ export interface HearthConfig {
   gaming: GamingConfig;
   /** Global keys that close the foreground app and return to Hearth. */
   homeKeys: HotkeyConfig[];
+  scenes: SceneRule[];
+  alerts: AlertsConfig;
+  tv: TvControlConfig;
+  plex?: { url: string; token: string; webUrl?: string };
+  screensaver: { idleMinutes: number; pickerAfterMinutes: number; photosDir?: string };
+  remote: {
+    /** Injects keys into apps (Plex, browser…) when the phone remote is used. {key} = Linux key name. */
+    keyCommand: string[];
+  };
   system: {
     volumeUp: string[];
     volumeDown: string[];
@@ -168,7 +228,20 @@ function defaults(): HearthConfig {
       ],
       recordingPlayer: ['mpv', '--fs', '--force-window=immediate', '--title=Hearth Recording', '{url}'],
     },
-    lab: { services: [], sensors: [] },
+    lab: { services: [], sensors: [], actions: [] },
+    scenes: [],
+    alerts: { rules: [], labDown: true },
+    tv: {
+      commands: {
+        on: ['cec-ctl', '-d', '/dev/cec0', '--to', '0', '--image-view-on'],
+        off: ['cec-ctl', '-d', '/dev/cec0', '--to', '0', '--standby'],
+        hearth: ['cec-ctl', '-d', '/dev/cec0', '--playback', '--active-source', 'phys-addr={addr}'],
+        input: ['cec-ctl', '-d', '/dev/cec0', '--to', '15', '--set-stream-path', 'phys-addr={addr}'],
+      },
+      inputs: [],
+    },
+    screensaver: { idleMinutes: 5, pickerAfterMinutes: 30 },
+    remote: { keyCommand: ['ydotool', 'key', '{key}'] },
     gaming: { moonlight: ['flatpak', 'run', 'com.moonlight_stream.Moonlight', 'stream', '{host}', '{app}'], hosts: [], kbmOverrides: {} },
     homeKeys: [
       { key: 'KEY_HOMEPAGE', holdMs: 0 },
@@ -252,7 +325,23 @@ export function loadConfig(path = resolveConfigPath()): HearthConfig {
   if (raw.lab) {
     cfg.lab.services = Array.isArray(raw.lab.services) ? raw.lab.services : [];
     cfg.lab.sensors = Array.isArray(raw.lab.sensors) ? raw.lab.sensors : [];
+    cfg.lab.actions = Array.isArray(raw.lab.actions) ? raw.lab.actions : [];
   }
+  if (Array.isArray(raw.scenes)) cfg.scenes = raw.scenes;
+  if (raw.alerts) {
+    cfg.alerts = {
+      doorbell: raw.alerts.doorbell?.entity ? { seconds: 30, ...raw.alerts.doorbell } : undefined,
+      rules: Array.isArray(raw.alerts.rules) ? raw.alerts.rules : [],
+      labDown: raw.alerts.labDown ?? true,
+    };
+  }
+  if (raw.tv) {
+    Object.assign(cfg.tv.commands, raw.tv.commands);
+    cfg.tv.inputs = (raw.tv.inputs ?? []).map((x: any, i: number) => ({ id: x.id ?? `input${i}`, ...x }));
+  }
+  if (raw.plex?.url && raw.plex?.token) cfg.plex = { url: String(raw.plex.url).replace(/\/$/, ''), token: raw.plex.token, webUrl: raw.plex.webUrl };
+  Object.assign(cfg.screensaver, raw.screensaver);
+  if (Array.isArray(raw.remote?.keyCommand)) cfg.remote.keyCommand = raw.remote.keyCommand;
 
   if (raw.gaming) {
     if (Array.isArray(raw.gaming.moonlight)) cfg.gaming.moonlight = raw.gaming.moonlight;

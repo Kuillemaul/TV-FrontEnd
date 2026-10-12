@@ -114,6 +114,9 @@ function GuideGrid() {
             <Button icon="record" autoFocus={!airing} onClick={() => { void post('/api/tv/record', { programmeId: selected.id }); setSelected(null); }}>
               Record
             </Button>
+            <Button icon="record" onClick={() => { void post('/api/tv/record', { programmeId: selected.id, series: true }); setSelected(null); }}>
+              Record series
+            </Button>
             <Button onClick={() => setSelected(null)}>Close</Button>
           </div>
         </Modal>

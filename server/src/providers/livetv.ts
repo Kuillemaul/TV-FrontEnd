@@ -36,6 +36,8 @@ export interface LiveTvProvider {
   recordings(): Promise<Recording[]>;
   recordingUrl(id: string): string;
   record(programmeId: string): Promise<void>;
+  /** Record every episode of the series this programme belongs to (Tvheadend autorec). */
+  recordSeries(programmeId: string): Promise<void>;
   deleteRecording(id: string): Promise<void>;
   /** Proxy fetch for channel icons (Tvheadend imagecache needs auth). */
   fetchIcon?(path: string): Promise<Response>;
@@ -141,6 +143,10 @@ export class TvheadendProvider implements LiveTvProvider {
     await this.api('/api/dvr/entry/create_by_event', { event_id: programmeId, config_uuid: '' });
   }
 
+  async recordSeries(programmeId: string): Promise<void> {
+    await this.api('/api/dvr/autorec/create_by_series', { event_id: programmeId, config_uuid: '' });
+  }
+
   async deleteRecording(id: string): Promise<void> {
     await this.api('/api/idnode/delete', { uuid: id });
   }
@@ -214,6 +220,10 @@ export class DemoTvProvider implements LiveTvProvider {
 
   async record(programmeId: string): Promise<void> {
     this.scheduled.add(programmeId);
+  }
+
+  async recordSeries(programmeId: string): Promise<void> {
+    this.scheduled.add(`${programmeId} (series)`);
   }
 
   async deleteRecording(id: string): Promise<void> {

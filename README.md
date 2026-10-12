@@ -9,9 +9,12 @@ controller, or a keyboard and mouse.
 - **Smart home**: Home Assistant dashboard with lights, climate, locks, covers, cameras and scenes, updating live.
 - **Home lab**: up/down and latency for your services, plus Home Assistant sensors (CPU, NAS, UPS, internet).
 - **Voice**: press the mic button and talk. TV commands ("open Netflix", "play Elden Ring", "watch channel 4") run locally; everything else ("turn off the kitchen lights") goes to Home Assistant Assist.
+- **Family**: daily screen-time limits and bedtime for kid profiles, with a "That's all for today" screen and PIN-protected bonus time. "Who's watching?" again after a long idle.
+- **Around the house**: doorbell pop-up with live camera (even over a game), alerts like "washer done" or "server down", movie-time lights that follow what's playing, TV power and inputs over HDMI-CEC.
+- **Extras**: Plex continue watching, record a whole series, wake word, a phone remote (QR pairing, typing), a photo screensaver, 24-hour charts and PIN-protected one-button actions in the Lab.
 - **Profiles**: a "Who's watching?" screen. Kid profiles get a hand-picked set of apps and games, no Smart Home/Lab/Settings, and voice only for TV commands. Parent profiles can have a PIN.
 - **Make it yours**: reorder, hide or add app tiles (any website), and pick a theme (background, colour palette and font) from a side panel that previews live as you move. Each profile keeps its own theme.
-- **Games**: your favourites from **Playnite** (Steam, Epic, Game Pass, GOG…) and **LaunchBox** (emulators), plus Steam and custom entries, in one library. It handles libraries of 20,000+ ROMs. Pick one and the PC wakes, starts it, and it streams to the TV with Moonlight. Games that need a keyboard and mouse tell you to get them ready first, and the prompt shows whether a keyboard and mouse are plugged in.
+- **Games**: details before you play (screenshot, rating, play time), **Browse** for unfavourited/uninstalled PC games or one emulated platform at a time, and a PCs panel to wake/sleep/shut down. Plus your favourites from **Playnite** (Steam, Epic, Game Pass, GOG…) and **LaunchBox** (emulators), plus Steam and custom entries, in one library. It handles libraries of 20,000+ ROMs. Pick one and the PC wakes, starts it, and it streams to the TV with Moonlight. Games that need a keyboard and mouse tell you to get them ready first, and the prompt shows whether a keyboard and mouse are plugged in.
 
 ```
  ┌──────────────── OptiPlex 5080 (Debian/Ubuntu) ─────────────────┐        ┌──── Gaming PC ────┐

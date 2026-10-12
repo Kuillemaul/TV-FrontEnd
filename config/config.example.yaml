@@ -98,8 +98,12 @@ lab:
     - { name: Plex Media Server, url: "http://192.168.1.12:32400/web", check: "http://192.168.1.12:32400/identity" }
     - { name: Home Assistant, url: "http://homeassistant.local:8123" }
     - { name: Pi-hole, url: "http://192.168.1.2/admin" }
-  # Home Assistant sensors to show as stat tiles (Proxmox, NAS, UPS, speedtest integrations…)
+  # Home Assistant sensors to show as stat tiles with a 24-hour chart (Proxmox, NAS, UPS, speedtest…)
   sensors: [sensor.pve_cpu_usage, sensor.truenas_pool_used, sensor.ups_load, sensor.speedtest_download]
+  # One-button actions on the Lab page. Parents only, and they ask for your PIN.
+  actions:
+    - { name: Restart Plex container, ha: { service: button.press, data: { entity_id: button.portainer_plex_restart } } }
+    - { name: Reboot Pi-hole, http: { url: "http://192.168.1.2:8080/hooks/reboot", method: POST } }
 
 # ---------------------------------------------------------------------------
 # Game streaming: Sunshine + Hearth agent on each PC, Moonlight on the TV
@@ -132,6 +136,56 @@ gaming:
 homeKeys:
   - { key: KEY_HOMEPAGE, holdMs: 0 }   # Home button on most remotes
   - { key: BTN_MODE, holdMs: 1000 }    # hold the Xbox/PS button for 1s
+
+# ---------------------------------------------------------------------------
+# Plex: "Continue watching" row on Home
+# ---------------------------------------------------------------------------
+plex:
+  url: http://192.168.1.12:32400
+  token: "YOUR_PLEX_TOKEN"   # https://support.plex.tv/articles/204059436
+
+# ---------------------------------------------------------------------------
+# Lights that follow the TV ("movie time"). Toggle in Settings.
+# match: app:<id>, plex, livetv, recording, game:*, app:*, *
+# ---------------------------------------------------------------------------
+scenes:
+  - name: Movie time
+    match: [plex, livetv, recording]
+    start: { service: scene.turn_on, data: { entity_id: scene.movie_time } }
+    stop: { service: scene.turn_on, data: { entity_id: scene.living_room_normal } }
+  - name: Game lights
+    match: ["game:*"]
+    start: { service: light.turn_on, data: { entity_id: light.tv_backlight, rgb_color: [120, 80, 255] } }
+
+# ---------------------------------------------------------------------------
+# Alerts: pop-ups on the TV, even over a game ("Alerts over apps" in Settings)
+# ---------------------------------------------------------------------------
+alerts:
+  doorbell: { entity: binary_sensor.front_door_ding, camera: camera.front_door, seconds: 30 }
+  labDown: true          # "Proxmox is down"
+  rules:
+    - { entity: sensor.washer_status, from: running, to: idle, title: The washer is done }
+    - { entity: sensor.dryer_status, from: running, to: idle, title: The dryer is done }
+    - { entity: binary_sensor.garage_door, to: "on", title: Garage door opened, camera: camera.garage }
+
+# ---------------------------------------------------------------------------
+# TV power & inputs over HDMI-CEC (Pulse-Eight USB-CEC adapter)
+# ---------------------------------------------------------------------------
+tv:
+  # Other HDMI devices become app tiles (and "switch to Xbox" by voice).
+  # Find physical addresses with: cec-ctl -d /dev/cec0 --show-topology
+  inputs:
+    - { id: xbox, name: Xbox, physAddr: "2.0.0.0", color: "#107c10" }
+  # commands: { on: [...], off: [...], hearth: [...], input: [...] }   # override if you don't use cec-ctl
+
+screensaver:
+  idleMinutes: 5           # 0 = off
+  pickerAfterMinutes: 30   # after this long idle, ask "Who's watching?" again
+  photosDir: /srv/photos   # jpg/png/webp slideshow; a gradient is shown if empty
+
+# Phone remote: set server.host to 0.0.0.0 above, then pair from Settings → Phone remote.
+remote:
+  keyCommand: [ydotool, key, "{key}"]   # how presses reach Plex/browser/Moonlight
 
 system:
   volumeUp: [wpctl, set-volume, -l, "1.0", "@DEFAULT_AUDIO_SINK@", 5%+]

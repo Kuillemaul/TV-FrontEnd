@@ -9,7 +9,14 @@ export type UiEvent =
   | { type: 'ha-state'; entity: unknown }
   | { type: 'ha-connection'; connected: boolean }
   /** Profiles or the active profile changed; UIs reload. */
-  | { type: 'profiles' };
+  | { type: 'profiles' }
+  | { type: 'alert'; alert: unknown }
+  /** Screen time ran out / bedtime (kid profiles). */
+  | { type: 'timesup'; reason: 'limit' | 'bedtime' }
+  | { type: 'screentime' }
+  /** A button pressed on the phone remote. */
+  | { type: 'remote'; cmd: string; text?: string }
+  | { type: 'settings' };
 
 export type GameStage = 'waking' | 'launching' | 'streaming' | 'ended' | 'error';
 

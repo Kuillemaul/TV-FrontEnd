@@ -17,7 +17,7 @@ apt-get install -y --no-install-recommends \
   pipewire pipewire-pulse wireplumber \
   intel-media-va-driver vainfo \
   fonts-inter fonts-noto-color-emoji \
-  v4l-utils dvb-tools ir-keytable inputattach \
+  v4l-utils dvb-tools ir-keytable inputattach ydotool \
   python3
 
 if ! command -v node >/dev/null || [[ "$(node -p 'process.versions.node.split(".")[0]')" -lt 20 ]]; then
@@ -76,6 +76,18 @@ polkit.addRule(function (action, subject) {
   }
 });
 RULES
+
+# Phone remote → key presses into Plex/browser/Moonlight (ydotool needs its daemon).
+cat > /etc/systemd/system/ydotoold.service <<'UNIT'
+[Unit]
+Description=ydotool daemon (Hearth phone remote)
+[Service]
+ExecStart=/usr/bin/ydotoold --socket-path=/run/ydotoold.socket --socket-perm=0666
+Restart=always
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl enable ydotoold.service
 
 systemctl daemon-reload
 echo

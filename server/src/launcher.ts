@@ -9,6 +9,8 @@ interface Running extends ForegroundSession {
   onExit?: () => void;
 }
 
+export type SessionListener = (event: 'start' | 'stop', session: ForegroundSession) => void;
+
 /**
  * Owns the single "foreground" app (Plex, a browser app, mpv, Moonlight…).
  * The Hearth shell stays running underneath; when the foreground app exits the
@@ -16,12 +18,53 @@ interface Running extends ForegroundSession {
  */
 export class Launcher {
   private current: Running | null = null;
+  private listeners = new Set<SessionListener>();
+  private overlayProc: ChildProcess | null = null;
 
   constructor(
     private readonly config: HearthConfig,
     private readonly bus: EventBus,
     private readonly log: { info: (m: string) => void; error: (m: string) => void },
   ) {}
+
+  /** Called when a foreground app starts or exits (scenes, screen time…). */
+  onSession(fn: SessionListener): void {
+    this.listeners.add(fn);
+  }
+
+  private notify(event: 'start' | 'stop', s: ForegroundSession): void {
+    for (const fn of this.listeners) {
+      try {
+        fn(event, s);
+      } catch (err) {
+        this.log.error(`session listener: ${(err as Error).message}`);
+      }
+    }
+  }
+
+  /**
+   * Show a page above whatever is on screen (doorbell, alerts) for a few seconds, without
+   * touching the foreground app. Under cage it covers the screen, then the app returns.
+   */
+  showOverlay(url: string, seconds: number): void {
+    this.closeOverlay();
+    const { argv } = this.commandFor('overlay', { type: 'web', url });
+    try {
+      const proc = spawn(argv[0], argv.slice(1), { stdio: 'ignore', detached: true });
+      proc.on('error', (err) => this.log.error(`overlay: ${err.message}`));
+      this.overlayProc = proc;
+      setTimeout(() => {
+        if (this.overlayProc === proc) this.closeOverlay();
+      }, seconds * 1000);
+    } catch (err) {
+      this.log.error(`overlay: ${(err as Error).message}`);
+    }
+  }
+
+  closeOverlay(): void {
+    if (this.overlayProc?.pid) killGroup(this.overlayProc.pid, 'SIGTERM');
+    this.overlayProc = null;
+  }
 
   get session(): ForegroundSession | null {
     if (!this.current) return null;
@@ -58,6 +101,7 @@ export class Launcher {
     const running: Running = { id, title, startedAt: Date.now(), proc, onExit };
     this.current = running;
     this.bus.emit({ type: 'session', session: this.session });
+    this.notify('start', this.session!);
 
     proc.once('exit', (code) => {
       this.log.info(`${id} exited (${code})`);
@@ -66,6 +110,7 @@ export class Launcher {
         this.bus.emit({ type: 'session', session: null });
       }
       running.onExit?.();
+      this.notify('stop', { id: running.id, title: running.title, startedAt: running.startedAt });
     });
   }
 

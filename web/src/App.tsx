@@ -1,15 +1,34 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GameLaunch, type LaunchProgress } from './components/GameLaunch';
 import { Icon } from './components/Icon';
+import { AlertStack } from './components/Alerts';
 import { AppOrderEditor } from './components/AppOrderEditor';
+import { GameDetailsModal } from './components/GameDetails';
+import { Screensaver } from './components/Screensaver';
+import { TimeLeftChip, TimesUp } from './components/ScreenTime';
 import { KbmPrompt } from './components/KbmPrompt';
 import { Avatar, ProfileEditor, ProfileMenu, ProfilePicker, saveProfile } from './components/Profiles';
 import { ThemeMenu } from './components/ThemeMenu';
 import { VoiceOverlay } from './components/VoiceOverlay';
-import { formatTime, get, post, useServerEvents, type Info, type PageId, type Profile, type ProfilesState, type UiAction } from './lib/api';
+import {
+  formatTime,
+  get,
+  post,
+  useServerEvents,
+  type Alert,
+  type Game,
+  type Info,
+  type PageId,
+  type Profile,
+  type ProfilesState,
+  type ScreenTimeStatus,
+  type TvSettings,
+  type UiAction,
+} from './lib/api';
+import { useWakeWord } from './lib/wake';
 import { applyTheme } from './lib/theme';
 import { HearthContext, type Hearth, type PlayRequest } from './lib/hearth';
-import { ensureFocus, focusFirst, installNavigation, onNavCommand } from './nav/spatial';
+import { activateFocused, dispatchNav, ensureFocus, focusFirst, installNavigation, lastInputAt, markInput, move, onNavCommand, type Dir } from './nav/spatial';
 import { GamesPage } from './pages/Games';
 import { HomePage, useNow } from './pages/Home';
 import { LiveTvPage } from './pages/LiveTv';
@@ -27,7 +46,7 @@ const TABS: Array<{ id: PageId; label: string; icon: string }> = [
 /** Pages a kid profile can reach. */
 const kidPages = (p: Profile): PageId[] => ['home', ...(p.liveTv ? (['tv'] as PageId[]) : []), 'apps', 'games'];
 
-type Overlay = null | { type: 'menu' } | { type: 'theme' } | { type: 'apps' } | { type: 'editProfile'; id: string };
+type Overlay = null | { type: 'menu' } | { type: 'theme' } | { type: 'apps' } | { type: 'editProfile'; id: string } | { type: 'game'; game: Game };
 
 interface Toast {
   id: number;
@@ -48,6 +67,11 @@ export function App() {
   const [profiles, setProfiles] = useState<ProfilesState | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [overlay, setOverlay] = useState<Overlay>(null);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [screenTime, setScreenTime] = useState<ScreenTimeStatus | null>(null);
+  const [tvSettings, setTvSettings] = useState<TvSettings | null>(null);
+  const [saver, setSaver] = useState(false);
+  const [session, setSession] = useState(false);
   const profile = profiles?.profiles.find((p) => p.id === profiles.activeId) ?? null;
   const isKid = profile?.kind === 'kid';
   const allowed: PageId[] | null = profile && isKid ? kidPages(profile) : null;
@@ -69,6 +93,47 @@ export function App() {
   useEffect(() => {
     void loadProfiles(true);
   }, [loadProfiles]);
+
+  const loadScreenTime = useCallback(() => {
+    get<{ active: ScreenTimeStatus }>('/api/screentime')
+      .then((s) => setScreenTime(s.active))
+      .catch(() => {});
+  }, []);
+  const loadSettings = useCallback(() => {
+    get<TvSettings>('/api/settings').then(setTvSettings).catch(() => {});
+  }, []);
+  useEffect(() => {
+    loadScreenTime();
+    loadSettings();
+    const t = setInterval(loadScreenTime, 60_000);
+    return () => clearInterval(t);
+  }, [loadScreenTime, loadSettings]);
+
+  // Screensaver after a few idle minutes (never over a playing app); after a long idle,
+  // waking up asks "Who's watching?" again.
+  useEffect(() => {
+    const idleMin = info?.screensaver.idleMinutes ?? 5;
+    const t = setInterval(() => {
+      const busy = session || voiceOpen || launch || overlay || pickerOpen;
+      if (!saver && !busy && idleMin > 0 && Date.now() - lastInputAt() > idleMin * 60_000) setSaver(true);
+    }, 10_000);
+    return () => clearInterval(t);
+  }, [info, session, voiceOpen, launch, overlay, pickerOpen, saver]);
+
+  const wakeFromSaver = useCallback(() => {
+    const idleFor = Date.now() - lastInputAt();
+    markInput();
+    setSaver(false);
+    const pickerAfter = (info?.screensaver.pickerAfterMinutes ?? 30) * 60_000;
+    if (pickerAfter > 0 && idleFor > pickerAfter && (profiles?.profiles.length ?? 0) > 1) setPickerOpen(true);
+    requestAnimationFrame(ensureFocus);
+  }, [info, profiles]);
+
+  useWakeWord(Boolean(tvSettings?.wakeWord && info?.features.wakeWordAvailable), voiceOpen, () => {
+    markInput();
+    setSaver(false);
+    setVoiceOpen(true);
+  });
 
   // A kid profile can't stay on a page it isn't allowed to see.
   useEffect(() => {
@@ -113,7 +178,7 @@ export function App() {
   const startGame = useCallback(
     (g: PlayRequest) => {
       setLaunch({ ...g, stage: 'starting', message: `Connecting to the PC…` });
-      void post(`/api/games/${encodeURIComponent(g.hostId)}/${encodeURIComponent(g.gameId)}/launch`);
+      void post(`/api/games/${encodeURIComponent(g.hostId)}/${encodeURIComponent(g.gameId)}/launch`, { title: g.title, art: g.art });
     },
     [],
   );
@@ -133,6 +198,7 @@ export function App() {
       editProfile: (id) => setOverlay({ type: 'editProfile', id }),
       editApps: () => setOverlay({ type: 'apps' }),
       openTheme: () => setOverlay({ type: 'theme' }),
+      openGame: (game) => setOverlay({ type: 'game', game }),
     }),
     [info, page, navigate, toast, startGame, profiles, profile, isKid],
   );
@@ -148,6 +214,10 @@ export function App() {
           return hearth.watchChannel(a.id);
         case 'launch-game':
           return hearth.playGame({ hostId: a.hostId, gameId: a.gameId, title: a.title, requiresKbm: a.requiresKbm });
+        case 'tv-power':
+          return void post(`/api/tv-control/${a.on ? 'on' : 'off'}`);
+        case 'tv-input':
+          return hearth.launchApp(a.id);
         case 'stop':
           return void post('/api/session/stop');
       }
@@ -160,13 +230,25 @@ export function App() {
       case 'toast':
         return toast(e.message, e.level);
       case 'profiles':
+        loadScreenTime();
         return void loadProfiles();
+      case 'alert':
+        // A new ring replaces an older doorbell card; keep at most three alerts on screen.
+        return setAlerts((a) => [...a.filter((x) => !(x.kind === 'doorbell' && e.alert.kind === 'doorbell')), e.alert].slice(-3));
+      case 'timesup':
+      case 'screentime':
+        return loadScreenTime();
+      case 'settings':
+        return loadSettings();
+      case 'remote':
+        return handleRemote(e.cmd, e.text);
       case 'home':
         setVoiceOpen(false);
         setKbmFor(null);
         setLaunch(null);
         return navigate('home');
       case 'session':
+        setSession(Boolean(e.session));
         if (!e.session) requestAnimationFrame(ensureFocus);
         return;
       case 'game-status':
@@ -196,6 +278,29 @@ export function App() {
   );
 
   const closeVoice = useCallback(() => setVoiceOpen(false), []);
+  const expireAlert = useCallback((id: string) => setAlerts((a) => a.filter((x) => x.id !== id)), []);
+
+  /** Phone remote buttons arrive as server events and drive the same navigation as a real remote. */
+  function handleRemote(cmd: string, text?: string) {
+    markInput();
+    if (saver) return wakeFromSaver();
+    if (['up', 'down', 'left', 'right'].includes(cmd)) return move(cmd as Dir);
+    if (cmd === 'ok') return activateFocused();
+    if (cmd === 'back' || cmd === 'voice') return dispatchNav(cmd);
+    if (cmd === 'text' && text) {
+      const el = document.activeElement;
+      if (el instanceof HTMLInputElement) {
+        // Set through the native setter so React sees the change.
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(el, el.value + text);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        return;
+      }
+      void post<{ action?: UiAction; speech: string }>('/api/voice/text', { text }).then((r) => {
+        if (r.action) runAction(r.action);
+        else if (r.speech) toast(r.speech);
+      });
+    }
+  }
 
   return (
     <HearthContext.Provider value={hearth}>
@@ -222,6 +327,7 @@ export function App() {
                 <Icon name="settings" />
               </button>
             ) : null}
+            {isKid ? <TimeLeftChip status={screenTime} /> : null}
             {profile ? (
               <button className="icon-btn avatar-btn" data-nav onClick={() => setOverlay({ type: 'menu' })} aria-label={`Profile: ${profile.name}`}>
                 <Avatar profile={profile} size="sm" />
@@ -294,7 +400,22 @@ export function App() {
           />
         ) : null}
         {overlay?.type === 'editProfile' ? <ProfileEditor profileId={overlay.id} onClose={() => setOverlay(null)} /> : null}
-        {pickerOpen ? <ProfilePicker canClose={Boolean(profile)} onDone={() => setPickerOpen(false)} /> : null}
+        {overlay?.type === 'game' ? <GameDetailsModal game={overlay.game} onClose={() => setOverlay(null)} /> : null}
+        {isKid && screenTime?.blocked ? (
+          <TimesUp reason={screenTime.blocked} onSwitch={() => setPickerOpen(true)} onClose={loadScreenTime} />
+        ) : null}
+        {pickerOpen ? (
+          <ProfilePicker
+            canClose={Boolean(profile)}
+            onDone={() => {
+              setPickerOpen(false);
+              // Whatever is now on top (home, or the time's-up screen) gets the focus.
+              setTimeout(ensureFocus, 50);
+            }}
+          />
+        ) : null}
+        <AlertStack alerts={alerts} onExpire={expireAlert} />
+        {saver ? <Screensaver clock24h={info?.clock24h ?? false} onWake={wakeFromSaver} /> : null}
       </div>
     </HearthContext.Provider>
   );

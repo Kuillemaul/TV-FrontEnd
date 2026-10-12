@@ -35,6 +35,13 @@ export function GamePicker({
     return (data?.games ?? []).filter((g) => (!q || g.title.toLowerCase().includes(q)) && (!onlyPicked || picked.has(gameKey(g))));
   }, [data, query, onlyPicked, picked]);
 
+  /** Tick every game rated at or below `max` (E < E10 < T < M). Unrated games are left alone. */
+  const addByRating = (max: 'E' | 'E10' | 'T') => {
+    const order = ['E', 'E10', 'T', 'M'];
+    const ok = (data?.games ?? []).filter((g) => g.rating && order.indexOf(g.rating) <= order.indexOf(max)).map(gameKey);
+    set([...new Set([...picked, ...ok])]);
+  };
+
   const toggle = (key: string) => {
     const next = new Set(picked);
     if (next.has(key)) next.delete(key);
@@ -58,6 +65,22 @@ export function GamePicker({
           <input data-nav value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search games" />
         </label>
       </div>
+      {local !== null ? (
+        <div className="picker-bar" data-nav-group>
+          <span className="modal-sub">Add by age rating:</span>
+          {(
+            [
+              ['E', 'Everyone'],
+              ['E10', 'E10+ and under'],
+              ['T', 'Teen and under'],
+            ] as const
+          ).map(([max, label]) => (
+            <Chip key={max} active={false} onClick={() => addByRating(max)}>
+              + {label}
+            </Chip>
+          ))}
+        </div>
+      ) : null}
       {local === null ? (
         <p className="modal-sub">This profile sees every game. Turn off “All games” to hand-pick.</p>
       ) : (

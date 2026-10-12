@@ -28,6 +28,16 @@ function emit(cmd: NavCommand): void {
   for (const fn of listeners) fn(cmd);
 }
 
+/** Trigger back/home/voice from elsewhere (e.g. the phone remote). */
+export const dispatchNav = emit;
+
+let lastInput = Date.now();
+/** Time of the last remote/keyboard/controller/mouse input (for the screensaver). */
+export const lastInputAt = () => lastInput;
+export const markInput = () => {
+  lastInput = Date.now();
+};
+
 function scopeRoot(): ParentNode {
   const scopes = document.querySelectorAll('[data-nav-scope]');
   return scopes.length ? scopes[scopes.length - 1] : document;
@@ -115,6 +125,10 @@ export function move(dir: Dir): void {
   focusElement(best);
 }
 
+export function activateFocused(): void {
+  activate();
+}
+
 function activate(): void {
   const el = document.activeElement as HTMLElement | null;
   if (el && el !== document.body) el.click();
@@ -128,6 +142,7 @@ const HOME_KEYS = new Set(['BrowserHome', 'GoHome']);
 const VOICE_KEYS = new Set(['F2', 'MicrophoneToggle', 'VoiceDial', 'LaunchAssistant']);
 
 function onKeyDown(e: KeyboardEvent): void {
+  markInput();
   const el = document.activeElement;
   const typing = el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement;
   const dir = KEY_DIRS[e.key];
@@ -196,6 +211,7 @@ function poll(now: number): void {
     for (const gp of gps) {
       const prev = pads.get(gp.index) ?? { buttons: [], dir: null, nextRepeat: 0 };
       const pressed = gp.buttons.map((b) => b.pressed);
+      if (pressed.some(Boolean) || padDir(gp)) markInput();
       const edge = (i: number) => pressed[i] && !prev.buttons[i];
 
       if (edge(Btn.A)) activate();
@@ -229,6 +245,7 @@ function startPolling(): void {
 let mouseTimer: number | undefined;
 
 function onMouseMove(): void {
+  markInput();
   document.body.classList.add('mouse-active');
   clearTimeout(mouseTimer);
   mouseTimer = window.setTimeout(() => document.body.classList.remove('mouse-active'), 3000);

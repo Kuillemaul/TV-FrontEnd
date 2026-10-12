@@ -23,7 +23,19 @@ export interface Profile {
   games: string[] | null;
   liveTv: boolean;
   theme: Theme;
+  /** Screen-time rules (kid profiles). */
+  limits?: Limits;
 }
+
+export interface Limits {
+  /** Minutes of watching/playing allowed per day; null = unlimited. */
+  dailyMinutes: number | null;
+  /** "HH:MM" after which nothing can be started, until wakeTime. */
+  bedtime: string | null;
+  wakeTime: string | null;
+}
+
+export const NO_LIMITS: Limits = { dailyMinutes: null, bedtime: null, wakeTime: null };
 
 export type PublicProfile = Omit<Profile, 'pinHash'> & { hasPin: boolean };
 
@@ -138,6 +150,7 @@ export class ProfileStore {
     if (patch.apps !== undefined) p.apps = patch.apps;
     if (patch.games !== undefined) p.games = patch.games;
     if (patch.liveTv !== undefined) p.liveTv = patch.liveTv;
+    if (patch.limits !== undefined) p.limits = { ...NO_LIMITS, ...p.limits, ...patch.limits };
     if (patch.theme) p.theme = { ...p.theme, ...patch.theme };
     if (patch.pin !== undefined) {
       if (patch.pin === null || patch.pin === '') delete p.pinHash;
@@ -146,6 +159,12 @@ export class ProfileStore {
     }
     this.save();
     return p;
+  }
+
+  /** True if the profile has no PIN or the PIN matches (used to confirm sensitive actions). */
+  checkPin(id: string, pin?: string): boolean {
+    const p = this.get(id);
+    return !p.pinHash || hash(pin ?? '') === p.pinHash;
   }
 
   remove(id: string): void {

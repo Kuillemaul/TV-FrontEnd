@@ -8,6 +8,65 @@ export interface Info {
   demo: { tv: boolean; homeassistant: boolean; games: boolean };
   session: Session | null;
   configPath: string;
+  features: { plex: boolean; tvInputs: number; wakeWordAvailable: boolean; labActions: number };
+  screensaver: { idleMinutes: number; pickerAfterMinutes: number };
+}
+
+export interface Limits {
+  dailyMinutes: number | null;
+  bedtime: string | null;
+  wakeTime: string | null;
+}
+
+export interface ScreenTimeStatus {
+  profileId: string;
+  usedMinutes: number;
+  limitMinutes: number | null;
+  remainingMinutes: number | null;
+  bedtime: string | null;
+  wakeTime: string | null;
+  blocked: 'limit' | 'bedtime' | null;
+}
+
+export interface Alert {
+  id: string;
+  kind: 'doorbell' | 'info' | 'warning';
+  title: string;
+  message?: string;
+  camera?: string;
+  seconds: number;
+  at: number;
+}
+
+export interface TvSettings {
+  scenes: boolean;
+  wakeWord: boolean;
+  alertsOverApps: boolean;
+}
+
+export interface OnDeckItem {
+  id: string;
+  title: string;
+  subtitle: string;
+  thumb?: string;
+  progress: number;
+}
+
+export interface BrowseSource {
+  hostId: string;
+  hostName: string;
+  online: boolean;
+  pc: number;
+  platforms: Array<{ name: string; count: number }>;
+}
+
+export interface GameDetails extends Game {
+  description: string;
+  year: number | null;
+  genres: string[];
+  libraryPlaytimeMinutes: number | null;
+  hearthPlaytimeMinutes: number;
+  screenshots: string[];
 }
 
 export interface Session {
@@ -43,6 +102,7 @@ export interface Profile {
   games: string[] | null;
   liveTv: boolean;
   theme: ThemeChoice;
+  limits?: Limits;
 }
 
 export interface ProfilesState {
@@ -100,6 +160,9 @@ export interface Game {
   art?: string;
   controller: 'full' | 'partial' | 'none' | 'unknown';
   requiresKbm: boolean;
+  rating: 'E' | 'E10' | 'T' | 'M' | null;
+  favorite: boolean;
+  installed: boolean;
 }
 
 export interface GameHost {
@@ -108,6 +171,9 @@ export interface GameHost {
   online: boolean;
   canWake: boolean;
   games: number;
+  uptime: number | null;
+  playing: string | null;
+  wakeEstimate: number | null;
 }
 
 export interface RecentGame {
@@ -164,6 +230,8 @@ export type UiAction =
   | { type: 'launch-app'; id: string; name: string }
   | { type: 'launch-game'; hostId: string; gameId: string; title: string; requiresKbm: boolean }
   | { type: 'watch-channel'; id: string; name: string }
+  | { type: 'tv-power'; on: boolean }
+  | { type: 'tv-input'; id: string; name: string }
   | { type: 'stop' };
 
 export type ServerEvent =
@@ -173,7 +241,12 @@ export type ServerEvent =
   | { type: 'game-status'; hostId: string; gameId: string; stage: 'waking' | 'launching' | 'streaming' | 'ended' | 'error'; message: string }
   | { type: 'ha-state'; entity: HaEntity }
   | { type: 'ha-connection'; connected: boolean }
-  | { type: 'profiles' };
+  | { type: 'profiles' }
+  | { type: 'alert'; alert: Alert }
+  | { type: 'timesup'; reason: 'limit' | 'bedtime' }
+  | { type: 'screentime' }
+  | { type: 'remote'; cmd: string; text?: string }
+  | { type: 'settings' };
 
 export async function get<T>(path: string): Promise<T> {
   const res = await fetch(path);
@@ -250,4 +323,11 @@ export function useServerEvents(fn: Listener): void {
 
 export function formatTime(ms: number, h24: boolean): string {
   return new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: !h24 });
+}
+
+export function formatMinutes(min: number): string {
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m ? `${h} h ${m} min` : `${h} h`;
 }
