@@ -5,3 +5,4 @@ pc-agent/agent.json
 pc-agent/cache/
 *.log
 .DS_Store
+__pycache__/
