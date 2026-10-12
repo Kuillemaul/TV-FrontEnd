@@ -238,7 +238,7 @@ export function registerExtras(app: FastifyInstance, ctx: ExtrasContext): void {
 
   app.get<{ Params: { hostId: string; gameId: string; n: string } }>('/api/games/:hostId/shot/:gameId/:n', async (req, reply) => {
     try {
-      return await relay(reply, await games.shot(req.params.hostId, req.params.gameId, Number(req.params.n)), 'public, max-age=604800');
+      return await relay(reply, await games.shot(req.params.hostId, req.params.gameId, Number(req.params.n)), 'public, max-age=86400');
     } catch {
       return reply.code(404).send();
     }

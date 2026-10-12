@@ -319,7 +319,8 @@ app.post<{ Params: { hostId: string; gameId: string }; Body: { title?: string; a
 app.get<{ Params: { hostId: string; gameId: string } }>('/api/games/:hostId/art/:gameId', async (req, reply) => {
   try {
     const res = await games.art(req.params.hostId, req.params.gameId);
-    reply.header('Cache-Control', 'public, max-age=604800').type(res.headers.get('content-type') ?? 'image/jpeg');
+    // A day, so a cover changed in Playnite/LaunchBox shows up on the TV by tomorrow at the latest.
+    reply.header('Cache-Control', 'public, max-age=86400').type(res.headers.get('content-type') ?? 'image/jpeg');
     return reply.code(res.status).send(Buffer.from(await res.arrayBuffer()));
   } catch {
     return reply.code(404).send();

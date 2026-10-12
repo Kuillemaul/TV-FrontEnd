@@ -322,6 +322,7 @@ class LaunchBoxSource:
         self.cache_key: tuple[float, ...] | None = None
         self.cache: dict[str, dict[str, Any]] = {}
         self.art_index: dict[tuple[str, str], dict[str, list[Path]]] = {}
+        self.art_index_at: dict[tuple[str, str], float] = {}
         self.counts: dict[str, int] = {}
         self.id_platform: dict[str, Path] = {}
         self.browse_cache: tuple[Any, list[dict[str, Any]]] | None = None
@@ -485,7 +486,9 @@ class LaunchBoxSource:
 
     def _image_index(self, platform: str, folder: str) -> dict[str, list[Path]]:
         key = (platform, folder)
-        if key not in self.art_index:
+        # Rebuilt every 10 minutes so new or changed images in LaunchBox show up without a restart.
+        if key not in self.art_index or time.time() - self.art_index_at.get(key, 0) > 600:
+            self.art_index_at[key] = time.time()
             index: dict[str, list[Path]] = {}
             root = self.root / "Images" / platform / folder
             if root.is_dir():
@@ -973,7 +976,7 @@ def make_handler(cfg: dict[str, Any], library: Library, launcher: Launcher):
             self.send_response(200)
             self.send_header("Content-Type", mimetypes.guess_type(path)[0] or "image/jpeg")
             self.send_header("Content-Length", str(len(data)))
-            self.send_header("Cache-Control", "max-age=604800")
+            self.send_header("Cache-Control", "max-age=3600")
             self.end_headers()
             self.wfile.write(data)
 
