@@ -248,7 +248,7 @@ function defaults(): HearthConfig {
       inputs: [],
     },
     screensaver: { idleMinutes: 5, pickerAfterMinutes: 30 },
-    remote: { keyCommand: ['ydotool', 'key', '{key}'] },
+    remote: { keyCommand: ['ydotool', 'key', '{code}:1', '{code}:0'] },
     gaming: { moonlight: ['flatpak', 'run', 'com.moonlight_stream.Moonlight', 'stream', '{host}', '{app}'], hosts: [], kbmOverrides: {} },
     homeKeys: [
       { key: 'KEY_HOMEPAGE', holdMs: 0 },

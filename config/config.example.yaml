@@ -190,7 +190,7 @@ screensaver:
 
 # Phone remote: set server.host to 0.0.0.0 above, then pair from Settings → Phone remote.
 remote:
-  keyCommand: [ydotool, key, "{key}"]   # how presses reach Plex/browser/Moonlight
+  keyCommand: [ydotool, key, "{code}:1", "{code}:0"]   # how presses reach Plex/browser/Moonlight ({key} = KEY_ENTER style name)
 
 system:
   volumeUp: [wpctl, set-volume, -l, "1.0", "@DEFAULT_AUDIO_SINK@", 5%+]

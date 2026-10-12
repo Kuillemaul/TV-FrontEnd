@@ -17,8 +17,20 @@ apt-get install -y --no-install-recommends \
   pipewire pipewire-pulse wireplumber \
   intel-media-va-driver vainfo \
   fonts-inter fonts-noto-color-emoji \
-  v4l-utils dvb-tools ir-keytable inputattach ydotool \
+  v4l-utils dvb-tools ir-keytable inputattach \
   python3
+
+# ydotool (phone remote key presses) isn't packaged in Debian 13, so build 1.x from source.
+if [[ ! -x /usr/local/bin/ydotoold ]]; then
+  echo "==> ydotool (from source)"
+  apt-get install -y --no-install-recommends git cmake build-essential
+  tmp=$(mktemp -d)
+  git clone --depth 1 --branch v1.0.4 https://github.com/ReimuNotMoe/ydotool.git "$tmp/ydotool"
+  cmake -S "$tmp/ydotool" -B "$tmp/build"
+  cmake --build "$tmp/build" -j"$(nproc)" --target ydotool ydotoold
+  install -m 755 "$tmp/build/ydotool" "$tmp/build/ydotoold" /usr/local/bin/
+  rm -rf "$tmp"
+fi
 
 if ! command -v node >/dev/null || [[ "$(node -p 'process.versions.node.split(".")[0]')" -lt 20 ]]; then
   echo "==> Node.js 22"
@@ -82,14 +94,13 @@ cat > /etc/systemd/system/ydotoold.service <<'UNIT'
 [Unit]
 Description=ydotool daemon (Hearth phone remote)
 [Service]
-ExecStart=/usr/bin/ydotoold --socket-path=/run/ydotoold.socket --socket-perm=0666
+ExecStart=/usr/local/bin/ydotoold --socket-path=/run/ydotoold.socket --socket-perm=0666
 Restart=always
 [Install]
 WantedBy=multi-user.target
 UNIT
-systemctl enable ydotoold.service
-
 systemctl daemon-reload
+systemctl enable --now ydotoold.service
 echo
 echo "Done. Next:"
 echo "  1. Edit /opt/hearth/config/config.yaml (Home Assistant token, Tvheadend, gaming PCs)"

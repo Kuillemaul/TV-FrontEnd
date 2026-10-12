@@ -315,7 +315,7 @@ export function registerExtras(app: FastifyInstance, ctx: ExtrasContext): void {
       // While Plex/a browser/Moonlight has the screen, inject real key presses into it.
       const key = REMOTE_KEYS[cmd];
       if (launcher.session && key) {
-        await launcher.run(expand(config.remote.keyCommand, { key }));
+        await launcher.run(expand(config.remote.keyCommand, key));
         return;
       }
       bus.emit({ type: 'remote', cmd, text });

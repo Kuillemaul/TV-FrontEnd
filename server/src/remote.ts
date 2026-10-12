@@ -17,15 +17,15 @@ export type RemoteCommand =
   | 'mute'
   | 'text';
 
-/** Linux key names for injecting remote presses into other apps (via ydotool). */
-export const REMOTE_KEYS: Partial<Record<RemoteCommand, string>> = {
-  up: 'KEY_UP',
-  down: 'KEY_DOWN',
-  left: 'KEY_LEFT',
-  right: 'KEY_RIGHT',
-  ok: 'KEY_ENTER',
-  back: 'KEY_ESC',
-  playpause: 'KEY_SPACE',
+/** Linux key names and codes (input-event-codes.h) for injecting remote presses into other apps (via ydotool). */
+export const REMOTE_KEYS: Partial<Record<RemoteCommand, { key: string; code: number }>> = {
+  up: { key: 'KEY_UP', code: 103 },
+  down: { key: 'KEY_DOWN', code: 108 },
+  left: { key: 'KEY_LEFT', code: 105 },
+  right: { key: 'KEY_RIGHT', code: 106 },
+  ok: { key: 'KEY_ENTER', code: 28 },
+  back: { key: 'KEY_ESC', code: 1 },
+  playpause: { key: 'KEY_SPACE', code: 57 },
 };
 
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
