@@ -59,6 +59,10 @@ The installer:
 - adds the Hearth boot splash (Plymouth), hides the boot menu and kernel text, and starts Chrome and the server
   side by side so the TV is ready sooner. Hold **Shift** or tap **Esc** while it boots to get the boot menu back.
 
+**Plex "Continue watching"** on Home opens Plex HTPC and tells it to play from where you stopped (like casting from
+the Plex phone app). In Plex HTPC's settings, keep **Advertise as player** on. If it isn't found, Plex HTPC still
+opens and the show is first in its own Continue Watching row.
+
 Edit `/opt/hearth/config/config.yaml`, then reboot. Logs: `journalctl --user -u hearth -f` (as `tv`).
 
 **Updating:** `cd /opt/hearth && git pull && npm ci && npm run build && systemctl --user restart hearth`.
@@ -416,6 +420,9 @@ and weather fades in. Any button wakes it. If it's been idle longer than `picker
   OK→Enter, Back→Escape, Home→`Homepage` (KEY_HOMEPAGE), Mic→F2, CH±→PgUp/PgDn.
 - **Game controllers** (Xbox, PlayStation, 8BitDo) work over USB or Bluetooth: D-pad/stick to move, A to select,
   B for back, Y for voice. Hold the Xbox/PS button for one second to return to Hearth from any app.
+  In Plex, YouTube, Netflix and the other apps, Hearth turns the controller into a keyboard: D-pad/left stick → arrows,
+  A → Enter, B or View → Back (Esc), X/Y → play/pause (Space). Moonlight is left alone (it uses the controller
+  directly). Turn it off for an app that handles controllers itself with `controllerKeys: false` on its tile.
 - **HDMI-CEC (the TV's own remote over HDMI):** the OptiPlex's Intel graphics can't do CEC. Add a
   **Pulse-Eight USB-CEC adapter**, then:
   ```bash

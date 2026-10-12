@@ -13,6 +13,7 @@ export interface OnDeckItem {
 /** Plex "On Deck" (continue watching) from your Plex Media Server. */
 export class PlexClient {
   private machineId?: string;
+  private commandId = 0;
 
   constructor(private readonly cfg: { url: string; token: string; webUrl?: string }) {}
 
@@ -45,11 +46,59 @@ export class PlexClient {
     return fetch(`${this.cfg.url}/photo/:/transcode?${q}`);
   }
 
-  /** Plex Web link straight to an item (opened full screen in the kiosk browser). */
-  async itemUrl(id: string): Promise<string> {
+  private async serverId(): Promise<string> {
     if (!this.machineId) this.machineId = (await this.api('/identity')).MediaContainer.machineIdentifier;
+    return this.machineId!;
+  }
+
+  /** Plex Web link straight to an item (used when the Plex tile is a web app). */
+  async itemUrl(id: string): Promise<string> {
     const base = this.cfg.webUrl ?? `${this.cfg.url}/web/index.html`;
-    return `${base}#!/server/${this.machineId}/details?key=${encodeURIComponent(`/library/metadata/${id}`)}`;
+    return `${base}#!/server/${await this.serverId()}/details?key=${encodeURIComponent(`/library/metadata/${id}`)}`;
+  }
+
+  /**
+   * Tell the Plex HTPC app on this TV to play an item from where you left off, the same way the
+   * Plex phone app casts to it. Waits for the app to start and show up as a player on the server.
+   */
+  async playOnPlayer(id: string, isThisTv: (address: string) => boolean, timeoutMs = 30_000): Promise<string> {
+    const [serverId, meta] = await Promise.all([this.serverId(), this.api(`/library/metadata/${id}`)]);
+    const item = meta.MediaContainer?.Metadata?.[0];
+    if (!item) throw new Error('That item is no longer on the Plex server');
+    const deadline = Date.now() + timeoutMs;
+    let player: any;
+    while (!player && Date.now() < deadline) {
+      const clients: any[] = (await this.api('/clients').catch(() => null))?.MediaContainer?.Server ?? [];
+      const players = clients.filter((c) => /htpc|plex for linux|media player/i.test(`${c.product} ${c.name}`) || /playback/.test(c.protocolCapabilities ?? ''));
+      player = players.find((c) => isThisTv(c.address ?? c.host)) ?? (players.length === 1 ? players[0] : undefined);
+      if (!player) await new Promise((r) => setTimeout(r, 1000));
+    }
+    if (!player) throw new Error('Plex HTPC didn’t show up as a player (turn on “Advertise as player” in its settings)');
+
+    const server = new URL(this.cfg.url);
+    const q = new URLSearchParams({
+      key: `/library/metadata/${id}`,
+      offset: String(item.viewOffset ?? 0),
+      machineIdentifier: serverId,
+      address: server.hostname,
+      port: server.port || (server.protocol === 'https:' ? '443' : '80'),
+      protocol: server.protocol.replace(':', ''),
+      token: this.cfg.token,
+      type: 'video',
+      commandID: String(++this.commandId),
+    });
+    const res = await fetch(`http://${player.address ?? player.host}:${player.port}/player/playback/playMedia?${q}`, {
+      headers: {
+        'X-Plex-Client-Identifier': 'hearth-tv',
+        'X-Plex-Target-Client-Identifier': player.machineIdentifier,
+        'X-Plex-Token': this.cfg.token,
+        'X-Plex-Product': 'Hearth',
+        'X-Plex-Device-Name': 'Hearth',
+      },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) throw new Error(`Plex HTPC refused to play it (HTTP ${res.status})`);
+    return String(item.grandparentTitle ?? item.title);
   }
 }
 

@@ -17,6 +17,8 @@ export interface AppTile {
   /** Optional logo image (URL or path served by the UI). */
   logo?: string;
   launch: LaunchSpec;
+  /** Translate controller buttons into arrow/Enter/Esc key presses for this app (default on, off for Moonlight). */
+  controllerKeys?: boolean;
 }
 
 export interface TvheadendConfig {

@@ -106,6 +106,8 @@ export function gamepads(devices = readDevices()): string[] {
 
 /** Names of the first connected keyboard and mouse, and all controllers. */
 export function kbmStatus(devices = readDevices()): KbmStatus {
+  // ydotool's virtual keyboard/mouse (phone remote, controller keys) is always there; it isn't yours.
+  devices = devices.filter((d) => !/ydotool/i.test(d.name));
   return {
     keyboard: devices.find(isKeyboard)?.name ?? null,
     mouse: devices.find(isMouse)?.name ?? null,

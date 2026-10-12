@@ -164,6 +164,15 @@ export function registerExtras(app: FastifyInstance, ctx: ExtrasContext): void {
       if (!plex) throw new Error('Demo mode: add your Plex server under "plex" in config.yaml');
       const plexTile = ProfileStore.orderApps(profiles.active, config.apps).find((a) => a.id === 'plex');
       if (isKid() && !plexTile) throw new PermissionError('Plex isn’t on this profile');
+      // Plex HTPC (or any app tile) can't be deep-linked: open it, then ask it to play the item.
+      if (plexTile && plexTile.launch.type === 'command') {
+        await launcher.launch('app:plex', plexTile.name, plexTile.launch);
+        const here = new Set(['127.0.0.1', '::1', 'localhost', lanAddress()]);
+        plex
+          .playOnPlayer(req.params.id, (address) => here.has(address))
+          .catch((err) => app.log.warn(`plex: ${(err as Error).message}. Pick it from Continue Watching in Plex instead.`));
+        return;
+      }
       await launcher.launch('app:plex', 'Plex', { type: 'web', url: await plex.itemUrl(req.params.id) });
     }),
   );

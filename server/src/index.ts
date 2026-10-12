@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { EventBus } from './bus.js';
 import { expand, loadConfig, resolveConfigPath, type AppTile } from './config.js';
 import { HotkeyWatcher, kbmStatus } from './input.js';
+import { ControllerKeys, KEY_NAMES, wantsControllerKeys } from './padkeys.js';
 import type { IntentCatalog } from './intents.js';
 import { Launcher } from './launcher.js';
 import { DemoHome } from './providers/demohome.js';
@@ -71,6 +72,16 @@ async function callService(service: string, data: Record<string, unknown> = {}):
 
 const scenes = new SceneAutomation(config.scenes, (c) => callService(c.service, c.data), () => state.settings.scenes, log);
 launcher.onSession((event, s) => scenes.handle(event, s));
+
+// Controllers type arrow/Enter/Esc keys into keyboard-only apps (Plex HTPC, YouTube TV…).
+const padKeys = new ControllerKeys((code) => {
+  launcher.run(expand(config.remote.keyCommand, { code, key: KEY_NAMES[code] ?? '' })).catch((err) => log.warn(`controller keys: ${(err as Error).message}`));
+}, log);
+launcher.onSession((event, s) => {
+  const tile = event === 'start' ? config.apps.find((a) => `app:${a.id}` === s.id) : undefined;
+  if (tile && wantsControllerKeys(tile)) padKeys.start();
+  else padKeys.stop();
+});
 
 const alerts = new AlertService(config.alerts, (alert: Alert) => {
   bus.emit({ type: 'alert', alert });

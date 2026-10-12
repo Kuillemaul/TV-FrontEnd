@@ -39,6 +39,7 @@ apps:
     name: Jellyfin
     color: "#7a3fd1"
     launch: { type: command, command: [flatpak, run, com.github.iwalton3.jellyfin-media-player, --tv, --fullscreen] }
+    controllerKeys: false   # Jellyfin Media Player reads controllers itself (others get controller → arrow keys)
 
 # Browser used for type: web apps. {url} and {profile} are filled in.
 # google-chrome-stable includes Widevine, which Netflix/Disney+/Prime need.
