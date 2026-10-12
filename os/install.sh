@@ -13,7 +13,7 @@ TV_USER=tv
 echo "==> Packages"
 apt-get update
 apt-get install -y --no-install-recommends \
-  cage xwayland mpv curl ca-certificates gnupg flatpak \
+  sudo cage xwayland mpv curl ca-certificates gnupg flatpak \
   pipewire pipewire-pulse wireplumber \
   intel-media-va-driver vainfo \
   fonts-inter fonts-noto-color-emoji \

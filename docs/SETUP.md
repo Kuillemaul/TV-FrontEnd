@@ -29,6 +29,16 @@ port. Use a **DP→HDMI 2.0 active** adapter or cable for 4K60 HDR. 8 GB of RAM 
 "Debian desktop environment" and "GNOME". Keep "SSH server". Create any admin user you like; the installer creates
 a separate `tv` user that the TV runs as.
 
+If you set a root password in the installer, Debian leaves `sudo` out. Add it once (use the **root** password, and
+the dash in `su -`), then log out and back in:
+
+```bash
+su -
+apt update && apt install -y sudo git
+usermod -aG sudo YOURUSERNAME
+exit
+```
+
 ```bash
 sudo apt install git
 git clone https://github.com/Kuillemaul/TV-FrontEnd.git ~/hearth
