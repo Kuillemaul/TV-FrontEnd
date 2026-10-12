@@ -5,8 +5,12 @@
   "playnite": {
     "enabled": true,
     "exportPath": "",
-    "kbmTags": ["Hearth: KBM"],
-    "controllerTags": ["Hearth: Controller"]
+    "kbmTags": [
+      "Hearth: KBM"
+    ],
+    "controllerTags": [
+      "Hearth: Controller"
+    ]
   },
   "launchbox": {
     "path": "",
@@ -25,5 +29,10 @@
   },
   "kbm": {},
   "games": [],
-  "emulators": []
+  "emulators": [],
+  "loadingCover": {
+    "enabled": true,
+    "revealSeconds": 2,
+    "timeoutSeconds": 90
+  }
 }

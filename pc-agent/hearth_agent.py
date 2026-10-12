@@ -938,6 +938,130 @@ def kill_processes_under(directory: str) -> None:
             pass
 
 
+# --------------------------------------------------------------------------------------
+# Loading cover: hides the desktop on the stream while a game starts
+# --------------------------------------------------------------------------------------
+
+
+def visible_window_pids(min_w: int = 640, min_h: int = 360) -> set[int]:
+    """PIDs owning a visible, reasonably large top-level window (Windows only)."""
+    if not IS_WINDOWS:
+        return set()
+    import ctypes
+    from ctypes import wintypes
+
+    user32 = ctypes.windll.user32  # type: ignore[attr-defined]
+    pids: set[int] = set()
+
+    @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    def each(hwnd, _):  # noqa: ANN001
+        if not user32.IsWindowVisible(hwnd) or user32.IsIconic(hwnd):
+            return True
+        rect = wintypes.RECT()
+        user32.GetWindowRect(hwnd, ctypes.byref(rect))
+        if rect.right - rect.left >= min_w and rect.bottom - rect.top >= min_h:
+            pid = wintypes.DWORD()
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            pids.add(int(pid.value))
+        return True
+
+    user32.EnumWindows(each, 0)
+    return pids
+
+
+def show_cover(title: str, art: str | None = None) -> None:
+    """
+    Run as `hearth_agent.py --cover TITLE [ART]`: a full-screen "loading" window in Hearth's style.
+    It stays on top but never takes focus or clicks, so the game starting underneath gets focus
+    as usual. The agent closes it once the game's window is up.
+    """
+    import tkinter as tk
+
+    root = tk.Tk()
+    root.overrideredirect(True)
+    root.configure(bg="#07090e", cursor="none")
+    w, h = root.winfo_screenwidth(), root.winfo_screenheight()
+    root.geometry(f"{w}x{h}+0+0")
+    root.attributes("-topmost", True)
+    root.attributes("-alpha", 0.995)  # layered window, needed for click-through below
+    scale = h / 1080
+    frame = tk.Frame(root, bg="#07090e")
+    frame.place(relx=0.5, rely=0.5, anchor="center")
+    if art and art.lower().endswith((".png", ".gif")) and Path(art).is_file():
+        try:
+            img = tk.PhotoImage(file=art)
+            factor = max(1, round(img.height() / (420 * scale)))
+            img = img.subsample(factor, factor)
+            tk.Label(frame, image=img, bg="#07090e").pack(pady=(0, int(30 * scale)))
+            root._art = img  # type: ignore[attr-defined]  # keep a reference
+        except tk.TclError:
+            pass
+    tk.Label(frame, text=title, fg="#f2f4f8", bg="#07090e", font=("Segoe UI Semibold", int(54 * scale))).pack()
+    status = tk.Label(frame, text="Starting", fg="#8c93a8", bg="#07090e", font=("Segoe UI", int(24 * scale)))
+    status.pack(pady=(int(14 * scale), 0))
+    dots = [0]
+
+    def tick() -> None:
+        dots[0] = (dots[0] + 1) % 4
+        status.configure(text="Starting" + "." * dots[0])
+        root.after(450, tick)
+
+    tick()
+    if IS_WINDOWS:
+        import ctypes
+
+        root.update_idletasks()
+        user32 = ctypes.windll.user32  # type: ignore[attr-defined]
+        hwnd = user32.GetParent(root.winfo_id()) or root.winfo_id()
+        GWL_EXSTYLE, WS_EX_TRANSPARENT, WS_EX_TOOLWINDOW, WS_EX_NOACTIVATE, WS_EX_LAYERED = -20, 0x20, 0x80, 0x08000000, 0x80000
+        style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+        user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED)
+    root.after(int(float(os.environ.get("HEARTH_COVER_MAX", "120")) * 1000), root.destroy)  # never stay up forever
+    root.mainloop()
+
+
+class LoadingCover:
+    """The --cover window for one launch, and the watcher that takes it down."""
+
+    def __init__(self, cfg: dict[str, Any]) -> None:
+        c = cfg.get("loadingCover", {})
+        self.enabled = bool(c.get("enabled", True)) and IS_WINDOWS
+        self.timeout = float(c.get("timeoutSeconds", 90))
+        self.reveal = float(c.get("revealSeconds", 2))
+        self.proc: subprocess.Popen[bytes] | None = None
+
+    def show(self, entry: dict[str, Any], game_pids) -> None:  # noqa: ANN001 - callable returning set[int]
+        self.close()
+        if not self.enabled:
+            return
+        art = entry.get("_artPath") or ""
+        exe = sys.executable.replace("python.exe", "pythonw.exe")
+        try:
+            self.proc = subprocess.Popen([exe, str(Path(__file__).resolve()), "--cover", entry["title"], art])
+        except OSError as err:
+            log(f"loading cover: {err}")
+            return
+        proc = self.proc
+
+        def watch() -> None:
+            deadline = time.time() + self.timeout
+            while time.time() < deadline and self.proc is proc and proc.poll() is None:
+                time.sleep(0.5)
+                pids = game_pids()
+                if pids and pids & visible_window_pids():
+                    time.sleep(self.reveal)  # let the game draw its first frames
+                    break
+            if self.proc is proc:
+                self.close()
+
+        threading.Thread(target=watch, daemon=True).start()
+
+    def close(self) -> None:
+        proc, self.proc = self.proc, None
+        if proc and proc.poll() is None:
+            proc.terminate()
+
+
 class Launcher:
     #: A started process that exits this quickly was a launcher stub (explorer.exe shell:…,
     #: a game's own launcher), not the game itself, so its exit doesn't mean "game over".
@@ -1026,6 +1150,15 @@ class Launcher:
             return None
         self.misses += 1
         return False if self.misses >= 2 else True
+
+    def game_pids(self) -> set[int]:
+        """Processes that belong to the running game: the one we started, and anything in its folder."""
+        pids: set[int] = set()
+        if self.proc is not None and self.proc.poll() is None:
+            pids.add(self.proc.pid)
+        if self.current and self.current.get("_processDir"):
+            pids.update(processes_under(self.current["_processDir"]))
+        return pids
 
     def stop(self) -> None:
         self.generation += 1
@@ -1262,6 +1395,7 @@ def power(action: str) -> None:
 
 
 def make_handler(cfg: dict[str, Any], library: Library, launcher: Launcher):
+    cover = LoadingCover(cfg)
     token = cfg["token"]
 
     class Handler(BaseHTTPRequestHandler):
@@ -1363,6 +1497,8 @@ def make_handler(cfg: dict[str, Any], library: Library, launcher: Launcher):
                         if launcher.generation != generation:
                             log("stream ended while waiting; not starting the game")
                             return self._json(409, {"error": "The stream ended before the game started"})
+                    if body.get("cover"):
+                        cover.show(entry, launcher.game_pids)
                     launcher.launch(entry)
                     return self._json(200, {"ok": True})
                 if self.path == "/power":
@@ -1372,6 +1508,7 @@ def make_handler(cfg: dict[str, Any], library: Library, launcher: Launcher):
                     power(action)
                     return self._json(200, {"ok": True})
                 if self.path == "/stop":
+                    cover.close()
                     launcher.stop()
                     # Ending the app in Apollo removes its virtual display, so the real monitors come back.
                     closed = apollo_close(cfg.get("apollo") or {}) if self._body().get("endSession") else False
@@ -1448,7 +1585,11 @@ def main() -> None:
     parser.add_argument("--check", metavar="TITLE", help="look a game up on the Steam store now and show the keyboard/mouse decision")
     parser.add_argument("--displays", action="store_true", help="list active displays (run while streaming to see Apollo's virtual display)")
     parser.add_argument("--upgrade-config", action="store_true", help="create/repair agent.json and add new settings (used by the installer)")
+    parser.add_argument("--cover", nargs="+", metavar=("TITLE", "ART"), help=argparse.SUPPRESS)  # the loading window
     args = parser.parse_args()
+    if args.cover:
+        show_cover(args.cover[0], args.cover[1] if len(args.cover) > 1 else None)
+        return
     if args.upgrade_config:
         ok, notes = upgrade_config(Path(args.config), Path(__file__).with_name("agent.example.json"))
         print("\n".join(notes))

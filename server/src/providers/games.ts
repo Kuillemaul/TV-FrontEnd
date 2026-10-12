@@ -468,10 +468,14 @@ export class GameService {
    * the app over the paired connection; the agent also asks Apollo directly when it has the login.
    */
   private async endSession(h: GameHostConfig): Promise<void> {
+    let ended = false;
     if (h.quitOnExit || h.endSessionOnExit) {
-      await this.agent(h, '/stop', { method: 'POST', body: JSON.stringify({ endSession: h.endSessionOnExit }) }).catch(() => undefined);
+      const res = await this.agent(h, '/stop', { method: 'POST', body: JSON.stringify({ endSession: h.endSessionOnExit }) }).catch(() => null);
+      ended = Boolean(res?.ok && ((await res.json().catch(() => ({}))) as { sessionEnded?: boolean }).sessionEnded);
     }
-    if (h.endSessionOnExit) {
+    // Moonlight's quit pops up its own "quitting" window on the TV, so it's only the fallback for
+    // when the agent couldn't end the session itself (no Apollo login in agent.json).
+    if (h.endSessionOnExit && !ended) {
       await this.launcher.run([...this.moonlightBase(), 'quit', h.moonlightHost]).catch(() => undefined);
     }
   }
@@ -569,7 +573,8 @@ export class GameService {
           h,
           '/launch',
           // players: how many controllers are on the TV, so the agent can set up emulators (Eden…) for them.
-          { method: 'POST', body: JSON.stringify({ id: gameId, waitForDisplay, players: meta.players }) },
+          // cover: the PC shows a loading screen (on the stream) until the game's window appears.
+          { method: 'POST', body: JSON.stringify({ id: gameId, waitForDisplay, players: meta.players, cover: h.loadingScreen }) },
           waitForDisplay ? 75_000 : 30_000,
         );
         if (!res.ok) throw new Error(`${h.name} could not start ${title}: ${await res.text()}`);

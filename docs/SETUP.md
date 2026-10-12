@@ -59,11 +59,14 @@ The installer:
 - adds the Hearth boot splash (Plymouth), hides the boot menu and kernel text, and starts Chrome and the server
   side by side so the TV is ready sooner. Hold **Shift** or tap **Esc** while it boots to get the boot menu back.
 
-**Starting and leaving a game:** while a game loads, the TV shows its artwork instead of the PC's desktop, until the
-agent sees the game running (plus `revealSeconds`; Back shows the stream right away). When the stream ends (you
+**Starting and leaving a game:** while a game loads, the PC itself shows a full-screen "Starting…" cover (so the
+stream never shows the desktop) until the game's window appears; it never takes focus from the game. Tune it in
+`agent.json` under `loadingCover` (`revealSeconds`, `timeoutSeconds`, `enabled`). The TV also shows the game's
+artwork while the stream connects (Back shows the stream right away). When the stream ends (you
 quit the game, press Home, or Moonlight closes) Hearth closes the game and ends the session on the PC with Moonlight's
-*quit*, so Apollo removes its virtual display and your monitors come back on. With the Apollo login in `agent.json`
-the agent also ends it directly. Turn these off per PC with `loadingScreen: false` / `endSessionOnExit: false`.
+*quit*, so Apollo removes its virtual display and your monitors come back on. Put the Apollo login in `agent.json`
+(`"apollo": {"username", "password"}`) and the PC ends the session itself, without Moonlight's "quitting" window
+appearing on the TV. Turn these off per PC with `loadingScreen: false` / `endSessionOnExit: false`.
 
 **Requests (Seerr):** with `requests:` in config.yaml, a **Requests** tab appears (parents only): search with the
 keyboard or phone remote, or browse Trending / Popular / Coming soon with the remote, then *Request* a film or every
