@@ -4,6 +4,7 @@ import { findBackground, themeVars } from '../lib/theme';
 import { waitForRestart, type Notify, type useProfiles } from './Admin';
 import { TileGallery } from './TileDesigner';
 import { WifiCard } from './WifiCard';
+import { ChannelNamesCard } from './ChannelNames';
 
 type ProfilesApi = ReturnType<typeof useProfiles>;
 type MutationReply = Partial<ProfilesState> & { ok: boolean; error?: string };
@@ -243,6 +244,7 @@ export function TvSection({ notify }: { notify: Notify }) {
     <section>
       <h1>TV settings</h1>
       <WifiCard notify={notify} />
+      <ChannelNamesCard notify={notify} />
       <div className="ad-card">
         <h2>Automations</h2>
         <Toggle k="scenes" label="Movie-time lights" detail="Run your Home Assistant scenes when Plex, Live TV or games start and stop" />

@@ -219,6 +219,9 @@ they appear under **Recently added** on Home).
 **Choosing channels per profile:** Live TV → **Choose channels** hides the ones that profile doesn't want; the guide,
 "On now" on Home, voice and CH+/CH− then skip them. Each profile keeps its own list (kids' lists are set by a parent,
 here or in the network editor → Profiles → *Live TV channels*). New channels show up by themselves.
+Channels are tagged **HD**, **Radio** (radio stations on the TV signal) or **SD copy** (an HD channel shows the same
+programmes), with one-click *Hide SD copies* and *Hide radio*. Rename any channel in the editor → TV settings →
+*Channel names*.
 
 ## 3. Home Assistant dashboard and voice
 

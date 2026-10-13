@@ -388,6 +388,20 @@ function ChannelsPicker({ all, hidden, onChange }: { all: Channel[]; hidden: str
         <button className="ad-link" onClick={() => onChange([])}>
           Show all
         </button>{' '}
+        {all.some((c) => c.duplicateOf) ? (
+          <>
+            <button className="ad-link" onClick={() => onChange([...new Set([...hidden, ...all.filter((c) => c.duplicateOf).map((c) => c.id)])])}>
+              Hide SD copies
+            </button>{' '}
+          </>
+        ) : null}
+        {all.some((c) => c.radio) ? (
+          <>
+            <button className="ad-link" onClick={() => onChange([...new Set([...hidden, ...all.filter((c) => c.radio).map((c) => c.id)])])}>
+              Hide radio
+            </button>{' '}
+          </>
+        ) : null}
         <button className="ad-link" onClick={() => onChange(all.map((c) => c.id))}>
           Hide all
         </button>
@@ -402,6 +416,9 @@ function ChannelsPicker({ all, hidden, onChange }: { all: Channel[]; hidden: str
             />
             <span>
               <b>{c.number}</b> {c.name}
+              {c.hd ? <em className="ad-tag">HD</em> : null}
+              {c.radio ? <em className="ad-tag dim">Radio</em> : null}
+              {c.duplicateOf ? <em className="ad-tag dim">SD copy</em> : null}
             </span>
           </label>
         ))}

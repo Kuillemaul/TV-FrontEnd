@@ -15,6 +15,12 @@ export interface Channel {
   number: number;
   name: string;
   icon?: string;
+  /** Broadcast in HD. */
+  hd?: boolean;
+  /** A radio station carried on the TV signal. */
+  radio?: boolean;
+  /** Set by Hearth: the HD channel showing the same programmes. */
+  duplicateOf?: string;
 }
 
 export interface Recording {
@@ -256,4 +262,33 @@ export class DemoTvProvider implements LiveTvProvider {
   async deleteRecording(id: string): Promise<void> {
     this.scheduled.delete(id);
   }
+}
+
+/**
+ * SD channels that simulcast an HD one (ABC TV / ABC TV HD…): same titles at the same times for most
+ * of the window. Returns sdId → hdId.
+ */
+export function findDuplicates(channels: Channel[], programmes: Programme[]): Map<string, string> {
+  const slots = new Map<string, Set<string>>();
+  for (const p of programmes) {
+    const key = `${Math.round(p.start / 60_000)}|${p.title.toLowerCase()}`;
+    if (!slots.has(p.channelId)) slots.set(p.channelId, new Set());
+    slots.get(p.channelId)!.add(key);
+  }
+  const hd = channels.filter((c) => c.hd && slots.get(c.id)?.size);
+  const out = new Map<string, string>();
+  for (const c of channels) {
+    const mine = slots.get(c.id);
+    if (c.hd || c.radio || !mine || mine.size < 2) continue;
+    for (const h of hd) {
+      const theirs = slots.get(h.id)!;
+      let same = 0;
+      for (const k of mine) if (theirs.has(k)) same++;
+      if (same >= 2 && same / mine.size >= 0.6) {
+        out.set(c.id, h.id);
+        break;
+      }
+    }
+  }
+  return out;
 }

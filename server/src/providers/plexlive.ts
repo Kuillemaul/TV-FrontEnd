@@ -11,6 +11,33 @@ export const PLEX_CLIENT_ID = 'hearth-tv';
 /** "ABC (Australian Broadcasting Corporation)" → "ABC". */
 export const shortChannelName = (title: string) => title.replace(/\s*\([^)]*\)\s*$/, '').trim() || title;
 
+/**
+ * Plex (Gracenote) only gives broadcaster codes for Australian Freeview channels. These are the ones
+ * that decode unambiguously; the rest show as "<network> <number>" and can be renamed in the editor.
+ */
+const AU_NAMES: Record<string, string> = {
+  TENMANZ: '10', THMEANZ: '10 HD', ELMLANZ: '10 Peach', '1MELANZ': '10 Bold',
+  AVICANZ: 'ABC TV', AHVCANZ: 'ABC TV HD', AKVCANZ: 'ABC Kids', ANVCANZ: 'ABC News',
+  SBSMANZ: 'SBS', SMELANZ: 'SBS HD', VHVIANZ: 'SBS Viceland HD', WMVANZ: 'SBS World Movies', FVICANZ: 'SBS Food', NVIHANZ: 'NITV HD',
+  '7MELANZ': '7', '7HMANZ': '7HD', '72MLANZ': '7two', '7BVANZ': '7Bravo', '7FVANZ': '7flix',
+  '9HMLANZ': '9HD', '9MELANZ': '9', '9LMLANZ': '9Life', '9RMLANZ': '9Rush',
+  RCVCANZ: 'Racing.com',
+  ABCRMANZ: 'ABC Radio Melbourne', ABCRNMANZ: 'ABC Radio National', ABCCMENZ: 'ABC Classic', JJJMANZ: 'triple j', JJJUMANZ: 'triple j Unearthed',
+  JJRAMANZ: 'Double J', ABCJMANZ: 'ABC Jazz', AKLMANZ: 'ABC Kids Listen', ABCOUMANZ: 'ABC Country', ABCNRANZ: 'ABC NewsRadio',
+  RA1VANZ: 'SBS Radio 1', RA2VANZ: 'SBS Radio 2', RA3VANZ: 'SBS Radio 3', A24VANZ: 'SBS Arabic', SBSPDANZ: 'SBS PopDesi', SBSCANZ: 'SBS Chill', SBSPAANZ: 'SBS PopAsia',
+};
+const AU_RADIO = /^(ABCR|ABCC|JJ|ABCJ|AKL|ABCOU|ABCNR|RA\d|A24|SBSPD|SBSC|SBSPA)/;
+const NETWORK_SHORT: Record<string, string> = { 'Network Ten': 'Ten', 'Seven Network': 'Seven', 'Nine Network': 'Nine', Independent: 'Channel' };
+
+/** A friendly name, HD and radio flags for a Plex lineup channel. */
+export function describeChannel(c: { vcn?: string; title?: string; callSign?: string; isHd?: boolean }): { name: string; hd: boolean; radio: boolean } {
+  const number = Number.parseFloat(c.vcn ?? '') || 0;
+  const network = shortChannelName(String(c.title ?? ''));
+  const known = c.callSign ? AU_NAMES[c.callSign] : undefined;
+  const name = known ?? (network ? `${NETWORK_SHORT[network] ?? network} ${number}` : String(c.callSign ?? c.vcn ?? 'Channel'));
+  return { name, hd: c.isHd === true, radio: Boolean(c.callSign && AU_RADIO.test(c.callSign)) };
+}
+
 /** Plex grid entries → programmes (one per airing; a show can air on several channels). */
 export function gridToProgrammes(metadata: any[]): Programme[] {
   const out: Programme[] = [];
@@ -88,7 +115,7 @@ export class PlexLiveTvProvider implements LiveTvProvider {
     const { epg } = await this.findDvr();
     const data = await this.api(`/${epg}/lineups/dvr/channels`);
     const list = (data.MediaContainer?.Channel ?? [])
-      .map((c: any) => ({ id: String(c.id), number: Number.parseFloat(c.vcn) || 0, name: shortChannelName(String(c.title ?? c.callSign ?? c.vcn)), icon: c.thumb }))
+      .map((c: any) => ({ id: String(c.id), number: Number.parseFloat(c.vcn) || 0, icon: c.thumb, ...describeChannel(c) }))
       .sort((a: Channel, b: Channel) => a.number - b.number);
     this.channelCache = { at: Date.now(), list };
     return list;

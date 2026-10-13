@@ -1877,3 +1877,6 @@ body.is-alert { background: transparent; }
 .channel-pick-item.off .channel-pick-name { text-decoration: line-through; }
 .channel-pick-item:focus { background: var(--text); color: var(--bg); opacity: 1; transform: scale(1.02); }
 .channel-pick-item:focus .channel-pick-num { color: var(--bg); }
+.ch-tag { flex: none; font-size: 0.7rem; font-weight: 750; letter-spacing: 0.04em; padding: 0.1rem 0.35rem; border-radius: 0.3rem; border: 1px solid currentColor; opacity: 0.85; }
+.ch-tag-dim { opacity: 0.5; font-weight: 600; }
+.guide-channel .ch-tag { margin-left: auto; }

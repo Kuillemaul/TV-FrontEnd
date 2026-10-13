@@ -165,6 +165,10 @@ export interface Channel {
   number: number;
   name: string;
   icon?: string;
+  hd?: boolean;
+  radio?: boolean;
+  /** The HD channel showing the same programmes. */
+  duplicateOf?: string;
 }
 
 export interface Programme {

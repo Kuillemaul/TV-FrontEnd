@@ -171,3 +171,9 @@ html.is-admin body { overflow: auto; background: #0b0d13; cursor: auto; }
 }
 .ad-channel-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: 0.35rem 1rem; }
 .ad-channel-list b { display: inline-block; min-width: 2rem; color: var(--ad-dim); font-variant-numeric: tabular-nums; }
+.ad-tag { font-style: normal; font-size: 0.68rem; font-weight: 700; margin-left: 0.4rem; padding: 0.05rem 0.3rem; border-radius: 0.25rem; border: 1px solid var(--ad-accent); color: var(--ad-accent); }
+.ad-tag.dim { border-color: var(--ad-line); color: var(--ad-faint); }
+.ad-channel-names { display: grid; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); gap: 0.5rem 1rem; margin-bottom: 1rem; }
+.ad-channel-names label { display: flex; align-items: center; gap: 0.5rem; }
+.ad-channel-names b { min-width: 2.2rem; color: var(--ad-dim); font-variant-numeric: tabular-nums; }
+.ad-channel-names input { flex: 1; min-width: 0; }

@@ -1,7 +1,7 @@
 import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
 import Fastify from 'fastify';
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { EventBus } from './bus.js';
@@ -14,7 +14,7 @@ import { DemoHome } from './providers/demohome.js';
 import { GameService } from './providers/games.js';
 import { HomeAssistant, type HaEntity } from './providers/homeassistant.js';
 import { LabMonitor } from './providers/lab.js';
-import { DemoTvProvider, NoTvProvider, TvheadendProvider, type Channel, type LiveTvProvider } from './providers/livetv.js';
+import { DemoTvProvider, findDuplicates, NoTvProvider, TvheadendProvider, type Channel, type LiveTvProvider } from './providers/livetv.js';
 import { PermissionError, ProfileStore, type Profile } from './profiles.js';
 import { AlertService, type Alert } from './alerts.js';
 import { SceneAutomation } from './automations.js';
@@ -71,9 +71,19 @@ const hotkeys = new HotkeyWatcher(
 );
 
 let channelCache: { at: number; channels: Channel[] } | null = null;
+/** Names given to channels in the network editor (channel id → name). */
+const channelNamesFile = join(config.stateDir, 'channel-names.json');
+let channelNames: Record<string, string> = {};
+try {
+  channelNames = JSON.parse(readFileSync(channelNamesFile, 'utf8'));
+} catch {
+  /* none yet */
+}
+
 async function channels(): Promise<Channel[]> {
   if (channelCache && Date.now() - channelCache.at < 5 * 60_000) return channelCache.channels;
-  channelCache = { at: Date.now(), channels: await tv.channels() };
+  const list = (await tv.channels()).map((c) => (channelNames[c.id] ? { ...c, name: channelNames[c.id] } : c));
+  channelCache = { at: Date.now(), channels: list };
   return channelCache.channels;
 }
 
@@ -383,8 +393,26 @@ app.get<{ Querystring: { hours?: string } }>('/api/tv/guide', async (req) => {
   return { demo: tv.demo, lastChannel: state.lastChannel, channels: chs, programmes: all.filter((p) => shown.has(p.channelId)) };
 });
 
-// Every channel (for choosing which ones a profile sees).
-app.get('/api/tv/channels', async () => ({ channels: await channels().catch(() => []) }));
+// Every channel (for choosing which ones a profile sees), with which SD ones simulcast an HD one.
+app.get('/api/tv/channels', async () => {
+  const all = await channels().catch(() => [] as Channel[]);
+  const programmes = await tv.guide(Date.now(), Date.now() + 6 * 3600_000).catch(() => []);
+  const dupes = findDuplicates(all, programmes);
+  return { channels: all.map((c) => (dupes.has(c.id) ? { ...c, duplicateOf: dupes.get(c.id) } : c)), names: channelNames };
+});
+
+// Rename channels (network editor). An empty name puts the original back.
+app.put<{ Body: { names: Record<string, string> } }>('/api/admin/tv/channel-names', async (req) => {
+  const next: Record<string, string> = {};
+  for (const [id, name] of Object.entries(req.body?.names ?? {})) {
+    const n = String(name ?? '').trim().slice(0, 40);
+    if (n && id.length <= 120) next[id] = n;
+  }
+  channelNames = next;
+  writeFileSync(channelNamesFile, JSON.stringify(next, null, 2));
+  channelCache = null;
+  return { ok: true };
+});
 
 app.post<{ Body: { channelId: string } }>('/api/tv/watch', async (req) => {
   try {

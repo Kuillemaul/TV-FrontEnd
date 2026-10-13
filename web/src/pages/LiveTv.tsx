@@ -67,8 +67,8 @@ function ChannelPicker({ onClose }: { onClose: (changed: boolean) => void }) {
   return (
     <Modal title={`Channels for ${hearth.profile?.name ?? 'this profile'}`} onClose={() => onClose(false)} wide>
       <p className="modal-sub">
-        Select a channel to show or hide it. {all.length ? `${shown} of ${all.length} shown.` : 'Loading channels…'} New channels
-        show up by themselves.
+        Select a channel to show or hide it. {all.length ? `${shown} of ${all.length} shown.` : 'Loading channels…'} “SD copy”
+        means an HD channel shows the same programmes. New channels show up by themselves.
       </p>
       <div className="channel-pick" data-nav-group>
         {all.map((c) => (
@@ -76,6 +76,9 @@ function ChannelPicker({ onClose }: { onClose: (changed: boolean) => void }) {
             {c.icon ? <img src={c.icon} alt="" /> : <span className="channel-pick-icon" />}
             <span className="channel-pick-num">{c.number}</span>
             <span className="channel-pick-name">{c.name}</span>
+            {c.hd ? <span className="ch-tag">HD</span> : null}
+            {c.radio ? <span className="ch-tag ch-tag-dim">Radio</span> : null}
+            {c.duplicateOf ? <span className="ch-tag ch-tag-dim">SD copy</span> : null}
             <Icon name={hidden.has(c.id) ? 'x' : 'check'} size="1.1em" />
           </button>
         ))}
@@ -84,6 +87,16 @@ function ChannelPicker({ onClose }: { onClose: (changed: boolean) => void }) {
         <Button onClick={() => void save()} disabled={busy || !all.length}>
           {busy ? 'Saving…' : 'Save'}
         </Button>
+        {all.some((c) => c.duplicateOf) ? (
+          <Button variant="ghost" onClick={() => setHidden((h) => new Set([...h, ...all.filter((c) => c.duplicateOf).map((c) => c.id)]))}>
+            Hide SD copies
+          </Button>
+        ) : null}
+        {all.some((c) => c.radio) ? (
+          <Button variant="ghost" onClick={() => setHidden((h) => new Set([...h, ...all.filter((c) => c.radio).map((c) => c.id)]))}>
+            Hide radio
+          </Button>
+        ) : null}
         <Button variant="ghost" onClick={() => setHidden(new Set())}>
           Show all
         </Button>
@@ -171,6 +184,7 @@ function GuideGrid({ onChoose }: { onChoose: () => void }) {
               {ch.icon ? <img src={ch.icon} alt="" /> : null}
               <span className="guide-channel-num">{ch.number}</span>
               <span className="guide-channel-name">{ch.name}</span>
+              {ch.hd ? <span className="ch-tag">HD</span> : null}
             </button>
             <div className="guide-timeline" style={{ width: `${width}rem` }}>
               {(byChannel.get(ch.id) ?? []).map((p) => {
