@@ -8,6 +8,7 @@ import { parseDocument } from 'yaml';
 import type { EventBus } from '../bus.js';
 import { loadConfig, type HearthConfig } from '../config.js';
 import { ELEVATE_HEADER, ELEVATE_SECRET, isElevated, isPrivateAddress } from '../elevate.js';
+import { hardExit } from '../exit.js';
 
 /**
  * The network editor: a second web server on config.admin.port (default 8780) for your laptop or
@@ -193,7 +194,7 @@ function listImages(dir: string): Array<{ file: string; size: number }> {
 /** Exit and let systemd start Hearth again (Restart=always), picking up the new config. */
 function scheduleRestart(log: AdminContext['log']): void {
   log.info('restarting to apply the new settings');
-  setTimeout(() => process.exit(0), 600);
+  setTimeout(hardExit, 600);
 }
 
 /** Start the network editor's own web server. */

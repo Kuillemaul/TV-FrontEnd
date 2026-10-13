@@ -29,6 +29,7 @@ import { installElevation, isElevated } from './elevate.js';
 import { ScreenTime } from './screentime.js';
 import { StateStore } from './state.js';
 import { TileArtStore } from './tileart.js';
+import { hardExit } from './exit.js';
 import { VoiceService } from './voice.js';
 
 const config = loadConfig();
@@ -660,11 +661,13 @@ log.info(`Hearth ready on http://${config.server.host}:${config.server.port}${co
 
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   process.on(sig, async () => {
+    // Never let a stuck clean-up keep the TV waiting on a restart.
+    setTimeout(hardExit, 5000).unref();
     hotkeys.stop();
     lab.stop();
     launcher.closeOverlay();
     await launcher.stop();
-    await app.close();
-    process.exit(0);
+    await app.close().catch(() => undefined);
+    hardExit();
   });
 }
