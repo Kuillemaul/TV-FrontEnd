@@ -17,6 +17,7 @@ test('Seerr search results: films, shows, no people', () => {
     backdrop: undefined,
     overview: 'x',
     status: 'available',
+    trailer: undefined,
   });
   const show = toMedia({ id: 1, mediaType: 'tv', name: 'Severance', firstAirDate: '2022-02-18' });
   assert.equal(show?.title, 'Severance');
@@ -57,4 +58,11 @@ test('requests config: login page URL, placeholder keys skipped', () => {
   assert.equal(cfg.requests.seerr?.url, 'http://192.168.50.252:5055');
   assert.equal(cfg.requests.radarr?.url, 'http://192.168.50.252:7878');
   assert.equal(cfg.requests.sonarr, undefined);
+});
+
+test('trailer: YouTube trailer preferred over teaser', async () => {
+  const { pickTrailer } = await import('./providers/seerr.js');
+  assert.equal(pickTrailer([{ site: 'YouTube', type: 'Teaser', key: 'tease1' }, { site: 'Vimeo', type: 'Trailer', key: 'v' }, { site: 'YouTube', type: 'Trailer', key: 'trail1' }]), 'trail1');
+  assert.equal(pickTrailer([{ site: 'YouTube', type: 'Teaser', key: 'tease1' }]), 'tease1');
+  assert.equal(pickTrailer(undefined), undefined);
 });

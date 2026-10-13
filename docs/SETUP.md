@@ -220,6 +220,10 @@ homeassistant:
 - **TV commands are handled locally:** "open Netflix", "launch Plex", "play Super Metroid", "watch channel 7",
   "put on NBC", "show me the home lab", "go home", "stop". Anything else goes to Home Assistant's conversation
   agent, including your own sentences and LLM agents if you've set them up.
+- **More commands:** "request Dune Part Three" (finds it in Seerr; press OK to request), "what's downloading?",
+  "pin this" (pins whatever was focused when you pressed the mic), "sleep timer one hour" / "sleep in 90 minutes" /
+  "how long on the sleep timer?" / "cancel the sleep timer", "who's at the door?", "show the garage camera",
+  "hide the camera".
 - You can also type a command in the voice panel. That's handy with a keyboard, or before a mic is set up.
 
 ## 4. Gaming PC and emulator PC
@@ -437,6 +441,24 @@ Settings → *Test doorbell*.
 ### Plex: continue watching
 Add your server under `plex:` (URL + token) to get a **Continue watching** row on Home. Selecting an item opens it
 in Plex Web, full screen, ready to resume.
+
+With Plex set up, Home also has **Recently added** and **Your watchlist** rows (the watchlist is your plex.tv one).
+A watchlist item that's in your library plays straight away; one that isn't opens in Requests so you can ask for it.
+
+### Trailers in Requests
+Open any film or show in Requests and choose **Trailer** to watch it before you request. Back returns to the request.
+If a trailer won't play embedded, choose *Open in YouTube*.
+
+### Sleep timer
+Settings → *Sleep timer* (30 min to 2 h), or say "sleep timer one hour". A chip in the top bar counts down; select it
+to cancel. A minute before the end you get a *Keep watching (+30 min)* button. When it runs out, Hearth stops what's
+playing, turns the TV off (with CEC) and suspends.
+
+### Camera picture-in-picture
+Select a camera tile on the Home Assistant page, say "who's at the door?" / "show the garage camera", or choose
+*Keep camera up* on a doorbell alert. On Home and Hearth's own pages the camera sits in a corner while you carry on;
+Back or "hide the camera" closes it. Over Plex, games or Live TV the kiosk compositor shows it full screen instead
+(Back returns you to what you were watching).
 
 ### Recording a whole series
 In the guide, select a show → **Record series** (Tvheadend's "autorec" records every episode).

@@ -5,7 +5,8 @@ import type { AlertService } from '../alerts.js';
 import { AudioControl } from '../audio.js';
 import { BluetoothControl } from '../bluetooth.js';
 import { DisplayControl } from '../display.js';
-import { RequestsClient } from '../providers/seerr.js';
+import type { RequestsClient } from '../providers/seerr.js';
+import type { SleepTimer } from '../sleep.js';
 import { ArrWatcher } from '../providers/arrwatch.js';
 import type { EventBus } from '../bus.js';
 import { expand, type HearthConfig, type LabAction } from '../config.js';
@@ -34,6 +35,10 @@ export interface ExtrasContext {
   ha?: HomeAssistant;
   demoHome?: DemoHome;
   lab: LabMonitor;
+  requests: RequestsClient;
+  sleep: SleepTimer;
+  /** Camera picture-in-picture (or full screen over an app); null hides it. */
+  showCamera: (entity: string | null, name?: string) => void;
   callService: (service: string, data?: Record<string, unknown>) => Promise<void>;
   fail: (err: unknown) => { ok: boolean; error: string };
   isKid: () => boolean;
@@ -133,6 +138,24 @@ export function registerExtras(app: FastifyInstance, ctx: ExtrasContext): void {
     }),
   );
 
+  /* ---------------- sleep timer & camera picture-in-picture ---------------- */
+
+  app.get('/api/sleep', async () => ({ endsAt: sleep.ends }));
+  app.post<{ Body: { minutes: number } }>('/api/sleep', async (req) =>
+    run(() => {
+      sleep.set(Math.max(0, Math.min(12 * 60, Number(req.body.minutes) || 0)));
+      return { endsAt: sleep.ends };
+    }),
+  );
+  app.post<{ Body: { entity: string | null; name?: string } }>('/api/pip', async (req) =>
+    run(() => {
+      if (isKid()) throw new PermissionError('Ask a parent to show the cameras');
+      const entity = req.body.entity ? String(req.body.entity) : null;
+      if (entity && !/^camera\.[a-z0-9_]+$/.test(entity)) throw new Error('Not a camera');
+      showCamera(entity, req.body.name);
+    }),
+  );
+
   /* ---------------- Bluetooth ---------------- */
 
   const bt = new BluetoothControl();
@@ -166,7 +189,7 @@ export function registerExtras(app: FastifyInstance, ctx: ExtrasContext): void {
 
   /* ---------------- requests (Seerr) & downloads (Radarr / Sonarr / Lidarr) ---------------- */
 
-  const requests = new RequestsClient(config.requests);
+  const { requests, sleep, showCamera } = ctx;
   const parentsOnly = () => {
     if (isKid()) throw new PermissionError('Requests are for parents');
   };
@@ -204,6 +227,16 @@ export function registerExtras(app: FastifyInstance, ctx: ExtrasContext): void {
       if (mediaType !== 'movie' && mediaType !== 'tv') throw new Error('Unknown type');
       await requests.request(mediaType, Number(id));
       return { media: await requests.details(mediaType, Number(id)) };
+    }),
+  );
+  // "Open in YouTube" for a trailer that can't play inside Hearth.
+  app.post<{ Body: { key: string } }>('/api/youtube/play', async (req) =>
+    run(async () => {
+      const key = String(req.body.key ?? '');
+      if (!/^[\w-]{6,20}$/.test(key)) throw new Error('Not a YouTube video');
+      const yt = config.apps.find((a) => a.id === 'youtube');
+      const ua = yt?.launch.type === 'web' ? yt.launch.userAgent : undefined;
+      await launcher.launch('app:youtube', 'YouTube', { type: 'web', url: `https://www.youtube.com/tv#/watch?v=${key}`, userAgent: ua });
     }),
   );
   app.get('/api/downloads', async () => (requests.hasDownloads && !isKid() ? requests.downloads() : { items: [], errors: [] }));
@@ -317,7 +350,28 @@ export function registerExtras(app: FastifyInstance, ctx: ExtrasContext): void {
     }
     await launcher.launch('app:plex', 'Plex', { type: 'web', url: await plex.itemUrl(id) });
   };
-  app.post<{ Params: { id: string } }>('/api/plex/open/:id', async (req) => run(() => openPlexItem(req.params.id)));
+  app.post<{ Params: { id: string } }>('/api/plex/open/:id', async (req) =>
+    run(async () => openPlexItem(plex ? await plex.playable(req.params.id).catch(() => req.params.id) : req.params.id)),
+  );
+  app.get('/api/plex/recent', async () => {
+    if (!plex) return { items: config.demo ? DEMO_ON_DECK : [] };
+    return { items: await plex.recentlyAdded().catch(() => []) };
+  });
+  app.get('/api/plex/watchlist', async () => {
+    if (!plex) return { items: [] };
+    return { items: await plex.watchlist().catch(() => []) };
+  });
+  // Watchlist item: play it if it's in your libraries; otherwise say so (the TV offers a request).
+  app.post<{ Body: { title: string; year?: number; mediaType: 'movie' | 'tv' } }>('/api/plex/watchlist/play', async (req) =>
+    run(async () => {
+      if (!plex) throw new Error('Add your Plex server under "plex" in config.yaml');
+      const { title, year, mediaType } = req.body;
+      const id = await plex.find({ title: String(title), year: year ? Number(year) : undefined, mediaType: mediaType === 'tv' ? 'tv' : 'movie' });
+      if (!id) return { inLibrary: false };
+      await openPlexItem(await plex.playable(id).catch(() => id));
+      return { inLibrary: true };
+    }),
+  );
 
   /* ---------------- ready to watch (Radarr / Sonarr / Lidarr imports) ---------------- */
 
@@ -328,6 +382,16 @@ export function registerExtras(app: FastifyInstance, ctx: ExtrasContext): void {
     run(async () => {
       const action = alerts.get(String(req.body.alertId))?.action;
       if (!action) throw new Error('That pop-up has expired');
+      if (action.kind === 'sleep-extend') {
+        launcher.closeOverlay();
+        sleep.extend(action.minutes);
+        return;
+      }
+      if (action.kind === 'pip') {
+        launcher.closeOverlay();
+        showCamera(action.entity);
+        return;
+      }
       if (!plex) throw new Error('Add your Plex server under "plex" in config.yaml to play from here');
       launcher.closeOverlay();
       const id = await plex.find(action);

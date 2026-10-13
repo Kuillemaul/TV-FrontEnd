@@ -1,10 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { onScopedBack } from '../nav/spatial';
 import { Icon } from '../components/Icon';
 import { Button, Modal, NotSetUp, PageHeader, Row, Tile } from '../components/Layout';
 import { get, post, useApi, type DownloadItem, type MediaResult } from '../lib/api';
 import { useHearth } from '../lib/hearth';
 
 type ListReply = { ok: boolean; error?: string; results?: MediaResult[] };
+
+/** "Request Dune Part Three" by voice: open that title's card once the Requests page is up. */
+let pendingMedia: { id: number; mediaType: 'movie' | 'tv' } | null = null;
+export function openMediaLater(media: { id: number; mediaType: 'movie' | 'tv' }): void {
+  pendingMedia = media;
+  window.dispatchEvent(new Event('hearth-open-media'));
+}
 
 const STATUS: Record<MediaResult['status'], { label: string; cls: string } | null> = {
   none: null,
@@ -98,6 +106,17 @@ export function RequestsPage() {
   const [debounced, setDebounced] = useState('');
   const [open, setOpen] = useState<MediaResult | null>(null);
   useEffect(() => {
+    const show = () => {
+      const want = pendingMedia;
+      pendingMedia = null;
+      if (!want) return;
+      void get<{ ok: boolean; media?: MediaResult }>(`/api/requests/media/${want.mediaType}/${want.id}`).then((r) => r.media && setOpen(r.media));
+    };
+    show();
+    window.addEventListener('hearth-open-media', show);
+    return () => window.removeEventListener('hearth-open-media', show);
+  }, []);
+  useEffect(() => {
     const t = setTimeout(() => setDebounced(query.trim()), 450);
     return () => clearTimeout(t);
   }, [query]);
@@ -153,10 +172,43 @@ export function RequestsPage() {
   );
 }
 
-function MediaModal({ media, onClose, onRequested }: { media: MediaResult; onClose: () => void; onRequested: (m: MediaResult) => void }) {
+/** Full-screen trailer inside Hearth (YouTube embed). Back closes it and you're back on Request. */
+function TrailerPlayer({ youtubeKey, title, onClose }: { youtubeKey: string; title: string; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => onScopedBack(() => ref.current, onClose), [onClose]);
+  useEffect(() => {
+    requestAnimationFrame(() => ref.current?.querySelector<HTMLElement>('button')?.focus());
+  }, []);
+  const src = `https://www.youtube-nocookie.com/embed/${youtubeKey}?autoplay=1&rel=0&modestbranding=1&playsinline=1`;
+  return (
+    <div className="trailer" data-nav-scope ref={ref}>
+      <iframe src={src} title={`${title} trailer`} allow="autoplay; encrypted-media; fullscreen" />
+      <div className="trailer-bar" data-nav-group>
+        <span>{title} · trailer</span>
+        <button className="btn" data-nav onClick={onClose}>
+          Back to request
+        </button>
+        <button className="btn btn-ghost" data-nav onClick={() => void post('/api/youtube/play', { key: youtubeKey })}>
+          Won’t play? Open in YouTube
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function MediaModal({ media: initial, onClose, onRequested }: { media: MediaResult; onClose: () => void; onRequested: (m: MediaResult) => void }) {
   const hearth = useHearth();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [media, setMedia] = useState(initial);
+  const [trailer, setTrailer] = useState(false);
+  // Search results don't carry the trailer; the details do (and a fresh status).
+  useEffect(() => {
+    setMedia(initial);
+    void get<{ ok: boolean; media?: MediaResult }>(`/api/requests/media/${initial.mediaType}/${initial.id}`).then(
+      (r) => r.media && setMedia((m) => ({ ...m, ...r.media, approval: m.approval })),
+    );
+  }, [initial]);
   const canRequest = media.status === 'none';
 
   const request = async () => {
@@ -196,6 +248,11 @@ function MediaModal({ media, onClose, onRequested }: { media: MediaResult; onClo
                   Open Plex
                 </Button>
               ) : null}
+              {media.trailer ? (
+                <Button icon="play" onClick={() => setTrailer(true)}>
+                  Trailer
+                </Button>
+              ) : null}
               <Button onClick={onClose} autoFocus={!canRequest && media.status !== 'available' && media.status !== 'partial'}>
                 Close
               </Button>
@@ -203,6 +260,7 @@ function MediaModal({ media, onClose, onRequested }: { media: MediaResult; onClo
           </div>
         </div>
       </div>
+      {trailer && media.trailer ? <TrailerPlayer youtubeKey={media.trailer} title={media.title} onClose={() => setTrailer(false)} /> : null}
     </Modal>
   );
 }

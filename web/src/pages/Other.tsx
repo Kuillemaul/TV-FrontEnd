@@ -186,6 +186,20 @@ export function SettingsPage() {
         </div>
       </section>
       <section className="settings-group">
+        <h2>Sleep timer</h2>
+        <div className="settings-row" data-nav-group>
+          {[30, 60, 90, 120].map((m) => (
+            <Button key={m} icon="moon" onClick={() => void post('/api/sleep', { minutes: m }).then(() => hearth.toast(`Going to sleep in ${m < 60 ? `${m} min` : `${m / 60} h`}`))}>
+              {m < 60 ? `${m} min` : `${m / 60} h`}
+            </Button>
+          ))}
+          <Button variant="ghost" onClick={() => void post('/api/sleep', { minutes: 0 }).then(() => hearth.toast('Sleep timer off'))}>
+            Off
+          </Button>
+        </div>
+        <p className="modal-sub">Or say “sleep timer one hour”. A minute before, you can choose to keep watching.</p>
+      </section>
+      <section className="settings-group">
         <h2>Power</h2>
         <div className="settings-row" data-nav-group>
           <Button icon="moon" onClick={() => setConfirm({ action: 'suspend', label: 'Sleep' })}>Sleep</Button>

@@ -8,7 +8,7 @@ import { EventBus } from './bus.js';
 import { expand, loadConfig, resolveConfigPath, type AppTile } from './config.js';
 import { HotkeyWatcher, kbmStatus } from './input.js';
 import { ControllerKeys, KEY_NAMES, wantsControllerKeys } from './padkeys.js';
-import type { IntentCatalog } from './intents.js';
+import type { IntentCatalog, UiAction } from './intents.js';
 import { Launcher } from './launcher.js';
 import { DemoHome } from './providers/demohome.js';
 import { GameService } from './providers/games.js';
@@ -21,6 +21,9 @@ import { SceneAutomation } from './automations.js';
 import { PlexClient } from './providers/plex.js';
 import { cookieToken, isLoopback, lanAddress, RemotePairing } from './remote.js';
 import { registerExtras } from './routes/extras.js';
+import { RequestsClient } from './providers/seerr.js';
+import { SleepTimer, sayMinutes } from './sleep.js';
+import { score } from './intents.js';
 import { registerAdminApi, startAdminServer } from './routes/admin.js';
 import { installElevation, isElevated } from './elevate.js';
 import { ScreenTime } from './screentime.js';
@@ -162,9 +165,88 @@ const catalog = async (): Promise<IntentCatalog> => ({
   inputs: visibleApps()
     .filter((a) => a.id.startsWith('input-'))
     .map((a) => ({ id: a.id, name: a.name })),
+  cameras: ha ? ha.cameras() : (demoHome?.cameras() ?? []),
+  doorbellCamera: config.alerts.doorbell?.camera,
 });
+const requests = new RequestsClient(config.requests);
+
+const sleep = new SleepTimer({
+  warn: () =>
+    alerts.raise({
+      kind: 'info',
+      title: 'Going to sleep in a minute',
+      message: 'The sleep timer is nearly up.',
+      seconds: 55,
+      action: { label: 'Keep watching (+30 min)', kind: 'sleep-extend', minutes: 30 },
+    }),
+  sleep: async () => {
+    log.info('sleep timer: closing the app, switching the TV off and sleeping');
+    await launcher.stop().catch(() => undefined);
+    await launcher.run(config.tv.commands.off).catch(() => undefined);
+    await launcher.run(config.system.suspend).catch((err) => log.warn(`sleep timer: ${(err as Error).message}`));
+  },
+  changed: (endsAt) => bus.emit({ type: 'sleep', endsAt }),
+});
+
+/** Camera in a corner over Hearth; over Plex, a game or Live TV it has to take the whole screen. */
+const showCamera = (entity: string | null, name?: string) => {
+  if (entity && launcher.session) {
+    const q = new URLSearchParams({ entity, ...(name ? { name } : {}) });
+    launcher.showOverlay(`http://127.0.0.1:${config.server.port}/camera?${q}`, 90);
+    return;
+  }
+  if (!entity) launcher.closeOverlay();
+  bus.emit({ type: 'pip', entity, name });
+};
+
+/** Voice commands the server answers itself (Seerr lookups, downloads, sleep timer, cameras). */
+async function resolveVoice(action: UiAction): Promise<{ action?: UiAction; speech: string } | null> {
+  switch (action.type) {
+    case 'request-search': {
+      if (isKid()) return { speech: 'Ask a parent to request that.' };
+      if (!requests.hasSeerr) return { speech: 'Requests need Seerr. Add it under requests in the config.' };
+      const results = await requests.search(action.query).catch(() => []);
+      const top = [...results].sort((a, b) => score(action.query, b.title) - score(action.query, a.title))[0];
+      if (!top) return { speech: `I couldn't find ${action.query}.` };
+      const name = `${top.title}${top.year ? ` (${top.year})` : ''}`;
+      const ref = { id: top.id, mediaType: top.mediaType, title: top.title, year: top.year };
+      if (top.status === 'available') return { action: { type: 'request-open', media: ref }, speech: `${name} is already in your library.` };
+      if (top.status !== 'none') return { action: { type: 'request-open', media: ref }, speech: `${name} has already been requested.` };
+      return { action: { type: 'request-open', media: ref }, speech: `Found ${name}. Press OK to request it.` };
+    }
+    case 'downloads': {
+      if (!requests.hasDownloads) return { speech: 'Add Radarr or Sonarr to the config to see downloads.' };
+      const { items } = await requests.downloads();
+      if (!items.length) return { action: { type: 'navigate', page: 'requests' }, speech: 'Nothing is downloading right now.' };
+      const top = items
+        .slice(0, 3)
+        .map((d) => `${d.title} is ${Math.round(d.progress * 100)} percent done`)
+        .join(', ');
+      const more = items.length > 3 ? `, and ${items.length - 3} more` : '';
+      return { action: { type: 'navigate', page: 'requests' }, speech: `${items.length} downloading. ${top}${more}.` };
+    }
+    case 'sleep-timer': {
+      if (action.minutes === -1) {
+        const left = sleep.remainingMinutes;
+        return { speech: left === null ? 'There’s no sleep timer.' : `The TV goes to sleep in ${sayMinutes(left)}.` };
+      }
+      sleep.set(action.minutes);
+      return { speech: action.minutes ? `OK, the TV will go to sleep in ${sayMinutes(action.minutes)}.` : 'Sleep timer cancelled.' };
+    }
+    case 'camera': {
+      if (isKid()) return { speech: 'Ask a parent to show the cameras.' };
+      showCamera(action.entity, action.name);
+      return { speech: action.entity ? `Showing ${action.name ?? 'the camera'}.` : 'Camera hidden.' };
+    }
+    case 'pin-focused':
+      return { action, speech: '' };
+    default:
+      return null;
+  }
+}
+
 // Kid profiles get TV commands only, never Home Assistant.
-const voice = new VoiceService(ha, catalog, () => !isKid());
+const voice = new VoiceService(ha, catalog, () => !isKid(), resolveVoice);
 
 const fail = (err: unknown) => {
   const message = (err as Error).message;
@@ -507,7 +589,7 @@ app.post<{ Body: { name: string; url: string; color?: string } }>('/api/custom-a
 app.delete<{ Params: { id: string } }>('/api/custom-apps/:id', async (req) => mutate(() => profiles.removeCustomApp(req.params.id)));
 
 registerExtras(app, {
-  config, bus, state, launcher, games, profiles, screenTime, alerts, plex, pairing, ha, demoHome, lab,
+  config, bus, state, launcher, games, profiles, screenTime, alerts, plex, pairing, ha, demoHome, lab, requests, sleep, showCamera,
   callService, fail, isKid,
 });
 

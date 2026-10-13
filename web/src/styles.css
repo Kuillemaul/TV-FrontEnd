@@ -1839,3 +1839,23 @@ body.is-alert { background: transparent; }
 .bt-found-item:focus small { color: var(--bg); }
 .bt-searching { display: flex; align-items: center; gap: 0.9rem; color: var(--text-2); padding: 1rem; }
 .bt-done { color: var(--good); }
+
+/* ---------------- sleep timer & camera picture-in-picture ---------------- */
+
+.sleep-chip { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.8rem; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text-2); font: inherit; font-weight: 600; }
+.sleep-chip:focus { background: var(--text); color: var(--bg); }
+
+.camera-pip { position: fixed; right: var(--gutter); bottom: 3rem; z-index: 70; width: 30rem; border-radius: 1rem; overflow: hidden; background: #000; border: 1px solid var(--border); box-shadow: 0 1.5rem 3rem rgba(0, 0, 0, 0.6); animation: slide-in 0.35s var(--ease); }
+.camera-pip-bar { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.8rem; background: var(--panel); color: var(--text-2); font-size: 0.95rem; text-transform: capitalize; }
+.camera-pip-bar span { flex: 1; }
+.camera-pip-x { border: 0; background: none; color: var(--text-3); cursor: pointer; }
+.camera-page { position: fixed; inset: 0; background: #000; display: grid; place-items: center; }
+.camera-page .camera-live, .camera-page .camera-empty { width: 100vw; height: 100vh; aspect-ratio: auto; object-fit: contain; }
+.camera-page-bar { position: absolute; left: 50%; bottom: 2.5rem; transform: translateX(-50%); display: flex; align-items: center; gap: 0.6rem; padding: 0.7rem 1.3rem; border-radius: 999px; background: rgba(0, 0, 0, 0.6); color: #fff; font-size: 1.2rem; text-transform: capitalize; }
+
+/* ---------------- trailer ---------------- */
+
+.trailer { position: fixed; inset: 0; z-index: 120; background: #000; display: flex; flex-direction: column; }
+.trailer iframe { flex: 1; width: 100%; border: 0; }
+.trailer-bar { display: flex; align-items: center; gap: 0.8rem; padding: 0.9rem var(--gutter); background: #000; color: var(--text-2); }
+.trailer-bar span { flex: 1; }

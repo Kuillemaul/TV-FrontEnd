@@ -181,3 +181,51 @@ export function AlertPage() {
     </div>
   );
 }
+
+/** Camera picture-in-picture: bottom-right corner over Hearth. Back (or "hide the camera") closes it. */
+export function CameraPip({ entity, name, onClose }: { entity: string; name?: string; onClose: () => void }) {
+  return (
+    <div className="camera-pip">
+      <CameraView entity={entity} />
+      <div className="camera-pip-bar">
+        <Icon name="camera" size="1em" />
+        <span>{name ?? entity.replace(/^camera\./, '').replace(/_/g, ' ')}</span>
+        <button className="camera-pip-x" onClick={onClose} title="Close">
+          <Icon name="x" size="1em" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * /camera?entity=…: full-screen camera the server opens above Plex, a game or Live TV (only one
+ * window can be on screen there). Back closes it and the app comes back.
+ */
+export function CameraPage() {
+  const q = new URLSearchParams(location.search);
+  const entity = q.get('entity') ?? '';
+  useEffect(() => {
+    const close = () => void post('/api/alerts/dismiss');
+    const onKey = (e: KeyboardEvent) => ['Escape', 'Backspace', 'BrowserBack', 'Enter'].includes(e.key) && close();
+    window.addEventListener('keydown', onKey);
+    let frame = 0;
+    const poll = () => {
+      if (navigator.getGamepads().some((g) => g?.buttons[1]?.pressed || g?.buttons[0]?.pressed)) return close();
+      frame = requestAnimationFrame(poll);
+    };
+    frame = requestAnimationFrame(poll);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      cancelAnimationFrame(frame);
+    };
+  }, []);
+  return (
+    <div className="camera-page">
+      <CameraView entity={entity} />
+      <div className="camera-page-bar">
+        <Icon name="camera" size="1.2em" /> {q.get('name') ?? entity.replace(/^camera\./, '').replace(/_/g, ' ')} · Press Back to return
+      </div>
+    </div>
+  );
+}

@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { EntityCard } from '../components/EntityCard';
 import { PinnedRow } from '../components/Pins';
-import { DownloadsList } from './Requests';
+import { DownloadsList, openMediaLater } from './Requests';
 import { Icon } from '../components/Icon';
 import { Row, Tile } from '../components/Layout';
-import { formatTime, post, useApi, useServerEvents, type AppTile, type Dashboard, type GameLibrary, type Guide, type OnDeckItem } from '../lib/api';
+import { formatTime, get, post, useApi, useServerEvents, type AppTile, type Dashboard, type GameLibrary, type Guide, type OnDeckItem, type WatchlistItem } from '../lib/api';
 import { useHearth } from '../lib/hearth';
 
 function greeting(h: number): string {
@@ -35,6 +35,25 @@ export function HomePage() {
   // Continue watching only for profiles that can see Plex.
   const hasPlex = apps.data?.some((a) => a.id === 'plex') ?? false;
   const deck = useApi<{ demo: boolean; items: OnDeckItem[] }>(hasPlex ? '/api/plex/ondeck' : null, 5 * 60_000);
+  const recent = useApi<{ items: OnDeckItem[] }>(hasPlex ? '/api/plex/recent' : null, 10 * 60_000);
+  const watchlist = useApi<{ items: WatchlistItem[] }>(hasPlex ? '/api/plex/watchlist' : null, 15 * 60_000);
+
+  /** Watchlist: play it if it's in Plex, otherwise offer to request it (Seerr). */
+  const openWatchlist = async (w: WatchlistItem) => {
+    const res = await post<{ ok: boolean; error?: string; inLibrary?: boolean }>('/api/plex/watchlist/play', w);
+    if (!res.ok || res.inLibrary) return;
+    if (!hearth.info?.features.requests || hearth.isKid) return hearth.toast(`${w.title} isn’t in your library yet`);
+    const found = await get<{ ok: boolean; results?: Array<{ id: number; mediaType: 'movie' | 'tv'; title: string; year: number | null }> }>(
+      `/api/requests/search?q=${encodeURIComponent(w.title)}`,
+    );
+    const match =
+      found.results?.find((r) => r.mediaType === w.mediaType && r.title.toLowerCase() === w.title.toLowerCase() && (!w.year || r.year === w.year)) ??
+      found.results?.find((r) => r.mediaType === w.mediaType);
+    if (!match) return hearth.toast(`${w.title} isn’t in your library yet`);
+    hearth.toast(`${w.title} isn’t in your library yet. Request it?`);
+    hearth.navigate('requests');
+    openMediaLater(match);
+  };
 
   useServerEvents((e) => {
     if (e.type !== 'ha-state' || !dash.data) return;
@@ -119,6 +138,38 @@ export function HomePage() {
       ) : null}
 
       {hearth.info?.features.downloads && !hearth.isKid ? <DownloadsList compact /> : null}
+
+      {hasPlex && recent.data?.items.length ? (
+        <Row title="Recently added">
+          {recent.data.items.map((item) => (
+            <Tile
+              key={item.id}
+              title={item.title}
+              subtitle={item.subtitle}
+              image={item.thumb}
+              icon="play"
+              color="#14161f"
+              badge={<span className="badge req-available">New</span>}
+              onSelect={() => void post(`/api/plex/open/${encodeURIComponent(item.id)}`)}
+            />
+          ))}
+        </Row>
+      ) : null}
+
+      {hasPlex && watchlist.data?.items.length ? (
+        <Row title="Your watchlist">
+          {watchlist.data.items.map((w) => (
+            <Tile
+              key={`${w.mediaType}:${w.title}:${w.year ?? ''}`}
+              shape="poster"
+              title={w.title}
+              subtitle={[w.mediaType === 'tv' ? 'Series' : 'Film', w.year].filter(Boolean).join(' · ')}
+              image={w.thumb}
+              onSelect={() => void openWatchlist(w)}
+            />
+          ))}
+        </Row>
+      ) : null}
 
       {onNow.length ? (
         <Row title="On now">

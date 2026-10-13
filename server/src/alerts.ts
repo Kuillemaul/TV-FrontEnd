@@ -17,15 +17,13 @@ export interface Alert {
   at: number;
 }
 
-export interface AlertAction {
-  label: string;
-  kind: 'watch';
-  title: string;
-  year?: number;
-  mediaType: 'movie' | 'tv';
-  season?: number;
-  episode?: number;
-}
+export type AlertAction =
+  /** Play a newly downloaded film/episode in Plex. */
+  | { label: string; kind: 'watch'; title: string; year?: number; mediaType: 'movie' | 'tv'; season?: number; episode?: number }
+  /** Sleep-timer warning: add more time. */
+  | { label: string; kind: 'sleep-extend'; minutes: number }
+  /** Doorbell: keep the camera up in a corner. */
+  | { label: string; kind: 'pip'; entity: string };
 
 const DOORBELL_ON = new Set(['on', 'ringing', 'pressed', 'detected']);
 
@@ -64,7 +62,13 @@ export class AlertService {
       // binary_sensor goes "on"; event.* entities change their timestamp state on every press.
       const rang = entity.entity_id.startsWith('event.') ? old !== null && old.state !== entity.state : DOORBELL_ON.has(entity.state);
       if (rang && entity.state !== 'unavailable') {
-        this.raise({ kind: 'doorbell', title: 'Someone’s at the door', camera: bell.camera, seconds: bell.seconds });
+        this.raise({
+          kind: 'doorbell',
+          title: 'Someone’s at the door',
+          camera: bell.camera,
+          seconds: bell.seconds,
+          action: bell.camera ? { label: 'Keep camera up', kind: 'pip', entity: bell.camera } : undefined,
+        });
       }
       return;
     }

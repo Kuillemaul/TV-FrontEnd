@@ -152,6 +152,13 @@ export class HomeAssistant {
     return this.states.size === 0 || this.states.has(id);
   }
 
+  /** Every camera.* entity, for "show the garage camera". */
+  cameras(): Array<{ id: string; name: string }> {
+    return [...this.states.values()]
+      .filter((e) => e.entity_id.startsWith('camera.'))
+      .map((e) => ({ id: e.entity_id, name: String(e.attributes.friendly_name ?? e.entity_id.slice(7).replace(/_/g, ' ')) }));
+  }
+
   entities(ids: string[]): HaEntity[] {
     return ids.map((id) => this.states.get(id) ?? { entity_id: id, state: 'unavailable', attributes: {} });
   }

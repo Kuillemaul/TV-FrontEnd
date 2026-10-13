@@ -41,6 +41,56 @@ export class PlexClient {
     });
   }
 
+  /** Newly added films and TV (seasons/episodes), newest first. Music is left out. */
+  async recentlyAdded(): Promise<OnDeckItem[]> {
+    const data = await this.api('/library/recentlyAdded?X-Plex-Container-Start=0&X-Plex-Container-Size=40');
+    const out: OnDeckItem[] = [];
+    const seen = new Set<string>();
+    for (const m of data.MediaContainer?.Metadata ?? []) {
+      let item: OnDeckItem | null = null;
+      if (m.type === 'movie') {
+        item = { id: String(m.ratingKey), title: m.title, subtitle: String(m.year ?? 'Film'), thumb: m.art ?? m.thumb, progress: 0 };
+      } else if (m.type === 'season') {
+        item = { id: String(m.ratingKey), title: m.parentTitle ?? m.title, subtitle: m.title ?? `Season ${m.index}`, thumb: m.art ?? m.parentThumb ?? m.thumb, progress: 0 };
+      } else if (m.type === 'episode') {
+        item = { id: String(m.ratingKey), title: m.grandparentTitle, subtitle: `S${m.parentIndex} · E${m.index} · ${m.title}`, thumb: m.grandparentArt ?? m.grandparentThumb ?? m.thumb, progress: 0 };
+      }
+      const key = item ? `${item.title}|${item.subtitle}` : '';
+      if (!item || seen.has(key)) continue;
+      seen.add(key);
+      out.push({ ...item, thumb: item.thumb ? `/api/plex/thumb?path=${encodeURIComponent(item.thumb)}` : undefined });
+      if (out.length >= 16) break;
+    }
+    return out;
+  }
+
+  /** Your Plex watchlist (plex.tv). Things you don't have yet can be requested instead. */
+  async watchlist(): Promise<WatchlistItem[]> {
+    const res = await fetch(
+      `https://discover.provider.plex.tv/library/sections/watchlist/all?X-Plex-Container-Start=0&X-Plex-Container-Size=40&X-Plex-Token=${this.cfg.token}`,
+      { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(8000) },
+    );
+    if (!res.ok) throw new Error(`Plex watchlist: HTTP ${res.status}`);
+    const data: any = await res.json();
+    return (data.MediaContainer?.Metadata ?? [])
+      .filter((m: any) => m.type === 'movie' || m.type === 'show')
+      .map((m: any) => ({
+        title: String(m.title),
+        year: m.year ? Number(m.year) : undefined,
+        mediaType: m.type === 'movie' ? 'movie' : 'tv',
+        thumb: typeof m.thumb === 'string' && m.thumb.startsWith('http') ? m.thumb : undefined,
+      }));
+  }
+
+  /** A season or show plays from its next unwatched episode; films/episodes play as they are. */
+  async playable(id: string): Promise<string> {
+    const meta = (await this.api(`/library/metadata/${id}`)).MediaContainer?.Metadata?.[0];
+    if (!meta || (meta.type !== 'season' && meta.type !== 'show')) return id;
+    const leaves: any[] = (await this.api(`/library/metadata/${id}/allLeaves`)).MediaContainer?.Metadata ?? [];
+    const next = leaves.find((e) => !e.viewCount) ?? leaves[0];
+    return next ? String(next.ratingKey) : id;
+  }
+
   thumb(path: string): Promise<Response> {
     const q = new URLSearchParams({ width: '640', height: '360', minSize: '1', upscale: '1', url: path, 'X-Plex-Token': this.cfg.token });
     return fetch(`${this.cfg.url}/photo/:/transcode?${q}`);
@@ -119,6 +169,13 @@ export class PlexClient {
     if (!res.ok) throw new Error(`Plex HTPC refused to play it (HTTP ${res.status})`);
     return String(item.grandparentTitle ?? item.title);
   }
+}
+
+export interface WatchlistItem {
+  title: string;
+  year?: number;
+  mediaType: 'movie' | 'tv';
+  thumb?: string;
 }
 
 export const DEMO_ON_DECK: OnDeckItem[] = [

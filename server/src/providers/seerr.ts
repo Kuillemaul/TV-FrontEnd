@@ -30,6 +30,8 @@ export interface MediaResult {
   backdrop?: string;
   overview: string;
   status: MediaStatus;
+  /** YouTube id of the trailer (details only). */
+  trailer?: string;
 }
 
 export interface RecentRequest extends MediaResult {
@@ -84,7 +86,14 @@ export function toMedia(r: any, fallbackType?: 'movie' | 'tv'): MediaResult | nu
     backdrop: r.backdropPath ? `${TMDB_IMG}/w1280${r.backdropPath}` : undefined,
     overview: String(r.overview ?? ''),
     status: mediaStatus(r.mediaInfo?.status),
+    trailer: pickTrailer(r.relatedVideos),
   };
+}
+
+/** The best YouTube video from Seerr's relatedVideos: a trailer, else a teaser. */
+export function pickTrailer(videos: any[] | undefined): string | undefined {
+  const yt = (videos ?? []).filter((v) => v?.site === 'YouTube' && v.key);
+  return (yt.find((v) => v.type === 'Trailer') ?? yt.find((v) => v.type === 'Teaser'))?.key;
 }
 
 /** One *arr queue record → DownloadItem. */

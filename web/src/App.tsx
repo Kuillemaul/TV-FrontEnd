@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GameLaunch, type LaunchProgress } from './components/GameLaunch';
 import { Icon } from './components/Icon';
-import { AlertStack } from './components/Alerts';
+import { AlertStack, CameraPip } from './components/Alerts';
+import { openMediaLater } from './pages/Requests';
 import { AppOrderEditor } from './components/AppOrderEditor';
 import { GameDetailsModal } from './components/GameDetails';
 import { PinMenu, pinOf } from './components/Pins';
@@ -65,6 +66,16 @@ export function App() {
   const [page, setPage] = useState<PageId>('home');
   const history = useRef<PageId[]>([]);
   const [voiceOpen, setVoiceOpen] = useState(false);
+  // What was focused when you started talking, for "pin this".
+  const focusBeforeVoice = useRef<Element | null>(null);
+  const openVoice = useCallback(() => {
+    focusBeforeVoice.current = document.activeElement;
+    setVoiceOpen(true);
+  }, []);
+  const [pip, setPip] = useState<{ entity: string; name?: string } | null>(null);
+  const pipRef = useRef(pip);
+  pipRef.current = pip;
+  const [sleepEndsAt, setSleepEndsAt] = useState<number | null>(null);
   const [kbmFor, setKbmFor] = useState<PlayRequest | null>(null);
   const [launch, setLaunch] = useState<LaunchProgress | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -138,7 +149,7 @@ export function App() {
   useWakeWord(Boolean(tvSettings?.wakeWord && info?.features.wakeWordAvailable), voiceOpen, () => {
     markInput();
     setSaver(false);
-    setVoiceOpen(true);
+    openVoice();
   });
 
   // A kid profile can't stay on a page it isn't allowed to see.
@@ -237,13 +248,37 @@ export function App() {
           return hearth.launchApp(a.id);
         case 'stop':
           return void post('/api/session/stop');
+        case 'request-open':
+          navigate('requests');
+          return openMediaLater(a.media);
+        case 'downloads':
+          return navigate('requests');
+        case 'pin-focused': {
+          const el = focusBeforeVoice.current;
+          const pin = pinOf(el);
+          if (!pin) return toast('Point at an app, game or channel first, then say “pin this”.');
+          return void hearth.togglePin(pin);
+        }
+        case 'camera':
+          return setPip(a.entity ? { entity: a.entity, name: a.name } : null);
+        case 'sleep-timer':
+        case 'request-search':
+          return; // answered by the server
       }
     },
     [hearth, navigate],
   );
 
+  useEffect(() => {
+    void get<{ endsAt: number | null }>('/api/sleep').then((r) => setSleepEndsAt(r.endsAt)).catch(() => undefined);
+  }, []);
+
   useServerEvents((e) => {
     switch (e.type) {
+      case 'sleep':
+        return setSleepEndsAt(e.endsAt);
+      case 'pip':
+        return setPip(e.entity ? { entity: e.entity, name: e.name } : null);
       case 'toast':
         return toast(e.message, e.level);
       case 'profiles':
@@ -282,13 +317,17 @@ export function App() {
   useEffect(
     () =>
       onNavCommand((cmd) => {
-        if (cmd === 'voice') setVoiceOpen(true);
+        if (cmd === 'voice') openVoice();
         if (cmd === 'menu' && !document.querySelector('[data-nav-scope]')) {
           const el = document.activeElement;
           const pin = pinOf(el);
           if (pin) setOverlay({ type: 'pin', pin, label: el?.querySelector('.tile-title, .tile-wordmark')?.textContent ?? undefined });
         }
         if (cmd === 'home') navigate('home');
+        if (cmd === 'back' && !document.querySelector('[data-nav-scope]') && pipRef.current) {
+          setPip(null);
+          return;
+        }
         if (cmd === 'back' && !document.querySelector('[data-nav-scope]')) {
           const prev = history.current.pop();
           if (prev) setPage(prev);
@@ -341,7 +380,7 @@ export function App() {
             ))}
           </div>
           <div className="topbar-right">
-            <button className="icon-btn" data-nav onClick={() => setVoiceOpen(true)} aria-label="Voice">
+            <button className="icon-btn" data-nav onClick={openVoice} aria-label="Voice">
               <Icon name="mic" />
             </button>
             {!isKid ? (
@@ -350,6 +389,11 @@ export function App() {
               </button>
             ) : null}
             {isKid ? <TimeLeftChip status={screenTime} /> : null}
+            {sleepEndsAt ? (
+              <button className="sleep-chip" data-nav onClick={() => void post('/api/sleep', { minutes: 0 })} title="Cancel the sleep timer">
+                <Icon name="moon" size="1em" /> {Math.max(1, Math.ceil((sleepEndsAt - now) / 60_000))} min
+              </button>
+            ) : null}
             {profile ? (
               <button className="icon-btn avatar-btn" data-nav onClick={() => setOverlay({ type: 'menu' })} aria-label={`Profile: ${profile.name}`}>
                 <Avatar profile={profile} size="sm" />
@@ -439,6 +483,7 @@ export function App() {
           />
         ) : null}
         <AlertStack alerts={alerts} onExpire={expireAlert} />
+        {pip ? <CameraPip entity={pip.entity} name={pip.name} onClose={() => setPip(null)} /> : null}
         {saver ? <Screensaver clock24h={info?.clock24h ?? false} onWake={wakeFromSaver} /> : null}
       </div>
     </HearthContext.Provider>

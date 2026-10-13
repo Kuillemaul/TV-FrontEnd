@@ -133,7 +133,12 @@ function CameraCard({ entity }: { entity: HaEntity }) {
   }, []);
   return (
     <div className="entity entity-camera">
-      <button className="entity-main" data-nav onClick={() => setTick(Date.now())}>
+      {/* Select: keep watching this camera in a corner (picture-in-picture). */}
+      <button
+        className="entity-main"
+        data-nav
+        onClick={() => void post('/api/pip', { entity: entity.entity_id, name: entity.attributes.friendly_name })}
+      >
         {failed ? (
           <span className="camera-placeholder">
             <Icon name="camera" size="2.4em" />

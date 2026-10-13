@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { matchIntent, type IntentCatalog } from './intents.js';
+import { matchIntent, parseDuration, type IntentCatalog } from './intents.js';
 
 const catalog: IntentCatalog = {
   apps: [
@@ -61,4 +61,42 @@ test('tv power and inputs', () => {
   assert.deepEqual(matchIntent('turn the TV on', withInputs)?.action, { type: 'tv-power', on: true });
   assert.deepEqual(matchIntent('switch to the xbox', withInputs)?.action, { type: 'tv-input', id: 'xbox', name: 'Xbox' });
   assert.equal(matchIntent('switch to channel 4', withInputs)?.action.type, 'watch-channel');
+});
+
+test('sleep timer phrases and durations', () => {
+  const minutes = (s: string) => {
+    const a = matchIntent(s, catalog)?.action;
+    return a?.type === 'sleep-timer' ? a.minutes : null;
+  };
+  assert.equal(minutes('sleep timer one hour'), 60);
+  assert.equal(minutes('Set a sleep timer for 30 minutes'), 30);
+  assert.equal(minutes('turn off in an hour and a half'), 90);
+  assert.equal(minutes('turn the TV off in 45 mins'), 45);
+  assert.equal(minutes('sleep timer forty five minutes'), 45);
+  assert.equal(minutes('sleep timer half an hour'), 30);
+  assert.equal(minutes('sleep timer 1.5 hours'), 90);
+  assert.equal(minutes('sleep timer two hours and 15 minutes'), 135);
+  assert.equal(minutes('cancel the sleep timer'), 0);
+  assert.equal(minutes('how long is left on the sleep timer'), -1);
+  assert.equal(minutes('sleep timer banana'), null);
+  assert.equal(parseDuration('20'), 20);
+});
+
+test('requests, downloads, pin this', () => {
+  assert.deepEqual(matchIntent('Request Dune Part Three', catalog)?.action, { type: 'request-search', query: 'dune part three' });
+  assert.deepEqual(matchIntent('can you download Severance for me', catalog)?.action, { type: 'request-search', query: 'severance' });
+  assert.equal(matchIntent('What’s downloading?', catalog)?.action.type, 'downloads');
+  assert.equal(matchIntent('how are the downloads going', catalog)?.action.type, 'downloads');
+  assert.equal(matchIntent('pin this', catalog)?.action.type, 'pin-focused');
+  assert.equal(matchIntent('unpin that from the home screen', catalog), null);
+  assert.equal(matchIntent('unpin that', catalog)?.action.type, 'pin-focused');
+  assert.deepEqual(matchIntent('go to requests', catalog)?.action, { type: 'navigate', page: 'requests' });
+});
+
+test('cameras', () => {
+  const withCams = { ...catalog, cameras: [{ id: 'camera.front_porch', name: 'Front Porch' }, { id: 'camera.garage', name: 'Garage Camera' }], doorbellCamera: 'camera.front_door' };
+  assert.deepEqual(matchIntent('show the garage camera', withCams)?.action, { type: 'camera', entity: 'camera.garage', name: 'Garage Camera' });
+  assert.deepEqual(matchIntent('show me the front porch camera', withCams)?.action, { type: 'camera', entity: 'camera.front_porch', name: 'Front Porch' });
+  assert.equal((matchIntent('who’s at the door', withCams)?.action as { entity: string }).entity, 'camera.front_door');
+  assert.deepEqual(matchIntent('hide the camera', withCams)?.action, { type: 'camera', entity: null });
 });

@@ -43,7 +43,7 @@ export interface Alert {
   message?: string;
   camera?: string;
   image?: string;
-  action?: { label: string; kind: 'watch'; title: string };
+  action?: { label: string; kind: 'watch' | 'sleep-extend' | 'pip'; title?: string; entity?: string };
   seconds: number;
   at: number;
 }
@@ -61,6 +61,13 @@ export interface OnDeckItem {
   subtitle: string;
   thumb?: string;
   progress: number;
+}
+
+export interface WatchlistItem {
+  title: string;
+  year?: number;
+  mediaType: 'movie' | 'tv';
+  thumb?: string;
 }
 
 export interface BrowseSource {
@@ -269,6 +276,7 @@ export interface MediaResult {
   status: 'none' | 'requested' | 'processing' | 'partial' | 'available' | 'blocked';
   requestedBy?: string;
   approval?: 'pending' | 'approved' | 'declined';
+  trailer?: string;
 }
 
 export interface DownloadItem {
@@ -294,7 +302,13 @@ export type UiAction =
   | { type: 'watch-channel'; id: string; name: string }
   | { type: 'tv-power'; on: boolean }
   | { type: 'tv-input'; id: string; name: string }
-  | { type: 'stop' };
+  | { type: 'stop' }
+  | { type: 'request-search'; query: string }
+  | { type: 'request-open'; media: { id: number; mediaType: 'movie' | 'tv'; title: string; year: number | null } }
+  | { type: 'downloads' }
+  | { type: 'pin-focused' }
+  | { type: 'sleep-timer'; minutes: number }
+  | { type: 'camera'; entity: string | null; name?: string };
 
 export type ServerEvent =
   | { type: 'session'; session: Session | null }
@@ -311,6 +325,8 @@ export type ServerEvent =
   | { type: 'settings' }
   | { type: 'games' }
   | { type: 'display' }
+  | { type: 'sleep'; endsAt: number | null }
+  | { type: 'pip'; entity: string | null; name?: string }
   | { type: 'pair'; hostId: string; stage: 'waking' | 'pairing' | 'auto-pin' | 'paired' | 'failed'; message: string };
 
 export async function get<T>(path: string): Promise<T> {

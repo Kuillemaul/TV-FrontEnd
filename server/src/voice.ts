@@ -22,11 +22,18 @@ export class VoiceService {
     private readonly ha: HomeAssistant | undefined,
     private readonly catalog: () => Promise<IntentCatalog>,
     private readonly allowHome: () => boolean = () => true,
+    /** Some commands need the server to answer them (look something up, set a timer). */
+    private readonly resolve?: (action: UiAction) => Promise<{ action?: UiAction; speech: string } | null>,
   ) {}
 
   async process(text: string): Promise<VoiceResult> {
     const local = matchIntent(text, await this.catalog());
-    if (local) return { text, speech: local.speech, action: local.action, audio: await this.tts(local.speech) };
+    if (local) {
+      const resolved = this.resolve ? await this.resolve(local.action).catch(() => null) : null;
+      const speech = resolved ? resolved.speech : local.speech;
+      const action = resolved ? resolved.action : local.action;
+      return { text, speech, action, audio: speech ? await this.tts(speech) : undefined };
+    }
 
     if (!this.allowHome()) return { text, speech: "I can open your apps and games. Try “play” and a game's name." };
     if (!this.ha?.connected) {
