@@ -1,5 +1,5 @@
 # Tvheadend for the USB tuner: live TV, guide (EPG) and DVR.
-#   sudo apt install docker.io docker-compose-v2
+#   sudo apt install docker.io docker-compose   # Debian (Ubuntu: docker-compose-v2)
 #   sudo docker compose -f /opt/hearth/os/tvheadend/docker-compose.yml up -d
 # Then open http://<tv-ip>:9981 and run the setup wizard.
 services:

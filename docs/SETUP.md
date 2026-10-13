@@ -178,7 +178,7 @@ Linux-supported USB tuner. For US ATSC 1.0 the **Hauppauge WinTV-dualHD** is a s
 record and watch at once). ATSC 3.0 channels are mostly DRM-encrypted and won't work with any Linux tuner.
 
 ```bash
-sudo apt install docker.io docker-compose-v2
+sudo apt install docker.io docker-compose   # Debian (Ubuntu: docker-compose-v2)
 sudo mkdir -p /srv/tvheadend/config /srv/recordings && sudo chown -R tv:tv /srv/tvheadend /srv/recordings
 # set PUID/PGID (id tv) and TZ in the file first
 sudo docker compose -f /opt/hearth/os/tvheadend/docker-compose.yml up -d
