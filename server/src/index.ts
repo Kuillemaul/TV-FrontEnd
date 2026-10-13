@@ -430,7 +430,12 @@ app.post<{ Body: { channelId: string } }>('/api/tv/watch', async (req) => {
     state.setLastChannel(chs[index].id);
     await launcher.launch('livetv', `Live TV – ${chs[index].name}`, {
       type: 'command',
-      command: [...expand(config.livetv.player, { playlist, index }), ...(plexLive?.playerArgs() ?? [])],
+      command: [
+        ...expand(config.livetv.player, { playlist, index }),
+        ...(plexLive?.playerArgs() ?? []),
+        // What the player saw (stream errors, key presses) for troubleshooting.
+        ...(config.livetv.player[0] === 'mpv' ? [`--log-file=${join(config.stateDir, 'mpv-livetv.log')}`] : []),
+      ],
     });
     return { ok: true };
   } catch (err) {
