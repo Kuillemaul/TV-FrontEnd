@@ -8,6 +8,9 @@ set -euo pipefail
 
 [[ $EUID -eq 0 ]] || { echo "Run as root (sudo)"; exit 1; }
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
+# Commands run as the tv user below can't enter someone else's home folder (where the checkout
+# usually lives), so don't run them from there.
+cd /
 TV_USER=tv
 
 echo "==> Packages"
