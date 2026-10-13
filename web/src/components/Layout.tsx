@@ -1,18 +1,55 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { focusElement, focusFirst, onScopedBack } from '../nav/spatial';
 import type { Pin } from '../lib/api';
 import { Icon } from './Icon';
 
-/** A titled horizontal row of tiles; remembers its focused tile. */
+/** A titled horizontal row of tiles; remembers its focused tile. Arrows at the ends scroll it with the mouse. */
 export function Row({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
+  const scroller = useRef<HTMLDivElement>(null);
+  const [edges, setEdges] = useState({ left: false, right: false });
+  const update = useCallback(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const next = { left: el.scrollLeft > 4, right: el.scrollLeft + el.clientWidth < el.scrollWidth - 4 };
+    setEdges((e) => (e.left === next.left && e.right === next.right ? e : next));
+  }, []);
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    for (const child of Array.from(el.children)) ro.observe(child);
+    const mo = new MutationObserver(update);
+    mo.observe(el, { childList: true });
+    return () => {
+      ro.disconnect();
+      mo.disconnect();
+    };
+  }, [update]);
+  const page = (dir: 1 | -1) => scroller.current?.scrollBy({ left: dir * scroller.current.clientWidth * 0.8, behavior: 'smooth' });
+
   return (
     <section className="row">
       <header className="row-header">
         <h2>{title}</h2>
         {action}
       </header>
-      <div className="row-scroller" data-nav-group>
-        {children}
+      <div className="row-body">
+        <div className="row-scroller" data-nav-group ref={scroller} onScroll={update}>
+          {children}
+        </div>
+        {/* Mouse only: not part of remote/controller navigation. */}
+        {edges.left ? (
+          <button className="row-arrow row-arrow-left" tabIndex={-1} aria-label="Scroll left" onClick={() => page(-1)}>
+            <Icon name="left" size="1.6em" />
+          </button>
+        ) : null}
+        {edges.right ? (
+          <button className="row-arrow row-arrow-right" tabIndex={-1} aria-label="Scroll right" onClick={() => page(1)}>
+            <Icon name="right" size="1.6em" />
+          </button>
+        ) : null}
       </div>
     </section>
   );

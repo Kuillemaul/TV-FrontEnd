@@ -324,6 +324,16 @@ export function App() {
           if (pin) setOverlay({ type: 'pin', pin, label: el?.querySelector('.tile-title, .tile-wordmark')?.textContent ?? undefined });
         }
         if (cmd === 'home') navigate('home');
+        if ((cmd === 'prevTab' || cmd === 'nextTab') && !document.querySelector('[data-nav-scope]')) {
+          // Shoulder buttons step through the top menu, wrapping round.
+          const tabs = [...document.querySelectorAll<HTMLElement>('.topbar .tab[data-page]')].map((t) => t.dataset.page as PageId);
+          if (tabs.length) {
+            const i = tabs.indexOf(page);
+            const step = cmd === 'nextTab' ? 1 : tabs.length - 1;
+            // From a page that isn't in the menu (Settings), start at either end.
+            navigate(i < 0 ? tabs[cmd === 'nextTab' ? 0 : tabs.length - 1] : tabs[(i + step) % tabs.length]);
+          }
+        }
         if (cmd === 'back' && !document.querySelector('[data-nav-scope]') && pipRef.current) {
           setPip(null);
           return;
@@ -373,7 +383,7 @@ export function App() {
           </div>
           <div className="tabs">
             {TABS.filter((t) => (!allowed || allowed.includes(t.id)) && (t.id !== 'requests' || info?.features.requests || info?.features.downloads)).map((t) => (
-              <button key={t.id} className={`tab ${page === t.id ? 'tab-active' : ''}`} data-nav onClick={() => navigate(t.id)}>
+              <button key={t.id} className={`tab ${page === t.id ? 'tab-active' : ''}`} data-nav data-page={t.id} onClick={() => navigate(t.id)}>
                 <Icon name={t.icon} size="1.2em" />
                 <span>{t.label}</span>
               </button>

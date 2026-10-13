@@ -123,7 +123,8 @@ h1, h2 { margin: 0; font-weight: 650; letter-spacing: -0.01em; }
   color: var(--text-2);
   font-size: 1.05rem;
   font-weight: 550;
-  transition: background 0.2s var(--ease), color 0.2s var(--ease), transform 0.2s var(--ease);
+  /* Losing focus is instant, so moving along the menu never shows two highlighted items. */
+  transition: none;
 }
 
 .icon-btn { padding: 0.65rem; }
@@ -134,6 +135,7 @@ h1, h2 { margin: 0; font-weight: 650; letter-spacing: -0.01em; }
   background: var(--text);
   color: var(--bg);
   transform: scale(1.06);
+  transition: background 0.12s var(--ease), color 0.12s var(--ease), transform 0.2s var(--ease);
 }
 
 .topbar-right {
@@ -1880,3 +1882,29 @@ body.is-alert { background: transparent; }
 .ch-tag { flex: none; font-size: 0.7rem; font-weight: 750; letter-spacing: 0.04em; padding: 0.1rem 0.35rem; border-radius: 0.3rem; border: 1px solid currentColor; opacity: 0.85; }
 .ch-tag-dim { opacity: 0.5; font-weight: 600; }
 .guide-channel .ch-tag { margin-left: auto; }
+
+/* Row scroll arrows (mouse only; the remote/controller scroll by moving focus). */
+.row-body { position: relative; }
+.row-arrow {
+  position: absolute;
+  top: 50%;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 3.2rem;
+  height: 3.2rem;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: rgba(10, 12, 18, 0.72);
+  backdrop-filter: blur(10px);
+  color: var(--text);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%) scale(0.9);
+  transition: opacity 0.18s var(--ease), transform 0.18s var(--ease), background 0.18s var(--ease);
+}
+.row-arrow-left { left: calc(-1 * var(--gutter) + 0.6rem); }
+.row-arrow-right { right: calc(-1 * var(--gutter) + 0.6rem); }
+body.mouse-active .row-body:hover .row-arrow { opacity: 1; pointer-events: auto; transform: translateY(-50%) scale(1); }
+.row-arrow:hover { background: var(--text); color: var(--bg); }

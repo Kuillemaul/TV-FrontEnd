@@ -8,13 +8,14 @@
  *
  * Inputs:
  *   keyboard / IR / CEC remotes  → arrows, Enter, Escape/Backspace/BrowserBack
- *   game controllers             → D-pad/stick, A = select, B = back, X = menu (pin), Y = voice, Start = home
+ *   game controllers             → D-pad/stick, A = select, B = back, X = menu (pin), Y = voice, Start = home,
+ *                                  LB / RB = previous / next page in the top menu
  *   keyboard Menu key / P / right-click → menu (pin to Home)
  *   mouse                        → hover focuses, click activates
  */
 
 export type Dir = 'up' | 'down' | 'left' | 'right';
-export type NavCommand = 'back' | 'voice' | 'home' | 'menu';
+export type NavCommand = 'back' | 'voice' | 'home' | 'menu' | 'prevTab' | 'nextTab';
 
 const SELECTOR = '[data-nav]:not([disabled])';
 const groupMemory = new WeakMap<Element, HTMLElement>();
@@ -179,6 +180,8 @@ const enum Btn {
   B = 1,
   X = 2,
   Y = 3,
+  LB = 4,
+  RB = 5,
   Back = 8,
   Start = 9,
   Up = 12,
@@ -238,6 +241,8 @@ function poll(now: number): void {
       if (edge(Btn.Y)) emit('voice');
       if (edge(Btn.X)) emit('menu');
       if (edge(Btn.Start)) emit('home');
+      if (edge(Btn.LB)) emit('prevTab');
+      if (edge(Btn.RB)) emit('nextTab');
 
       const dir = padDir(gp);
       let nextRepeat = prev.nextRepeat;
