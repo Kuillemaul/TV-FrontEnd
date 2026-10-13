@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { isElevated } from './elevate.js';
 
 export interface Theme {
   background: string;
@@ -131,12 +132,13 @@ export class ProfileStore {
   }
 
   private requireAdmin(): void {
+    if (isElevated()) return;
     if (this.active.kind !== 'admin') throw new PermissionError('Only a parent profile can do that');
   }
 
   setActive(id: string, pin?: string): Profile {
     const p = this.get(id);
-    if (p.pinHash && p.id !== this.active.id && hash(pin ?? '') !== p.pinHash) throw new PermissionError('Wrong PIN');
+    if (p.pinHash && p.id !== this.active.id && !isElevated() && hash(pin ?? '') !== p.pinHash) throw new PermissionError('Wrong PIN');
     this.data.activeId = p.id;
     this.save();
     return p;
@@ -181,6 +183,7 @@ export class ProfileStore {
     if (patch.liveTv !== undefined) p.liveTv = patch.liveTv;
     if (patch.limits !== undefined) p.limits = { ...NO_LIMITS, ...p.limits, ...patch.limits };
     if (patch.theme) p.theme = { ...p.theme, ...patch.theme };
+    if (patch.pins !== undefined) p.pins = (Array.isArray(patch.pins) ? patch.pins : []).slice(0, MAX_PINS).map(cleanPin);
     if (patch.pin !== undefined) {
       if (patch.pin === null || patch.pin === '') delete p.pinHash;
       else if (!/^\d{4}$/.test(patch.pin)) throw new Error('PIN must be 4 digits');

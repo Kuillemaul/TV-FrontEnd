@@ -146,7 +146,23 @@ const rgb = (hex: string) => {
 };
 
 export const findPalette = (id: string) => PALETTES.find((p) => p.id === id) ?? PALETTES[0];
-export const findBackground = (id: string) => BACKGROUNDS.find((b) => b.id === id) ?? BACKGROUNDS[0];
+/** Uploaded photo backgrounds are stored as "image:<file>" (served from /backgrounds/<file>). */
+export const isImageBackground = (id: string) => id.startsWith('image:');
+export const imageUrl = (id: string) => `/backgrounds/${encodeURIComponent(id.slice('image:'.length))}`;
+
+export const findBackground = (id: string): Background => {
+  if (isImageBackground(id)) {
+    // Darkened so text and tiles stay readable on any photo.
+    return {
+      id,
+      name: 'Photo',
+      bg: '#05060a',
+      panel: '#151a26',
+      layers: `linear-gradient(180deg, rgba(5, 6, 10, 0.55) 0%, rgba(5, 6, 10, 0.72) 60%, rgba(5, 6, 10, 0.88) 100%), url("${imageUrl(id)}") center / cover no-repeat`,
+    };
+  }
+  return BACKGROUNDS.find((b) => b.id === id) ?? BACKGROUNDS[0];
+};
 export const findFont = (id: string) => FONTS.find((f) => f.id === id) ?? FONTS[0];
 
 /** CSS variables for a theme; applied to :root, or to an element for previews. */

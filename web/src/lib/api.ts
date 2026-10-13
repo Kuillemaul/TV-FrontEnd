@@ -4,6 +4,10 @@ export type PageId = 'home' | 'tv' | 'apps' | 'games' | 'requests' | 'smarthome'
 
 export interface Info {
   name: string;
+  /** Changes every time the server starts (used to notice a restart). */
+  bootId?: string;
+  /** The network editor's port, when it's on. */
+  admin?: { port: number; url: string } | null;
   clock24h: boolean;
   demo: { tv: boolean; homeassistant: boolean; games: boolean };
   /** Sections configured in config.yaml (or showing demo data). */
@@ -352,9 +356,20 @@ type Listener = (e: ServerEvent) => void;
 const listeners = new Set<Listener>();
 let socket: WebSocket | null = null;
 
+let bootId: string | null = null;
+
 function connect(): void {
   const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
   socket = ws;
+  // After Hearth restarts (e.g. config saved in the network editor), reload to pick everything up.
+  ws.onopen = () => {
+    void get<{ bootId?: string }>('/api/info')
+      .then((info) => {
+        if (bootId && info.bootId && info.bootId !== bootId) location.reload();
+        bootId = info.bootId ?? bootId;
+      })
+      .catch(() => undefined);
+  };
   ws.onmessage = (m) => {
     const event = JSON.parse(m.data) as ServerEvent;
     for (const l of listeners) l(event);

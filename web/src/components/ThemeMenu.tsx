@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import type { ThemeChoice } from '../lib/api';
-import { applyTheme, BACKGROUNDS, findFont, FONTS, PALETTES, themeVars } from '../lib/theme';
+import { useApi, type ThemeChoice } from '../lib/api';
+import { applyTheme, BACKGROUNDS, findBackground, findFont, FONTS, PALETTES, themeVars } from '../lib/theme';
 import { focusFirst } from '../nav/spatial';
 import { Icon } from './Icon';
 import { Button, useBack } from './Layout';
@@ -25,6 +25,9 @@ export function ThemeMenu({
   onClose: () => void;
 }) {
   const [chosen, setChosen] = useState<ThemeChoice>(initial);
+  // Photos uploaded in the network editor are backgrounds too.
+  const photos = useApi<{ files: Array<{ file: string }> }>('/api/backgrounds');
+  const backgrounds = [...BACKGROUNDS, ...(photos.data?.files ?? []).map((f) => ({ ...findBackground(`image:${f.file}`), name: f.file.replace(/\.[a-z]+$/, '') }))];
   const ref = useRef<HTMLDivElement>(null);
   const saved = useRef(false);
 
@@ -59,7 +62,7 @@ export function ThemeMenu({
         <section className="theme-section">
           <h3>Background</h3>
           <div className="theme-grid theme-backgrounds" data-nav-group>
-            {BACKGROUNDS.map((b) => {
+            {backgrounds.map((b) => {
               const vars = themeVars({ ...chosen, background: b.id });
               return (
                 <button
@@ -117,7 +120,7 @@ export function ThemeMenu({
         </section>
 
         <div className="theme-summary">
-          {BACKGROUNDS.find((b) => b.id === chosen.background)?.name} · {PALETTES.find((p) => p.id === chosen.palette)?.name} ·{' '}
+          {backgrounds.find((b) => b.id === chosen.background)?.name ?? 'Photo'} · {PALETTES.find((p) => p.id === chosen.palette)?.name} ·{' '}
           {findFont(chosen.font).name}
         </div>
         <div className="modal-actions" data-nav-group>

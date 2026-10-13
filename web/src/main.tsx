@@ -4,13 +4,14 @@ import { App } from './App';
 import { AlertPage } from './components/Alerts';
 import { PairPage } from './components/Pairing';
 import { LoadingCoverPage } from './components/LoadingCover';
+import { AdminPage } from './admin/Admin';
 import { RemotePage } from './pages/Remote';
 import './styles.css';
 
 // One bundle, three entry points: the TV shell, the phone remote, and the alert window
 // the server opens over other apps.
 const path = location.pathname;
-const Root = path.startsWith('/remote') ? RemotePage : path.startsWith('/alert') ? AlertPage : path.startsWith('/pair') ? PairPage : path.startsWith('/launching') ? LoadingCoverPage : App;
+const Root = path.startsWith('/admin') ? AdminPage : path.startsWith('/remote') ? RemotePage : path.startsWith('/alert') ? AlertPage : path.startsWith('/pair') ? PairPage : path.startsWith('/launching') ? LoadingCoverPage : App;
 if (path.startsWith('/remote')) document.body.classList.add('is-remote');
 if (path.startsWith('/alert')) document.body.classList.add('is-alert');
 

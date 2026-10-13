@@ -19,14 +19,17 @@ import { PermissionError, ProfileStore, type Profile } from './profiles.js';
 import { AlertService, type Alert } from './alerts.js';
 import { SceneAutomation } from './automations.js';
 import { PlexClient } from './providers/plex.js';
-import { cookieToken, isLoopback, RemotePairing } from './remote.js';
+import { cookieToken, isLoopback, lanAddress, RemotePairing } from './remote.js';
 import { registerExtras } from './routes/extras.js';
+import { registerAdminApi, startAdminServer } from './routes/admin.js';
+import { installElevation, isElevated } from './elevate.js';
 import { ScreenTime } from './screentime.js';
 import { StateStore } from './state.js';
 import { VoiceService } from './voice.js';
 
 const config = loadConfig();
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' } });
+installElevation(app);
 const log = {
   info: (m: string) => app.log.info(m),
   warn: (m: string) => app.log.warn(m),
@@ -148,7 +151,9 @@ const visibleGames = async (force = false) => {
   const p = profiles.active;
   return (await games.games(force)).filter((g) => ProfileStore.allowsGame(p, g.hostId, g.id));
 };
-const isKid = () => profiles.active.kind === 'kid';
+// The network editor acts as a parent whatever profile is on screen.
+const isKid = () => !isElevated() && profiles.active.kind === 'kid';
+const bootId = Date.now().toString(36);
 
 const catalog = async (): Promise<IntentCatalog> => ({
   apps: visibleApps().map((a) => ({ id: a.id, name: a.name })),
@@ -184,6 +189,8 @@ app.addHook('onRequest', async (req, reply) => {
 
 app.get('/api/info', async () => ({
   name: config.ui.name,
+  bootId,
+  admin: config.admin.enabled ? { port: config.admin.port, url: `http://${lanAddress() ?? 'this-tv'}:${config.admin.port}` } : null,
   clock24h: config.ui.clock24h,
   demo: { tv: tv.demo, homeassistant: Boolean(demoHome), games: games.demo },
   setup: { tv: Boolean(config.livetv.tvheadend) || tv.demo, homeassistant: Boolean(ha || demoHome), games: config.gaming.hosts.length > 0 || games.demo },
@@ -511,6 +518,8 @@ app.get('/ws/voice', { websocket: true }, (socket) => voice.handle(socket));
 
 /* ---------------- UI ---------------- */
 
+registerAdminApi(app, { config, configPath: resolveConfigPath(), bus, log });
+
 const webDist = fileURLToPath(new URL('../../web/dist', import.meta.url));
 if (existsSync(webDist)) {
   await app.register(fastifyStatic, { root: webDist });
@@ -525,6 +534,9 @@ hotkeys.start();
 
 await app.listen({ port: config.server.port, host: config.server.host });
 if (config.ignoredExamples.length) log.info(`Skipped untouched example entries from config.yaml: ${config.ignoredExamples.join(', ')}`);
+await startAdminServer(app, { config, configPath: resolveConfigPath(), bus, log }, webDist).catch((err) =>
+  log.warn(`network editor: ${(err as Error).message}`),
+);
 log.info(`Hearth ready on http://${config.server.host}:${config.server.port}${config.demo ? ' (demo mode)' : ''}`);
 
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {

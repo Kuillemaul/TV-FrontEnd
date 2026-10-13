@@ -184,6 +184,8 @@ export interface HearthConfig {
   livetv: LiveTvConfig;
   homeassistant?: HomeAssistantConfig;
   lab: LabConfig;
+  /** The network editor (http://<tv>:<port>, home network only, no login). */
+  admin: { enabled: boolean; port: number };
   /** Seerr for requests; Radarr/Sonarr/Lidarr for the download queue. */
   requests: RequestsConfig;
   gaming: GamingConfig;
@@ -250,6 +252,7 @@ function defaults(): HearthConfig {
     },
     lab: { services: [], sensors: [], actions: [] },
     requests: {},
+    admin: { enabled: true, port: 8780 },
     scenes: [],
     alerts: { rules: [], labDown: true },
     tv: {
@@ -410,6 +413,7 @@ export function loadConfig(path = resolveConfigPath()): HearthConfig {
     cfg.lab.sensors = Array.isArray(raw.lab.sensors) ? raw.lab.sensors : [];
     cfg.lab.actions = Array.isArray(raw.lab.actions) ? raw.lab.actions : [];
   }
+  if (raw.admin) cfg.admin = { enabled: raw.admin.enabled ?? true, port: Number(raw.admin.port ?? 8780) };
   if (raw.requests) {
     for (const k of ['seerr', 'radarr', 'sonarr', 'lidarr'] as const) {
       const svc = raw.requests[k];

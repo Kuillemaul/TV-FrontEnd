@@ -206,6 +206,11 @@ export function SettingsPage() {
       <section className="settings-group">
         <h2>About</h2>
         <div className="about">
+          {hearth.info?.admin ? (
+            <div>
+              Edit everything from your phone or laptop: <code>{hearth.info.admin.url}</code>
+            </div>
+          ) : null}
           <div>Config file: <code>{hearth.info?.configPath}</code></div>
           <div>
             {(['tv', 'homeassistant', 'games'] as const)

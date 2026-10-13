@@ -68,6 +68,13 @@ quit the game, press Home, or Moonlight closes) Hearth closes the game and ends 
 (`"apollo": {"username", "password"}`) and the PC ends the session itself, without Moonlight's "quitting" window
 appearing on the TV. Turn these off per PC with `loadingScreen: false` / `endSessionOnExit: false`.
 
+**Network editor:** open `http://<TV's IP>:8780` on your phone or laptop (Settings → About shows the address). No
+login; it only answers devices on your home network. From there you can edit profiles (name, colour, PIN, kid
+limits, apps and their order, games, pins, theme), add web apps, upload your own photos as Home backgrounds, change
+TV settings (automations, resolution/refresh, sound output and speaker test, sleep/restart), and edit
+`config.yaml` with live checking. Saving the config keeps a backup (`config/backups/`) and restarts Hearth; the TV
+reloads by itself. Turn it off with `admin: { enabled: false }`.
+
 **Requests (Seerr):** with `requests:` in config.yaml, a **Requests** tab appears (parents only): search with the
 keyboard or phone remote, or browse Trending / Popular / Coming soon with the remote, then *Request* a film or every
 season of a show. Badges show what's requested, on its way or already in your library. With Radarr, Sonarr or

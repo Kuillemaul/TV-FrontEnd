@@ -202,6 +202,12 @@ screensaver:
   pickerAfterMinutes: 30   # after this long idle, ask "Who's watching?" again
   photosDir: /srv/photos   # jpg/png/webp slideshow; a gradient is shown if empty
 
+# Network editor: http://<this TV>:8780 from any device on your home network (no login; it refuses
+# addresses outside your network). Edit profiles, apps, backgrounds, TV settings and this file.
+admin:
+  enabled: true
+  port: 8780
+
 # Phone remote: set server.host to 0.0.0.0 above, then pair from Settings → Phone remote.
 remote:
   keyCommand: [ydotool, key, "{code}:1", "{code}:0"]   # how presses reach Plex/browser/Moonlight ({key} = KEY_ENTER style name)
