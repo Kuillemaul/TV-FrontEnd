@@ -140,3 +140,8 @@ html.is-admin body { overflow: auto; background: #0b0d13; cursor: auto; }
   .ad-list { position: static; flex-direction: row; flex-wrap: wrap; }
   .ad-kv span { width: 8rem; }
 }
+
+.ad-normal { font-weight: 500; }
+.ad b.good { color: #3ddc97; }
+.ad b.bad { color: #ffb3ba; }
+.ad-changes { margin: 0; padding-left: 1.1rem; color: var(--ad-dim); line-height: 1.7; }

@@ -1,6 +1,8 @@
 import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
+import { execFile } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { basename, dirname, extname, join } from 'node:path';
 import { parseDocument } from 'yaml';
 import type { EventBus } from '../bus.js';
@@ -102,6 +104,32 @@ export function registerAdminApi(app: FastifyInstance, ctx: AdminContext): void 
 
   app.post('/api/admin/restart', async () => {
     scheduleRestart(log);
+    return { ok: true };
+  });
+
+  /* ---------- updates (os/update.sh, run as root by hearth-update.service) ---------- */
+
+  const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
+  const git = (args: string[]) =>
+    new Promise<string>((resolve) => execFile('git', ['-C', repoRoot, ...args], { timeout: 5000 }, (err, out) => resolve(err ? '' : out.trim())));
+
+  app.get('/api/admin/update', async () => {
+    const [head, branch] = await Promise.all([git(['log', '-1', '--format=%h%x09%cI%x09%s']), git(['rev-parse', '--abbrev-ref', 'HEAD'])]);
+    const [sha, date, subject] = head.split('\t');
+    let status: unknown = null;
+    try {
+      status = JSON.parse(readFileSync(join(config.stateDir, 'update.json'), 'utf8'));
+    } catch {
+      /* never run yet */
+    }
+    return { current: sha ? { sha, date, subject } : null, branch: branch || null, status };
+  });
+
+  app.post('/api/admin/update', async (_req, reply) => {
+    const err = await new Promise<string | null>((resolve) =>
+      execFile('systemctl', ['start', '--no-block', 'hearth-update.service'], { timeout: 10_000 }, (e, _out, stderr) => resolve(e ? stderr.trim() || e.message : null)),
+    );
+    if (err) return reply.code(500).send({ ok: false, error: `Couldn't start the updater (${err}). Re-run os/install.sh once to set it up.` });
     return { ok: true };
   });
 

@@ -9,8 +9,22 @@ export interface Alert {
   message?: string;
   /** camera.* entity to show live */
   camera?: string;
+  /** Poster/picture shown in the pop-up. */
+  image?: string;
+  /** A button on the pop-up ("Watch" a newly downloaded film in Plex). */
+  action?: AlertAction;
   seconds: number;
   at: number;
+}
+
+export interface AlertAction {
+  label: string;
+  kind: 'watch';
+  title: string;
+  year?: number;
+  mediaType: 'movie' | 'tv';
+  season?: number;
+  episode?: number;
 }
 
 const DOORBELL_ON = new Set(['on', 'ringing', 'pressed', 'detected']);

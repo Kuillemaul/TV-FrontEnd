@@ -5,6 +5,7 @@ import type { AlertService } from '../alerts.js';
 import { AudioControl } from '../audio.js';
 import { DisplayControl } from '../display.js';
 import { RequestsClient } from '../providers/seerr.js';
+import { ArrWatcher } from '../providers/arrwatch.js';
 import type { EventBus } from '../bus.js';
 import { expand, type HearthConfig, type LabAction } from '../config.js';
 import type { Launcher } from '../launcher.js';
@@ -87,7 +88,7 @@ export function registerExtras(app: FastifyInstance, ctx: ExtrasContext): void {
   app.put<{ Body: Partial<StateStore['settings']> }>('/api/settings', async (req) =>
     run(() => {
       requireParent();
-      const allowed = ['scenes', 'wakeWord', 'alertsOverApps'] as const;
+      const allowed = ['scenes', 'wakeWord', 'alertsOverApps', 'autoUpdate'] as const;
       state.updateSettings(Object.fromEntries(allowed.filter((k) => k in req.body).map((k) => [k, Boolean(req.body[k])])));
       bus.emit({ type: 'settings' });
       return state.settings;
@@ -211,13 +212,22 @@ export function registerExtras(app: FastifyInstance, ctx: ExtrasContext): void {
   app.get<{ Params: { id: string } }>('/api/alerts/:id', async (req, reply) => alerts.get(req.params.id) ?? reply.code(404).send());
   app.get('/api/alerts', async () => alerts.history);
 
-  app.post<{ Body: { kind: 'doorbell' | 'info' | 'warning' } }>('/api/alerts/test', async (req) =>
+  app.post<{ Body: { kind: 'doorbell' | 'info' | 'warning' | 'ready' } }>('/api/alerts/test', async (req) =>
     run(() => {
       requireParent();
       const kind = req.body.kind ?? 'doorbell';
       const camera = config.alerts.doorbell?.camera;
       if (kind === 'doorbell') alerts.raise({ kind, title: 'Someone’s at the door', camera, seconds: 20 });
-      else if (kind === 'warning') alerts.raise({ kind, title: 'Proxmox is down', message: 'Test alert from Settings.', seconds: 10 });
+      else if (kind === 'ready') {
+        alerts.raise({
+          kind: 'info',
+          title: 'The Expanse is ready to watch',
+          message: 'S1 · E1 · Dulcinea (test from Settings)',
+          image: 'https://image.tmdb.org/t/p/w342/8djpxDeWpINnGhjpFXQjnBe6zbx.jpg',
+          seconds: 25,
+          action: { label: 'Watch', kind: 'watch', title: 'The Expanse', mediaType: 'tv', season: 1, episode: 1 },
+        });
+      } else if (kind === 'warning') alerts.raise({ kind, title: 'Proxmox is down', message: 'Test alert from Settings.', seconds: 10 });
       else alerts.raise({ kind, title: 'The washer is done', message: 'Test alert from Settings.', seconds: 10 });
     }),
   );
@@ -259,23 +269,60 @@ export function registerExtras(app: FastifyInstance, ctx: ExtrasContext): void {
     return relay(reply, await plex.thumb(req.query.path), 'public, max-age=86400');
   });
 
-  app.post<{ Params: { id: string } }>('/api/plex/open/:id', async (req) =>
+  /** Open a Plex item on the TV: Plex HTPC gets told to play it; Plex Web is deep-linked. */
+  const openPlexItem = async (id: string) => {
+    if (!plex) throw new Error('Demo mode: add your Plex server under "plex" in config.yaml');
+    const plexTile = ProfileStore.orderApps(profiles.active, config.apps).find((a) => a.id === 'plex');
+    if (isKid() && !plexTile) throw new PermissionError('Plex isn’t on this profile');
+    // Plex HTPC (or any app tile) can't be deep-linked: open it, then ask it to play the item.
+    if (plexTile && plexTile.launch.type === 'command') {
+      await launcher.launch('app:plex', plexTile.name, plexTile.launch);
+      const here = new Set(['127.0.0.1', '::1', 'localhost', lanAddress()]);
+      plex
+        .playOnPlayer(id, (address) => here.has(address))
+        .catch((err) => app.log.warn(`plex: ${(err as Error).message}. Pick it from Continue Watching in Plex instead.`));
+      return;
+    }
+    await launcher.launch('app:plex', 'Plex', { type: 'web', url: await plex.itemUrl(id) });
+  };
+  app.post<{ Params: { id: string } }>('/api/plex/open/:id', async (req) => run(() => openPlexItem(req.params.id)));
+
+  /* ---------------- ready to watch (Radarr / Sonarr / Lidarr imports) ---------------- */
+
+  // The "Watch" button on a ready-to-watch pop-up: find it in Plex now (Plex may only just have
+  // scanned it) and play it.
+  app.post('/api/alerts/dismiss', async () => run(() => launcher.closeOverlay()));
+  app.post<{ Body: { alertId: string } }>('/api/alerts/action', async (req) =>
     run(async () => {
-      if (!plex) throw new Error('Demo mode: add your Plex server under "plex" in config.yaml');
-      const plexTile = ProfileStore.orderApps(profiles.active, config.apps).find((a) => a.id === 'plex');
-      if (isKid() && !plexTile) throw new PermissionError('Plex isn’t on this profile');
-      // Plex HTPC (or any app tile) can't be deep-linked: open it, then ask it to play the item.
-      if (plexTile && plexTile.launch.type === 'command') {
-        await launcher.launch('app:plex', plexTile.name, plexTile.launch);
-        const here = new Set(['127.0.0.1', '::1', 'localhost', lanAddress()]);
-        plex
-          .playOnPlayer(req.params.id, (address) => here.has(address))
-          .catch((err) => app.log.warn(`plex: ${(err as Error).message}. Pick it from Continue Watching in Plex instead.`));
-        return;
-      }
-      await launcher.launch('app:plex', 'Plex', { type: 'web', url: await plex.itemUrl(req.params.id) });
+      const action = alerts.get(String(req.body.alertId))?.action;
+      if (!action) throw new Error('That pop-up has expired');
+      if (!plex) throw new Error('Add your Plex server under "plex" in config.yaml to play from here');
+      launcher.closeOverlay();
+      const id = await plex.find(action);
+      if (!id) throw new Error(`Plex hasn’t added ${action.title} yet. Try again in a minute.`);
+      await openPlexItem(id);
     }),
   );
+  const watcher = new ArrWatcher(
+    config.requests,
+    config.requests.notify ?? 'all',
+    (item) => {
+      const watchable = item.kind !== 'music' && Boolean(plex);
+      alerts.raise({
+        kind: 'info',
+        title: item.kind === 'music' ? `New music: ${item.title}` : `${item.title} is ready to watch`,
+        message: item.subtitle ?? (item.year ? String(item.year) : undefined),
+        image: item.poster,
+        seconds: watchable ? 25 : 12,
+        action: watchable
+          ? { label: 'Watch', kind: 'watch', title: item.title, year: item.year, mediaType: item.kind as 'movie' | 'tv', season: item.season, episode: item.episode }
+          : undefined,
+      });
+    },
+    app.log,
+    requests.hasSeerr ? () => requests.requestedIds() : undefined,
+  );
+  watcher.start();
 
   /* ---------------- lab: history & actions ---------------- */
 

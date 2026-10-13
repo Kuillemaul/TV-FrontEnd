@@ -13,7 +13,7 @@ TV_USER=tv
 echo "==> Packages"
 apt-get update
 apt-get install -y --no-install-recommends \
-  sudo cage xwayland wlr-randr mpv curl ca-certificates gnupg flatpak polkitd \
+  sudo git cage xwayland wlr-randr mpv curl ca-certificates gnupg flatpak polkitd bluez \
   pipewire pipewire-pulse pipewire-alsa wireplumber pulseaudio-utils alsa-utils \
   intel-media-va-driver vainfo \
   fonts-inter fonts-noto-color-emoji \
@@ -53,12 +53,15 @@ flatpak install -y --noninteractive flathub com.moonlight_stream.Moonlight tv.pl
 echo "==> TV user"
 id "$TV_USER" >/dev/null 2>&1 || useradd -m -s /bin/bash "$TV_USER"
 # input: global Home key + keyboard/mouse detection; video/render: VAAPI; audio: sound
-usermod -aG video,render,audio,input "$TV_USER"
+usermod -aG video,render,audio,input,bluetooth "$TV_USER"
 loginctl enable-linger "$TV_USER"
 
 echo "==> Hearth to /opt/hearth"
 mkdir -p /opt/hearth
-cp -a "$REPO/." /opt/hearth/
+# (The updater runs this script from /opt/hearth itself; nothing to copy then.)
+if [[ "$(realpath "$REPO")" != "/opt/hearth" ]]; then
+  cp -a "$REPO/." /opt/hearth/
+fi
 [[ -f /opt/hearth/config/config.yaml ]] || cp /opt/hearth/config/config.example.yaml /opt/hearth/config/config.yaml
 chown -R "$TV_USER:$TV_USER" /opt/hearth
 sudo -u "$TV_USER" bash -c 'cd /opt/hearth && npm ci && npm run build'
@@ -120,6 +123,49 @@ polkit.addRule(function (action, subject) {
 });
 RULES
 
+echo "==> Automatic updates"
+# The updater fetches from GitHub as the tv user; give it the login you cloned with (if any).
+if [[ -n "${SUDO_USER:-}" && -f "$(getent passwd "$SUDO_USER" | cut -d: -f6)/.git-credentials" ]]; then
+  install -m 600 -o "$TV_USER" -g "$TV_USER" "$(getent passwd "$SUDO_USER" | cut -d: -f6)/.git-credentials" "$TV_HOME/.git-credentials"
+  sudo -u "$TV_USER" -H git config --global credential.helper store
+fi
+cat > /etc/systemd/system/hearth-update.service <<'UNIT'
+[Unit]
+Description=Update Hearth
+After=network-online.target
+[Service]
+Type=oneshot
+ExecStart=/opt/hearth/os/update.sh
+UNIT
+cat > /etc/systemd/system/hearth-update-nightly.service <<'UNIT'
+[Unit]
+Description=Update Hearth (nightly, if automatic updates are on)
+After=network-online.target
+[Service]
+Type=oneshot
+ExecStart=/opt/hearth/os/update.sh --nightly
+UNIT
+cat > /etc/systemd/system/hearth-update-nightly.timer <<'UNIT'
+[Unit]
+Description=Update Hearth every night
+[Timer]
+OnCalendar=*-*-* 04:30
+RandomizedDelaySec=20min
+Persistent=true
+[Install]
+WantedBy=timers.target
+UNIT
+# "Update now" in the network editor starts hearth-update.service as the tv user.
+cat > /etc/polkit-1/rules.d/51-hearth-update.rules <<'RULES'
+polkit.addRule(function (action, subject) {
+  if (subject.user == "tv" && action.id == "org.freedesktop.systemd1.manage-units" &&
+      action.lookup("unit") == "hearth-update.service" && action.lookup("verb") == "start") {
+    return polkit.Result.YES;
+  }
+});
+RULES
+systemctl enable bluetooth.service 2>/dev/null || true
+
 # Phone remote → key presses into Plex/browser/Moonlight (ydotool needs its daemon).
 cat > /etc/systemd/system/ydotoold.service <<'UNIT'
 [Unit]
@@ -132,9 +178,9 @@ WantedBy=multi-user.target
 UNIT
 systemctl daemon-reload
 systemctl enable --now ydotoold.service
+systemctl enable --now hearth-update-nightly.timer
 echo
 echo "Done. Next:"
 echo "  1. Edit /opt/hearth/config/config.yaml (Home Assistant token, Tvheadend, gaming PCs)"
-echo "  2. Pair Moonlight with each PC once: add Moonlight as an app tile (see docs/SETUP.md), open it"
-echo "     on the TV, pick the PC and type the PIN into Sunshine's web UI on that PC."
-echo "  3. Reboot. The TV boots straight into Hearth."
+echo "  2. Reboot. The TV boots straight into Hearth."
+echo "  3. Pair Moonlight from Settings → Gaming PCs. Updates install by themselves every night."

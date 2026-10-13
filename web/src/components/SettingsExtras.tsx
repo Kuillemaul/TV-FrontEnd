@@ -111,6 +111,9 @@ export function SettingsExtras() {
           <Button icon="bulb" variant="ghost" onClick={() => void post('/api/alerts/test', { kind: 'info' })}>
             Test alert
           </Button>
+          <Button icon="play" variant="ghost" onClick={() => void post('/api/alerts/test', { kind: 'ready' })}>
+            Test “ready to watch”
+          </Button>
         </div>
       </section>
 

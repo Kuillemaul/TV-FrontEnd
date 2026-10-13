@@ -80,6 +80,18 @@ keyboard or phone remote, or browse Trending / Popular / Coming soon with the re
 season of a show. Badges show what's requested, on its way or already in your library. With Radarr, Sonarr or
 Lidarr added too, a **Downloading** list (progress and time left) shows on Requests and Home.
 
+**Ready to watch:** with Radarr/Sonarr/Lidarr under `requests:`, Hearth checks once a minute what they imported and
+pops up "Dune is ready to watch" (one per film, show season or album), even over a game or film. **Watch** finds it
+in Plex (the exact episode for shows) and plays it in Plex HTPC; **Not now** or Back dismisses it.
+`requests.notify: requested` limits it to things asked for in Seerr; `off` turns it off. Try it with Settings →
+*Test "ready to watch"*.
+
+**Updates:** the TV updates itself every night around 4:30 (`hearth-update-nightly.timer`): it fetches the latest
+version, rebuilds, restarts Hearth and checks it comes back; if not, it puts the previous version back and skips that
+version. The network editor's Overview shows the version, what changed and an *Update now* button, and can turn
+nightly updates off. Logs: `journalctl -u hearth-update`. The GitHub login you cloned with is copied to the `tv`
+user by `install.sh` so it can fetch.
+
 **Display:** Settings → Display picks the resolution (4K, 1080p…) and refresh rate (60/59.94/50/24 Hz). A new
 setting goes back by itself after 15 seconds unless you press *Keep*, so a mode the TV can't show never leaves you
 with a black screen. HDR isn't available on this setup yet: cage (the kiosk compositor in Debian 13) can't output

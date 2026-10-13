@@ -1813,3 +1813,13 @@ body.is-alert { background: transparent; }
 .dl-bar { height: 0.35rem; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
 .dl-bar div { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width 1s ease; }
 .dl-pct { font-variant-numeric: tabular-nums; color: var(--text); font-weight: 650; }
+
+/* ready-to-watch pop-ups: poster + buttons */
+.alert-card.with-image .alert-text { align-items: stretch; }
+.alert-poster { width: 6.5rem; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 0.6rem; flex: none; background: var(--surface-2); }
+.alert-body { display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+.alert-actions { display: flex; gap: 0.6rem; margin-top: 0.9rem; }
+.alert-actions .btn { padding: 0.55rem 1rem; }
+.alert-error { color: #ffb3ba; font-size: 0.95rem; margin-top: 0.5rem; }
+.alert-card.large .alert-poster { width: 13rem; }
+.alert-card.large .alert-actions .btn { font-size: 1.3rem; padding: 0.8rem 1.4rem; }

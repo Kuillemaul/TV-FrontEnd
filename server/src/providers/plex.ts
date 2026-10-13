@@ -51,6 +51,25 @@ export class PlexClient {
     return this.machineId!;
   }
 
+  /**
+   * Find a film, or a show's episode, in your Plex libraries by title (and year), e.g. right after
+   * Radarr/Sonarr imported it. Returns the ratingKey to play, or null if Plex hasn't got it yet.
+   */
+  async find(q: { title: string; year?: number; mediaType: 'movie' | 'tv'; season?: number; episode?: number }): Promise<string | null> {
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const data = await this.api(`/hubs/search?query=${encodeURIComponent(q.title)}&limit=10`);
+    const want = q.mediaType === 'movie' ? 'movie' : 'show';
+    const items: any[] = (data.MediaContainer?.Hub ?? []).filter((h: any) => h.type === want).flatMap((h: any) => h.Metadata ?? []);
+    const hit =
+      items.find((m) => norm(m.title) === norm(q.title) && (!q.year || !m.year || Math.abs(m.year - q.year) <= 1)) ??
+      items.find((m) => norm(m.title) === norm(q.title));
+    if (!hit) return null;
+    if (q.mediaType === 'movie' || q.season === undefined) return String(hit.ratingKey);
+    const leaves = await this.api(`/library/metadata/${hit.ratingKey}/allLeaves`);
+    const ep = (leaves.MediaContainer?.Metadata ?? []).find((e: any) => e.parentIndex === q.season && e.index === q.episode);
+    return String(ep?.ratingKey ?? hit.ratingKey);
+  }
+
   /** Plex Web link straight to an item (used when the Plex tile is a web app). */
   async itemUrl(id: string): Promise<string> {
     const base = this.cfg.webUrl ?? `${this.cfg.url}/web/index.html`;

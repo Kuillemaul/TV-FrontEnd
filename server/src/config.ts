@@ -421,6 +421,7 @@ export function loadConfig(path = resolveConfigPath()): HearthConfig {
         cfg.requests[k] = { url: String(svc.url).replace(/\/(login)?\/?$/, ''), apiKey: String(svc.apiKey) };
       }
     }
+    if (['all', 'requested', 'off'].includes(raw.requests.notify)) cfg.requests.notify = raw.requests.notify;
   }
   if (Array.isArray(raw.scenes)) cfg.scenes = raw.scenes;
   if (raw.alerts) {

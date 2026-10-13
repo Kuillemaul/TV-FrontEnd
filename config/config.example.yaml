@@ -115,6 +115,7 @@ requests:
   radarr: { url: "http://192.168.1.20:7878", apiKey: "PASTE_RADARR_API_KEY" }
   sonarr: { url: "http://192.168.1.20:8989", apiKey: "PASTE_SONARR_API_KEY" }
   lidarr: { url: "http://192.168.1.20:8686", apiKey: "PASTE_LIDARR_API_KEY" }
+  notify: all          # "ready to watch" pop-ups: all (every import), requested (only things asked for in Seerr), off
 
 # ---------------------------------------------------------------------------
 # Game streaming: Sunshine + Hearth agent on each PC, Moonlight on the TV

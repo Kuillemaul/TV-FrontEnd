@@ -42,6 +42,8 @@ export interface Alert {
   title: string;
   message?: string;
   camera?: string;
+  image?: string;
+  action?: { label: string; kind: 'watch'; title: string };
   seconds: number;
   at: number;
 }
@@ -50,6 +52,7 @@ export interface TvSettings {
   scenes: boolean;
   wakeWord: boolean;
   alertsOverApps: boolean;
+  autoUpdate: boolean;
 }
 
 export interface OnDeckItem {

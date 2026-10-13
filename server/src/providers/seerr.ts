@@ -11,6 +11,8 @@ export interface ServiceConfig {
 }
 
 export interface RequestsConfig {
+  /** "Ready to watch" pop-ups: for every import (default), only things requested in Seerr, or none. */
+  notify?: 'all' | 'requested' | 'off';
   seerr?: ServiceConfig;
   radarr?: ServiceConfig;
   sonarr?: ServiceConfig;
@@ -201,6 +203,17 @@ export class RequestsClient {
       });
     }
     return out;
+  }
+
+  /** "tmdb:<id>" / "tvdb:<id>" for recent requests (ready-to-watch "only what we asked for"). */
+  async requestedIds(): Promise<Set<string>> {
+    const data = await this.seerr('/request?take=100&skip=0&sort=added&filter=all');
+    const ids = new Set<string>();
+    for (const r of data.results ?? []) {
+      if (r.media?.tmdbId) ids.add(`tmdb:${r.media.tmdbId}`);
+      if (r.media?.tvdbId) ids.add(`tvdb:${r.media.tvdbId}`);
+    }
+    return ids;
   }
 
   /** Everything downloading in Radarr, Sonarr and Lidarr. Services that fail are skipped. */
