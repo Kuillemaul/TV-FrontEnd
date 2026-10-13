@@ -60,7 +60,17 @@ echo "==> Hearth to /opt/hearth"
 mkdir -p /opt/hearth
 # (The updater runs this script from /opt/hearth itself; nothing to copy then.)
 if [[ "$(realpath "$REPO")" != "/opt/hearth" ]]; then
+  # Never replace the TV's live settings (they're edited in the network editor) with the copy's.
+  keep=""
+  if [[ -f /opt/hearth/config/config.yaml ]]; then
+    keep=$(mktemp)
+    cp -a /opt/hearth/config/config.yaml "$keep"
+  fi
   cp -a "$REPO/." /opt/hearth/
+  if [[ -n "$keep" ]]; then
+    cp -a "$keep" /opt/hearth/config/config.yaml
+    rm -f "$keep"
+  fi
 fi
 [[ -f /opt/hearth/config/config.yaml ]] || cp /opt/hearth/config/config.example.yaml /opt/hearth/config/config.yaml
 chown -R "$TV_USER:$TV_USER" /opt/hearth
