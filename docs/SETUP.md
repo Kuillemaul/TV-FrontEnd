@@ -137,6 +137,16 @@ software DRM (Widevine L3), so in Chrome on Linux:
 No 4K, HDR, Dolby Vision or Atmos from paid services is possible on Linux. If that matters, connect a
 Google TV Streamer, Shield or Apple TV to another HDMI input for those services.
 
+### App tile looks
+Every app tile has designed, animated artwork (it moves only while highlighted). To change one, open the network
+editor → **Apps**, select the tile, then pick a style (Aurora, Waves, Sunburst, Retro grid, Night sky, Equaliser,
+Stripes, Spotlight, Gradient), colours, text, lettering and an optional emoji, and choose **Save design**. Or choose
+**Use my own picture…**:
+
+- **Size:** 16:9. **960×540** is ideal (sharp on a 4K TV); 480×270 is the minimum. JPG, PNG or WebP, up to 8 MB.
+- Corners are rounded for you. Keep words away from the bottom-left corner, where badges go.
+- **Back to standard** undoes it. Changes appear on the TV straight away.
+
 ### Profiles, apps and themes
 
 Everything here is done from the TV with the remote. No config file needed.

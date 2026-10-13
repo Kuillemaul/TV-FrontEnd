@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { get, post, useApi, type AppTile, type AudioStatus, type Info, type ProfilesState, type TvSettings } from '../lib/api';
 import { findBackground, themeVars } from '../lib/theme';
 import { waitForRestart, type Notify, type useProfiles } from './Admin';
+import { TileGallery } from './TileDesigner';
 
 type ProfilesApi = ReturnType<typeof useProfiles>;
 type MutationReply = Partial<ProfilesState> & { ok: boolean; error?: string };
@@ -53,21 +54,23 @@ export function AppsSection({ profiles, notify }: { profiles: ProfilesApi; notif
 
       <div className="ad-card">
         <h2>All apps</h2>
-        <div className="ad-tiles">
-          {apps.data?.map((a) => {
-            const mine = custom.find((c) => c.id === a.id);
-            return (
-              <div key={a.id} className="ad-tile" style={{ background: a.color ?? '#333' }}>
-                <span>{a.name}</span>
-                {mine ? (
-                  <button className="ad-tile-x" onClick={() => void remove(a.id, a.name)} title="Remove">
+        <p className="ad-muted">Select a tile to change its look: pick a style and colours, or upload your own picture.</p>
+        {apps.data ? <TileGallery apps={apps.data} notify={notify} onChanged={(list) => apps.setData(list)} /> : null}
+        {custom.length ? (
+          <>
+            <div className="ad-sub">Your web apps</div>
+            <div className="ad-chips">
+              {custom.map((c) => (
+                <span key={c.id} className="ad-chip">
+                  {c.name}
+                  <button onClick={() => void remove(c.id, c.name)} title={`Remove ${c.name}`}>
                     ✕
                   </button>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
+                </span>
+              ))}
+            </div>
+          </>
+        ) : null}
         <p className="ad-muted">
           Which apps each person sees, and in what order, is set per profile (Profiles → Apps). Apps that launch programs
           (Plex HTPC, Moonlight…) live in the config file under <code>apps:</code>.

@@ -1,0 +1,27 @@
+/* Designed app tiles (TileArt.tsx). */
+.tile-art-layer { position: absolute; inset: 0; }
+.tile-art-svg { display: block; width: 100%; height: 100%; }
+.tile-art-photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
+/* Only focused tiles (and editor previews) move. */
+.tile-art-svg .ta-anim { animation-play-state: paused !important; }
+.tile:focus .tile-art-svg .ta-anim,
+.tile-art-svg.ta-live .ta-anim { animation-play-state: running !important; }
+
+.tile-art-svg .ta-sheen { opacity: 0; }
+.tile:focus .tile-art-svg .ta-sheen { animation: ta-sheen 1.1s ease-out 0.1s 1 both; }
+
+@keyframes ta-sheen { from { opacity: 1; transform: skewX(-18deg) translateX(0); } to { opacity: 1; transform: skewX(-18deg) translateX(900px); } }
+@keyframes ta-drift-a { from { transform: translate(0, 0) scale(1); } to { transform: translate(70px, 30px) scale(1.15); } }
+@keyframes ta-drift-b { from { transform: translate(0, 0) scale(1); } to { transform: translate(-80px, -20px) scale(0.9); } }
+@keyframes ta-slide { from { transform: translateX(0); } to { transform: translateX(-160px); } }
+@keyframes ta-spin { to { transform: rotate(360deg); } }
+@keyframes ta-floor { from { transform: translateY(0); } to { transform: translateY(16px); } }
+@keyframes ta-twinkle { from { opacity: 0.15; } to { opacity: 1; } }
+@keyframes ta-bounce { from { transform: scaleY(0.35); } to { transform: scaleY(1); } }
+@keyframes ta-stripes { to { transform: translateX(56px); } }
+@keyframes ta-pulse { from { transform: scale(0.85); opacity: 0.7; } to { transform: scale(1.1); opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .tile-art-svg .ta-anim, .tile-art-svg .ta-sheen { animation: none !important; }
+}

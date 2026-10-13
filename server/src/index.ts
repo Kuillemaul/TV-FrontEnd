@@ -28,6 +28,7 @@ import { registerAdminApi, startAdminServer } from './routes/admin.js';
 import { installElevation, isElevated } from './elevate.js';
 import { ScreenTime } from './screentime.js';
 import { StateStore } from './state.js';
+import { TileArtStore } from './tileart.js';
 import { VoiceService } from './voice.js';
 
 const config = loadConfig();
@@ -72,6 +73,7 @@ async function channels(): Promise<Channel[]> {
 }
 
 const profiles = new ProfileStore(config.stateDir);
+const tileArt = new TileArtStore(join(config.stateDir, 'tiles'));
 const screenTime = new ScreenTime(config.stateDir);
 const plex = config.plex ? new PlexClient(config.plex) : undefined;
 const pairing = new RemotePairing(state);
@@ -303,10 +305,45 @@ app.post('/api/session/stop', async () => {
 
 /* ---------------- apps ---------------- */
 
-const publicApp = ({ id, name, color, logo, launch }: AppTile) => ({ id, name, color, logo, kind: launch.type, custom: id.startsWith('custom-') });
+const publicApp = ({ id, name, color, logo, launch }: AppTile) => {
+  const art = tileArt.get(id);
+  return {
+    id,
+    name,
+    color,
+    logo,
+    kind: launch.type,
+    custom: id.startsWith('custom-'),
+    art: art?.type === 'image' ? { type: 'image' as const, url: `/tiles/${art.file}` } : art,
+  };
+};
 
 // ?all=1 lists every app (for the editors); otherwise the active profile's curated, ordered list.
 app.get<{ Querystring: { all?: string } }>('/api/apps', async (req) => (req.query.all === '1' ? allApps() : visibleApps()).map(publicApp));
+
+// Tile looks, set from the network editor (/api/admin/* is editor-only).
+const tileReply = (fn: () => void) => {
+  try {
+    fn();
+    bus.emit({ type: 'apps' });
+    return { ok: true, apps: allApps().map(publicApp) };
+  } catch (err) {
+    return { ok: false, error: (err as Error).message };
+  }
+};
+app.put<{ Params: { id: string }; Body: { design: unknown } }>('/api/admin/tiles/:id', async (req) =>
+  tileReply(() => tileArt.setDesign(req.params.id, req.body?.design)),
+);
+app.post<{ Params: { id: string }; Body: { data: string } }>('/api/admin/tiles/:id/image', { bodyLimit: 12 * 1024 * 1024 }, async (req) =>
+  tileReply(() => tileArt.setImage(req.params.id, String(req.body?.data ?? ''))),
+);
+app.delete<{ Params: { id: string } }>('/api/admin/tiles/:id', async (req) => tileReply(() => tileArt.reset(req.params.id)));
+app.get<{ Params: { file: string } }>('/tiles/:file', async (req, reply) => {
+  const f = tileArt.file(req.params.file);
+  if (!f) return reply.code(404).send();
+  const { readFileSync } = await import('node:fs');
+  return reply.header('Cache-Control', 'public, max-age=31536000, immutable').type(f.type).send(readFileSync(f.path));
+});
 
 app.post<{ Params: { id: string } }>('/api/apps/:id/launch', async (req) => {
   const tile = visibleApps().find((a) => a.id === req.params.id);

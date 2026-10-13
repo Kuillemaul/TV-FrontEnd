@@ -145,3 +145,27 @@ html.is-admin body { overflow: auto; background: #0b0d13; cursor: auto; }
 .ad b.good { color: #3ddc97; }
 .ad b.bad { color: #ffb3ba; }
 .ad-changes { margin: 0; padding-left: 1.1rem; color: var(--ad-dim); line-height: 1.7; }
+
+/* Tile looks (TileDesigner.tsx) */
+.ad-tile-art { overflow: hidden; border: 2px solid transparent; padding: 0; cursor: pointer; font: inherit; }
+.ad-tile-art.active { border-color: var(--ad-accent); }
+.ad-tile-art .tile-art-svg, .ad-tile-art .tile-art-photo { position: absolute; inset: 0; }
+.ad-tile-logo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; padding: 1.2rem; }
+.ad-tile-edit { position: absolute; left: 0; right: 0; bottom: 0; padding: 0.3rem; font-size: 0.75rem; font-weight: 600; background: rgba(0, 0, 0, 0.6); opacity: 0; transition: opacity 0.15s; }
+.ad-tile-art:hover .ad-tile-edit, .ad-tile-art:focus-visible .ad-tile-edit { opacity: 1; }
+.ad-chip button { border: 0; background: none; color: var(--ad-dim); cursor: pointer; padding: 0; font: inherit; }
+.ad-designer { margin-top: 1rem; padding: 1.1rem; border-radius: 0.8rem; background: var(--ad-bg); border: 1px solid var(--ad-line); }
+.ad-designer-head { display: flex; align-items: center; margin-bottom: 0.8rem; }
+.ad-designer-head h2 { margin: 0; }
+.ad-designer-body { display: grid; grid-template-columns: minmax(0, 26rem) minmax(0, 1fr); gap: 1.4rem; }
+.ad-designer-preview { position: relative; aspect-ratio: 16 / 9; border-radius: 0.9rem; overflow: hidden; box-shadow: 0 0 0 3px #fff, 0 18px 40px rgba(0, 0, 0, 0.5); }
+.ad-styles { display: grid; grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr)); gap: 0.5rem; margin-bottom: 1rem; }
+.ad-style { position: relative; aspect-ratio: 16 / 9; padding: 0; border-radius: 0.5rem; overflow: hidden; border: 2px solid transparent; cursor: pointer; background: none; }
+.ad-style.active { border-color: var(--ad-accent); }
+.ad-colors { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; margin-bottom: 1rem; }
+.ad-colors label { display: flex; align-items: center; gap: 0.45rem; color: var(--ad-dim); }
+.ad-colors input[type='color'] { width: 2.4rem; height: 2rem; padding: 0; border: 1px solid var(--ad-line); border-radius: 0.4rem; background: none; }
+.ad-colors .ad-link { margin-left: 0; }
+@media (max-width: 800px) {
+  .ad-designer-body { grid-template-columns: minmax(0, 1fr); }
+}

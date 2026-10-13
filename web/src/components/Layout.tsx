@@ -31,9 +31,11 @@ interface TileProps {
   autoFocus?: boolean;
   /** Lets X / Menu / right-click pin this tile to Home. */
   pin?: Pin;
+  /** Full-bleed artwork (designed app tiles); replaces image/wordmark. */
+  art?: ReactNode;
 }
 
-export function Tile({ title, subtitle, image, color, shape = 'wide', badge, icon, progress, onSelect, autoFocus, pin }: TileProps) {
+export function Tile({ title, subtitle, image, color, shape = 'wide', badge, icon, progress, onSelect, autoFocus, pin, art }: TileProps) {
   return (
     <button
       className={`tile tile-${shape}`}
@@ -46,9 +48,10 @@ export function Tile({ title, subtitle, image, color, shape = 'wide', badge, ico
       <div className="tile-art">
         {/* Poster titles sit under the artwork so they show if the image is missing or fails. */}
         {shape === 'poster' ? <span className="tile-poster-title">{title}</span> : null}
-        {!image && icon ? <Icon name={icon} size="3em" /> : null}
-        {!image && !icon && shape === 'app' ? <span className="tile-wordmark">{title}</span> : null}
-        {image ? (
+        {art ? <div className="tile-art-layer">{art}</div> : null}
+        {!art && !image && icon ? <Icon name={icon} size="3em" /> : null}
+        {!art && !image && !icon && shape === 'app' ? <span className="tile-wordmark">{title}</span> : null}
+        {image && !art ? (
           <img src={image} alt="" loading="lazy" onError={(e) => ((e.target as HTMLImageElement).style.display = 'none')} />
         ) : null}
         {badge ? <div className="tile-badges">{badge}</div> : null}

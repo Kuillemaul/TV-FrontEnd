@@ -93,6 +93,19 @@ export interface Session {
   startedAt: number;
 }
 
+export type TileStyle = 'aurora' | 'waves' | 'rays' | 'grid' | 'stars' | 'bars' | 'stripes' | 'glow' | 'plain';
+
+/** A designed tile: drawn live, so it's sharp at any size and animates when focused. */
+export interface TileDesign {
+  style: TileStyle;
+  /** Background, accent. */
+  colors: [string, string];
+  text?: string;
+  textColor?: string;
+  textStyle?: 'bold' | 'light' | 'caps';
+  icon?: string;
+}
+
 export interface AppTile {
   id: string;
   name: string;
@@ -100,6 +113,8 @@ export interface AppTile {
   logo?: string;
   kind: 'command' | 'web';
   custom?: boolean;
+  /** Custom look from the network editor. */
+  art?: { type: 'design'; design: TileDesign } | { type: 'image'; url: string };
 }
 
 export interface ThemeChoice {
@@ -324,6 +339,7 @@ export type ServerEvent =
   | { type: 'remote'; cmd: string; text?: string }
   | { type: 'settings' }
   | { type: 'games' }
+  | { type: 'apps' }
   | { type: 'display' }
   | { type: 'sleep'; endsAt: number | null }
   | { type: 'pip'; entity: string | null; name?: string }

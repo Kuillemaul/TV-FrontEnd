@@ -12,10 +12,12 @@ import { Icon } from '../components/Icon';
 import { Button, DemoBanner, Modal, NotSetUp, PageHeader, Tile } from '../components/Layout';
 import { post, useApi, useServerEvents, type AppTile, type Dashboard, type HaEntity, type LabStatus } from '../lib/api';
 import { useHearth } from '../lib/hearth';
+import { appArt } from '../components/TileArt';
 
 export function AppsPage() {
   const hearth = useHearth();
-  const { data } = useApi<AppTile[]>('/api/apps');
+  const { data, reload } = useApi<AppTile[]>('/api/apps');
+  useServerEvents((e) => e.type === 'apps' && void reload());
   return (
     <div className="page">
       <PageHeader title="Apps">
@@ -28,7 +30,7 @@ export function AppsPage() {
       {data && data.length === 0 ? <div className="empty">No apps on this profile yet.</div> : null}
       <div className="grid grid-apps">
         {data?.map((a, i) => (
-          <Tile key={a.id} pin={{ kind: 'app', id: a.id }} shape="app" title={a.name} color={a.color} image={a.logo} autoFocus={i === 0} onSelect={() => hearth.launchApp(a.id)} />
+          <Tile key={a.id} pin={{ kind: 'app', id: a.id }} shape="app" title={a.name} color={a.color} image={a.logo} art={appArt(a)} autoFocus={i === 0} onSelect={() => hearth.launchApp(a.id)} />
         ))}
       </div>
     </div>

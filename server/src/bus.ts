@@ -18,6 +18,8 @@ export type UiEvent =
   | { type: 'remote'; cmd: string; text?: string }
   | { type: 'settings' }
   | { type: 'games' }
+  /** App tiles changed look. */
+  | { type: 'apps' }
   | { type: 'display' }
   | { type: 'sleep'; endsAt: number | null }
   | { type: 'pip'; entity: string | null; name?: string }

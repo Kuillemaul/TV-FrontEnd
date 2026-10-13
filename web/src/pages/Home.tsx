@@ -6,6 +6,7 @@ import { Icon } from '../components/Icon';
 import { Row, Tile } from '../components/Layout';
 import { formatTime, get, post, useApi, useServerEvents, type AppTile, type Dashboard, type GameLibrary, type Guide, type OnDeckItem, type WatchlistItem } from '../lib/api';
 import { useHearth } from '../lib/hearth';
+import { appArt } from '../components/TileArt';
 
 function greeting(h: number): string {
   if (h < 5) return 'Good night';
@@ -31,6 +32,7 @@ export function HomePage() {
   const guide = useApi<Guide>(liveTv ? '/api/tv/guide?hours=1' : null, 60_000);
   const library = useApi<GameLibrary>('/api/games');
   useServerEvents((e) => e.type === 'games' && void library.reload());
+  useServerEvents((e) => e.type === 'apps' && void apps.reload());
   const dash = useApi<Dashboard>('/api/ha/dashboard');
   // Continue watching only for profiles that can see Plex.
   const hasPlex = apps.data?.some((a) => a.id === 'plex') ?? false;
@@ -116,7 +118,7 @@ export function HomePage() {
           />
         ) : null}
         {apps.data?.map((a, i) => (
-          <Tile key={a.id} pin={{ kind: 'app', id: a.id }} autoFocus={!liveTv && i === 0} shape="app" title={a.name} color={a.color} image={a.logo} onSelect={() => hearth.launchApp(a.id)} />
+          <Tile key={a.id} pin={{ kind: 'app', id: a.id }} autoFocus={!liveTv && i === 0} shape="app" title={a.name} color={a.color} image={a.logo} art={appArt(a)} onSelect={() => hearth.launchApp(a.id)} />
         ))}
       </Row>
 

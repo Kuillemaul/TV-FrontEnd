@@ -4,6 +4,7 @@ import { useHearth } from '../lib/hearth';
 import { EntityCard } from './EntityCard';
 import { Icon } from './Icon';
 import { Button, Modal, Row, Tile } from './Layout';
+import { appArt } from './TileArt';
 
 /** The pin carried by an element (or its tile), set with data-pin. */
 export function pinOf(el: Element | null): Pin | null {
@@ -63,7 +64,7 @@ export function PinnedRow({ apps, library }: { apps: AppTile[] | null; library: 
         if (pin.kind === 'app') {
           // Only apps this profile can open.
           const a = apps?.find((x) => x.id === pin.id);
-          return a ? [<Tile key={key} pin={pin} shape="app" title={a.name} color={a.color} image={a.logo} onSelect={() => hearth.launchApp(a.id)} />] : [];
+          return a ? [<Tile key={key} pin={pin} shape="app" title={a.name} color={a.color} image={a.logo} art={appArt(a)} onSelect={() => hearth.launchApp(a.id)} />] : [];
         }
         if (pin.kind === 'game') {
           const g = library?.games.find((x) => x.hostId === pin.hostId && x.id === pin.gameId);

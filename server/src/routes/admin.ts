@@ -137,7 +137,7 @@ export function registerAdminApi(app: FastifyInstance, ctx: AdminContext): void 
   // The TV's theme menu lists uploaded photos too.
   app.get('/api/backgrounds', async () => ({ files: listImages(bgDir) }));
 
-  app.post<{ Body: { name: string; data: string } }>('/api/admin/backgrounds', async (req, reply) => {
+  app.post<{ Body: { name: string; data: string } }>('/api/admin/backgrounds', { bodyLimit: 22 * 1024 * 1024 }, async (req, reply) => {
     const m = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/s.exec(String(req.body?.data ?? ''));
     if (!m) return reply.code(400).send({ ok: false, error: 'Upload a JPG, PNG or WebP image' });
     const bytes = Buffer.from(m[2], 'base64');
@@ -223,6 +223,7 @@ export async function startAdminServer(main: FastifyInstance, ctx: AdminContext,
   };
   admin.all('/api/*', forward);
   admin.get('/backgrounds/*', forward);
+  admin.get('/tiles/*', forward);
 
   if (existsSync(webDist)) {
     await admin.register(fastifyStatic, { root: webDist });
