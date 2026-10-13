@@ -92,6 +92,11 @@ version. The network editor's Overview shows the version, what changed and an *U
 nightly updates off. Logs: `journalctl -u hearth-update`. The GitHub login you cloned with is copied to the `tv`
 user by `install.sh` so it can fetch.
 
+**Bluetooth:** Settings → Bluetooth lists paired controllers, headphones and speakers (connected, battery) with
+Connect / Disconnect / Forget, and **Add a device** pairs a new one with the remote (scan, pick it, done; it's
+trusted so it reconnects by itself). Needs a Bluetooth adapter (most OptiPlex Micros have one with the Wi-Fi card;
+otherwise any USB dongle). Bluetooth headphones then appear under Settings → Sound as an output.
+
 **Display:** Settings → Display picks the resolution (4K, 1080p…) and refresh rate (60/59.94/50/24 Hz). A new
 setting goes back by itself after 15 seconds unless you press *Keep*, so a mode the TV can't show never leaves you
 with a black screen. HDR isn't available on this setup yet: cage (the kiosk compositor in Debian 13) can't output

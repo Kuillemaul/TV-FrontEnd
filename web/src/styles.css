@@ -1823,3 +1823,19 @@ body.is-alert { background: transparent; }
 .alert-error { color: #ffb3ba; font-size: 0.95rem; margin-top: 0.5rem; }
 .alert-card.large .alert-poster { width: 13rem; }
 .alert-card.large .alert-actions .btn { font-size: 1.3rem; padding: 0.8rem 1.4rem; }
+
+/* ---------------- bluetooth ---------------- */
+
+.bt-list { display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 1rem; max-width: 60rem; }
+.bt-row { display: flex; align-items: center; gap: 1rem; padding: 0.7rem 1rem; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--border); color: var(--text-2); }
+.bt-text { flex: 1; min-width: 0; }
+.bt-name { color: var(--text); font-weight: 650; font-size: 1.1rem; }
+.bt-sub { display: flex; align-items: center; gap: 0.4rem; font-size: 0.95rem; color: var(--text-3); }
+.bt-found { display: grid; grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr)); gap: 0.7rem; min-height: 5rem; }
+.bt-found-item { display: flex; align-items: center; gap: 0.9rem; padding: 0.9rem 1.1rem; border-radius: var(--radius); background: var(--surface-2); border: 1px solid var(--border); color: var(--text); font: inherit; font-weight: 600; text-align: left; }
+.bt-found-item span { flex: 1; }
+.bt-found-item small { color: var(--text-3); font-weight: 500; }
+.bt-found-item:focus { background: var(--text); color: var(--bg); transform: scale(1.03); }
+.bt-found-item:focus small { color: var(--bg); }
+.bt-searching { display: flex; align-items: center; gap: 0.9rem; color: var(--text-2); padding: 1rem; }
+.bt-done { color: var(--good); }

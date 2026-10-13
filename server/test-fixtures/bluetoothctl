@@ -1,0 +1,91 @@
+#!/usr/bin/env python3
+"""Stand-in for BlueZ's bluetoothctl (tests): same output format, state in $FAKE_BT_STATE."""
+import json, os, sys, time, threading
+
+STATE = os.environ.get("FAKE_BT_STATE", "/tmp/fake-bt.json")
+G, X = "\x1b[0;92m", "\x1b[0m"
+
+def load():
+    try:
+        return json.load(open(STATE))
+    except Exception:
+        return {"powered": True, "devices": {"11:22:33:44:55:66": {"name": "Living Room Soundbar", "icon": "audio-card", "paired": True, "connected": False}}}
+
+def save(s):
+    json.dump(s, open(STATE, "w"))
+
+def info(s, mac):
+    d = s["devices"].get(mac)
+    if not d:
+        print(f"Device {mac} not available"); return
+    yn = lambda b: "yes" if b else "no"
+    print(f"Device {mac} (public)\n\tName: {d['name']}\n\tAlias: {d['name']}\n\tIcon: {d['icon']}\n\tPaired: {yn(d['paired'])}\n\tTrusted: {yn(d.get('trusted'))}\n\tConnected: {yn(d['connected'])}")
+    if d.get("battery") is not None:
+        print(f"\tBattery Percentage: 0x{d['battery']:02x} ({d['battery']})")
+
+def command(args):
+    s = load()
+    cmd = args[0]
+    if cmd == "show":
+        print(f"Controller 00:1A:7D:DA:71:13 (public)\n\tPowered: {'yes' if s['powered'] else 'no'}\n\tDiscovering: {'yes' if s.get('discovering') else 'no'}")
+    elif cmd == "devices":
+        for mac, d in s["devices"].items():
+            print(f"Device {mac} {d['name']}")
+    elif cmd == "info":
+        info(s, args[1])
+    elif cmd == "power":
+        s["powered"] = args[1] == "on"; save(s); print(f"Changing power {args[1]} succeeded")
+    elif cmd == "connect":
+        d = s["devices"].get(args[1])
+        print(f"Attempting to connect to {args[1]}")
+        if d and d["paired"]:
+            d["connected"] = True; save(s); print(f"[{G}CHG{X}] Device {args[1]} Connected: yes\nConnection successful")
+        else:
+            print("Failed to connect: org.bluez.Error.Failed")
+    elif cmd == "disconnect":
+        s["devices"][args[1]]["connected"] = False; save(s); print("Successful disconnected")
+    elif cmd == "remove":
+        s["devices"].pop(args[1], None); save(s); print("Device has been removed")
+
+def interactive():
+    for line in sys.stdin:
+        parts = line.split()
+        if not parts:
+            continue
+        s = load()
+        c = parts[0]
+        if c == "agent":
+            print("Agent registered", flush=True)
+        elif c == "default-agent":
+            print("Default agent request successful", flush=True)
+        elif c == "scan" and parts[1] == "on":
+            s["discovering"] = True; save(s)
+            print("Discovery started", flush=True)
+            def found():
+                time.sleep(0.5)
+                st = load()
+                st["devices"]["AA:BB:CC:DD:EE:01"] = {"name": "Xbox Wireless Controller", "icon": "input-gaming", "paired": False, "connected": False, "battery": 80}
+                st["devices"]["AA:BB:CC:DD:EE:02"] = {"name": "AA-BB-CC-DD-EE-02", "icon": "", "paired": False, "connected": False}
+                save(st)
+                print(f"[{G}NEW{X}] Device AA:BB:CC:DD:EE:01 Xbox Wireless Controller", flush=True)
+            threading.Thread(target=found).start()
+        elif c == "scan":
+            s["discovering"] = False; save(s); print("Discovery stopped", flush=True)
+        elif c == "pair":
+            time.sleep(0.4)
+            d = s["devices"].get(parts[1])
+            if d:
+                d["paired"] = True; save(s); print(f"Attempting to pair with {parts[1]}\n[{G}CHG{X}] Device {parts[1]} Paired: yes\nPairing successful", flush=True)
+            else:
+                print(f"Device {parts[1]} not available", flush=True)
+        elif c == "trust":
+            s["devices"][parts[1]]["trusted"] = True; save(s); print(f"Changing {parts[1]} trust succeeded", flush=True)
+        elif c == "connect":
+            s["devices"][parts[1]]["connected"] = True; save(s); print("Connection successful", flush=True)
+        elif c == "quit":
+            return
+
+if len(sys.argv) > 1:
+    command(sys.argv[1:])
+else:
+    interactive()

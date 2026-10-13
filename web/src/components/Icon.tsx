@@ -28,6 +28,7 @@ const PATHS: Record<string, string> = {
   cloud: 'M7 18a5 5 0 1 1 .9-9.9A6 6 0 0 1 19 10a4 4 0 0 1-1 8z',
   pin: 'M9 4h6l-1 6 3 3H7l3-3zM12 13v8',
   download: 'M12 4v11M7 10l5 5 5-5M5 20h14',
+  bluetooth: 'M7 7l10 10-5 4V3l5 4L7 17',
   left: 'M15 5l-7 7 7 7',
   right: 'M9 5l7 7-7 7',
 };

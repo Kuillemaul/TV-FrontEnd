@@ -3,6 +3,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import type { AlertService } from '../alerts.js';
 import { AudioControl } from '../audio.js';
+import { BluetoothControl } from '../bluetooth.js';
 import { DisplayControl } from '../display.js';
 import { RequestsClient } from '../providers/seerr.js';
 import { ArrWatcher } from '../providers/arrwatch.js';
@@ -129,6 +130,37 @@ export function registerExtras(app: FastifyInstance, ctx: ExtrasContext): void {
     run(async () => {
       requireParent();
       await display.auto(String(req.body.output));
+    }),
+  );
+
+  /* ---------------- Bluetooth ---------------- */
+
+  const bt = new BluetoothControl();
+  const validMac = (m: unknown) => {
+    const mac = String(m ?? '').toUpperCase();
+    if (!/^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/.test(mac)) throw new Error('Not a Bluetooth address');
+    return mac;
+  };
+  app.get('/api/bluetooth', async () => bt.status());
+  app.post<{ Body: { on: boolean } }>('/api/bluetooth/power', async (req) =>
+    run(async () => {
+      requireParent();
+      await bt.power(Boolean(req.body.on));
+    }),
+  );
+  app.post<{ Body: { on: boolean } }>('/api/bluetooth/scan', async (req) => run(() => bt.scan(req.body.on !== false)));
+  app.post<{ Body: { mac: string } }>('/api/bluetooth/pair', async (req) =>
+    run(async () => {
+      requireParent();
+      await bt.pair(validMac(req.body.mac));
+    }),
+  );
+  app.post<{ Body: { mac: string } }>('/api/bluetooth/connect', async (req) => run(() => bt.connect(validMac(req.body.mac))));
+  app.post<{ Body: { mac: string } }>('/api/bluetooth/disconnect', async (req) => run(() => bt.disconnect(validMac(req.body.mac))));
+  app.post<{ Body: { mac: string } }>('/api/bluetooth/forget', async (req) =>
+    run(async () => {
+      requireParent();
+      await bt.forget(validMac(req.body.mac));
     }),
   );
 
