@@ -32,6 +32,8 @@ export interface TvheadendConfig {
 
 export interface LiveTvConfig {
   tvheadend?: TvheadendConfig;
+  /** Use the Plex server's Live TV & DVR (tuner on the Plex server) instead of Tvheadend. */
+  plex?: boolean;
   /** Player command; {playlist} and {index} are substituted. */
   player: string[];
   /** Player command for a single recording; {url} is substituted. */
@@ -385,6 +387,7 @@ export function loadConfig(path = resolveConfigPath()): HearthConfig {
   if (raw.livetv) {
     if (Array.isArray(raw.livetv.player)) cfg.livetv.player = raw.livetv.player;
     if (Array.isArray(raw.livetv.recordingPlayer)) cfg.livetv.recordingPlayer = raw.livetv.recordingPlayer;
+    if (raw.livetv.plex === true) cfg.livetv.plex = true;
     if (raw.livetv.tvheadend?.url) {
       cfg.livetv.tvheadend = {
         url: String(raw.livetv.tvheadend.url).replace(/\/$/, ''),

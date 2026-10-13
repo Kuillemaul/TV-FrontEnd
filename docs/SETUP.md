@@ -202,6 +202,20 @@ livetv:
 Watching opens **mpv** full screen with every channel in a playlist. **CH+/CH−, PgUp/PgDn or up/down zap**,
 Back returns to the guide (`os/mpv/input.conf`). From the guide, select a show and choose **Record**.
 
+### Live TV from a Plex DVR instead
+If your tuner is in the Plex server (Plex **Live TV & DVR** set up there), skip Tvheadend and use Plex's channels and
+guide in Hearth:
+
+```yaml
+plex: { url: http://192.168.50.30:32400, token: "…" }   # already there for Continue watching
+livetv:
+  plex: true
+```
+
+Live TV, the guide, "On now" on Home and voice ("watch channel 2") then use the Plex tuner. Watching tunes the channel
+on the Plex server and plays it full screen; CH+/CH− still zap. Recordings stay in Plex (set them up in the Plex app;
+they appear under **Recently added** on Home).
+
 ## 3. Home Assistant dashboard and voice
 
 1. In Home Assistant: your profile → **Security** → **Long-lived access tokens** → create one for "Hearth".

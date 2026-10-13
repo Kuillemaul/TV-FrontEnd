@@ -19,6 +19,7 @@ import { PermissionError, ProfileStore, type Profile } from './profiles.js';
 import { AlertService, type Alert } from './alerts.js';
 import { SceneAutomation } from './automations.js';
 import { PlexClient } from './providers/plex.js';
+import { PlexLiveTvProvider } from './providers/plexlive.js';
 import { cookieToken, isLoopback, lanAddress, RemotePairing } from './remote.js';
 import { registerExtras } from './routes/extras.js';
 import { RequestsClient } from './providers/seerr.js';
@@ -45,8 +46,11 @@ const bus = new EventBus();
 const state = new StateStore(config.stateDir);
 const launcher = new Launcher(config, bus, log);
 // Sample data only when previewing without a config file; otherwise unset sections are just empty.
+const plexLive = !config.livetv.tvheadend && config.livetv.plex && config.plex ? new PlexLiveTvProvider(config.plex, `http://127.0.0.1:${config.server.port}`) : null;
 const tv: LiveTvProvider = config.livetv.tvheadend
   ? new TvheadendProvider(config.livetv.tvheadend)
+  : plexLive
+    ? plexLive
   : config.demo
     ? new DemoTvProvider()
     : new NoTvProvider();
@@ -278,7 +282,7 @@ app.get('/api/info', async () => ({
   admin: config.admin.enabled ? { port: config.admin.port, url: `http://${lanAddress() ?? 'this-tv'}:${config.admin.port}` } : null,
   clock24h: config.ui.clock24h,
   demo: { tv: tv.demo, homeassistant: Boolean(demoHome), games: games.demo },
-  setup: { tv: Boolean(config.livetv.tvheadend) || tv.demo, homeassistant: Boolean(ha || demoHome), games: config.gaming.hosts.length > 0 || games.demo },
+  setup: { tv: Boolean(config.livetv.tvheadend || plexLive) || tv.demo, homeassistant: Boolean(ha || demoHome), games: config.gaming.hosts.length > 0 || games.demo },
   session: launcher.session,
   configPath: resolveConfigPath(),
   features: {
@@ -387,11 +391,23 @@ app.post<{ Body: { channelId: string } }>('/api/tv/watch', async (req) => {
     state.setLastChannel(chs[index].id);
     await launcher.launch('livetv', `Live TV – ${chs[index].name}`, {
       type: 'command',
-      command: expand(config.livetv.player, { playlist, index }),
+      command: [...expand(config.livetv.player, { playlist, index }), ...(plexLive?.playerArgs() ?? [])],
     });
     return { ok: true };
   } catch (err) {
     return fail(err);
+  }
+});
+
+// Plex Live TV: mpv's playlist points here; tune the channel on the Plex server, then hand over its stream.
+app.get<{ Params: { id: string } }>('/api/tv/plex/stream/:id', async (req, reply) => {
+  if (!plexLive || !isLoopback(req.ip)) return reply.code(404).send();
+  try {
+    state.setLastChannel(req.params.id);
+    return reply.redirect(await plexLive.tune(req.params.id));
+  } catch (err) {
+    log.warn(`plex live tv: ${(err as Error).message}`);
+    return reply.code(502).send();
   }
 });
 
