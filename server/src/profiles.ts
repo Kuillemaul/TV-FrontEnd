@@ -23,6 +23,8 @@ export interface Profile {
   /** Allowed games as "<hostId>:<gameId>". null = every game. */
   games: string[] | null;
   liveTv: boolean;
+  /** Live TV channel ids this profile doesn't want to see (new channels show up by default). */
+  hiddenChannels?: string[];
   theme: Theme;
   /** Screen-time rules (kid profiles). */
   limits?: Limits;
@@ -165,9 +167,9 @@ export class ProfileStore {
 
   update(id: string, patch: Partial<Omit<Profile, 'id' | 'pinHash'>> & { pin?: string | null }): Profile {
     const p = this.get(id);
-    const onlyTheme = Object.keys(patch).every((k) => k === 'theme');
-    // Anyone may restyle their own profile; everything else needs a parent.
-    if (!(onlyTheme && id === this.active.id)) this.requireAdmin();
+    // Anyone may restyle their own profile, and grown-ups pick their own channels; everything else needs a parent.
+    const selfEditable = (k: string) => k === 'theme' || (k === 'hiddenChannels' && p.kind !== 'kid');
+    if (!(Object.keys(patch).every(selfEditable) && id === this.active.id)) this.requireAdmin();
 
     if (patch.name !== undefined) p.name = patch.name.trim().slice(0, 20) || p.name;
     if (patch.color) p.color = patch.color;
@@ -181,6 +183,10 @@ export class ProfileStore {
     if (patch.apps !== undefined) p.apps = patch.apps;
     if (patch.games !== undefined) p.games = patch.games;
     if (patch.liveTv !== undefined) p.liveTv = patch.liveTv;
+    if (patch.hiddenChannels !== undefined) {
+      const ids = Array.isArray(patch.hiddenChannels) ? patch.hiddenChannels : [];
+      p.hiddenChannels = [...new Set(ids.map((x) => String(x).slice(0, 120)))].slice(0, 1000);
+    }
     if (patch.limits !== undefined) p.limits = { ...NO_LIMITS, ...p.limits, ...patch.limits };
     if (patch.theme) p.theme = { ...p.theme, ...patch.theme };
     if (patch.pins !== undefined) p.pins = (Array.isArray(patch.pins) ? patch.pins : []).slice(0, MAX_PINS).map(cleanPin);

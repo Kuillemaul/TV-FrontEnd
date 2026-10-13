@@ -62,3 +62,14 @@ test('pins: toggle, order and per-profile', () => {
   // Saved to disk.
   assert.equal(new ProfileStore(dir).active.pins?.length, 2);
 });
+
+test('hidden channels: grown-ups choose their own, kids need a parent', () => {
+  const store = fresh();
+  store.update('main', { hiddenChannels: ['ch-a', 'ch-a', 'ch-b'] });
+  assert.deepEqual(store.active.hiddenChannels, ['ch-a', 'ch-b']);
+  const kid = store.create({ name: 'Leo', kind: 'kid' });
+  store.update(kid.id, { hiddenChannels: ['ch-c'] }); // a parent is on screen
+  store.setActive(kid.id);
+  assert.throws(() => store.update(kid.id, { hiddenChannels: [] }), PermissionError);
+  assert.deepEqual(store.get(kid.id).hiddenChannels, ['ch-c']);
+});

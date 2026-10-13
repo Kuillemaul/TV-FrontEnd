@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Icon } from '../components/Icon';
 import { Button, Chip, DemoBanner, Modal, NotSetUp, PageHeader } from '../components/Layout';
-import { formatTime, post, useApi, type Guide, type Programme, type Recording } from '../lib/api';
+import { formatTime, post, useApi, type Channel, type Guide, type Programme, type Recording } from '../lib/api';
 import { useHearth } from '../lib/hearth';
 import { useNow } from './Home';
 
@@ -10,19 +10,95 @@ const REM_PER_MIN = 0.42;
 const HOURS = 4;
 
 export function LiveTvPage() {
+  const hearth = useHearth();
   const [tab, setTab] = useState<'guide' | 'recordings'>('guide');
+  const [choosing, setChoosing] = useState(false);
+  const [version, setVersion] = useState(0);
   return (
     <div className="page">
       <PageHeader title="Live TV">
         <Chip active={tab === 'guide'} onClick={() => setTab('guide')}>Guide</Chip>
         <Chip active={tab === 'recordings'} onClick={() => setTab('recordings')}>Recordings</Chip>
+        {!hearth.isKid ? (
+          <Chip active={false} onClick={() => setChoosing(true)}>
+            Choose channels
+          </Chip>
+        ) : null}
       </PageHeader>
-      {tab === 'guide' ? <GuideGrid /> : <Recordings />}
+      {tab === 'guide' ? <GuideGrid key={version} onChoose={() => setChoosing(true)} /> : <Recordings />}
+      {choosing ? (
+        <ChannelPicker
+          onClose={(changed) => {
+            setChoosing(false);
+            if (changed) setVersion((v) => v + 1);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
 
-function GuideGrid() {
+/** Pick which channels this profile sees in the guide, on Home and when zapping. */
+function ChannelPicker({ onClose }: { onClose: (changed: boolean) => void }) {
+  const hearth = useHearth();
+  const { data } = useApi<{ channels: Channel[] }>('/api/tv/channels');
+  const [hidden, setHidden] = useState<Set<string>>(() => new Set(hearth.profile?.hiddenChannels ?? []));
+  const [busy, setBusy] = useState(false);
+  const all = data?.channels ?? [];
+  const toggle = (id: string) =>
+    setHidden((h) => {
+      const next = new Set(h);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const save = async () => {
+    if (!hearth.profile) return;
+    setBusy(true);
+    // Only remember channels that still exist.
+    const ids = all.filter((c) => hidden.has(c.id)).map((c) => c.id);
+    const res = await post(`/api/profiles/${hearth.profile.id}`, { hiddenChannels: ids }, 'PUT');
+    setBusy(false);
+    if (!res.ok) return hearth.toast(res.error ?? 'Couldn’t save the channels', 'error');
+    hearth.toast(`${all.length - ids.length} of ${all.length} channels shown for ${hearth.profile.name}`);
+    onClose(true);
+  };
+  const shown = all.filter((c) => !hidden.has(c.id)).length;
+  return (
+    <Modal title={`Channels for ${hearth.profile?.name ?? 'this profile'}`} onClose={() => onClose(false)} wide>
+      <p className="modal-sub">
+        Select a channel to show or hide it. {all.length ? `${shown} of ${all.length} shown.` : 'Loading channels…'} New channels
+        show up by themselves.
+      </p>
+      <div className="channel-pick" data-nav-group>
+        {all.map((c) => (
+          <button key={c.id} data-nav className={`channel-pick-item ${hidden.has(c.id) ? 'off' : ''}`} onClick={() => toggle(c.id)}>
+            {c.icon ? <img src={c.icon} alt="" /> : <span className="channel-pick-icon" />}
+            <span className="channel-pick-num">{c.number}</span>
+            <span className="channel-pick-name">{c.name}</span>
+            <Icon name={hidden.has(c.id) ? 'x' : 'check'} size="1.1em" />
+          </button>
+        ))}
+      </div>
+      <div className="modal-actions" data-nav-group>
+        <Button onClick={() => void save()} disabled={busy || !all.length}>
+          {busy ? 'Saving…' : 'Save'}
+        </Button>
+        <Button variant="ghost" onClick={() => setHidden(new Set())}>
+          Show all
+        </Button>
+        <Button variant="ghost" onClick={() => setHidden(new Set(all.map((c) => c.id)))}>
+          Hide all
+        </Button>
+        <Button variant="ghost" onClick={() => onClose(false)}>
+          Cancel
+        </Button>
+      </div>
+    </Modal>
+  );
+}
+
+function GuideGrid({ onChoose }: { onChoose: () => void }) {
   const hearth = useHearth();
   const now = useNow(30_000);
   const { data } = useApi<Guide>(`/api/tv/guide?hours=${HOURS}`, 5 * 60_000);
@@ -45,6 +121,18 @@ function GuideGrid() {
   }, [data, start, end]);
 
   if (!data) return <div className="empty">Loading guide…</div>;
+  if (!data.demo && data.channels.length === 0 && (hearth.profile?.hiddenChannels?.length ?? 0) > 0) {
+    return (
+      <div className="empty">
+        Every channel is hidden for this profile.{' '}
+        {!hearth.isKid ? (
+          <Button onClick={onChoose} autoFocus>
+            Choose channels
+          </Button>
+        ) : null}
+      </div>
+    );
+  }
   if (!data.demo && data.channels.length === 0) {
     return (
       <NotSetUp icon="tv" title="No channels yet">

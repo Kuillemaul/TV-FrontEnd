@@ -169,3 +169,5 @@ html.is-admin body { overflow: auto; background: #0b0d13; cursor: auto; }
 @media (max-width: 800px) {
   .ad-designer-body { grid-template-columns: minmax(0, 1fr); }
 }
+.ad-channel-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: 0.35rem 1rem; }
+.ad-channel-list b { display: inline-block; min-width: 2rem; color: var(--ad-dim); font-variant-numeric: tabular-nums; }

@@ -134,6 +134,8 @@ export interface Profile {
   /** "<hostId>:<gameId>" keys; null = every game. */
   games: string[] | null;
   liveTv: boolean;
+  /** Live TV channel ids hidden for this profile. */
+  hiddenChannels?: string[];
   theme: ThemeChoice;
   limits?: Limits;
   pins?: Pin[];

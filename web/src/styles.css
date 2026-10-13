@@ -1866,3 +1866,14 @@ body.is-alert { background: transparent; }
 .wifi-bars i.on { opacity: 1; }
 .wifi-list { margin-bottom: 1rem; }
 .wifi-current { border-color: var(--good); }
+
+/* Live TV → Choose channels */
+.channel-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr)); gap: 0.6rem; max-height: 58vh; overflow-y: auto; padding: 0.3rem; }
+.channel-pick-item { display: flex; align-items: center; gap: 0.8rem; padding: 0.6rem 0.9rem; border-radius: var(--radius); background: var(--surface-2); border: 1px solid var(--border); color: var(--text); font: inherit; text-align: left; }
+.channel-pick-item img, .channel-pick-icon { width: 2.6rem; height: 1.8rem; object-fit: contain; flex: none; }
+.channel-pick-num { color: var(--text-3); font-variant-numeric: tabular-nums; min-width: 1.8rem; }
+.channel-pick-name { flex: 1; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.channel-pick-item.off { opacity: 0.4; }
+.channel-pick-item.off .channel-pick-name { text-decoration: line-through; }
+.channel-pick-item:focus { background: var(--text); color: var(--bg); opacity: 1; transform: scale(1.02); }
+.channel-pick-item:focus .channel-pick-num { color: var(--bg); }

@@ -78,6 +78,12 @@ async function channels(): Promise<Channel[]> {
 }
 
 const profiles = new ProfileStore(config.stateDir);
+/** The channels the profile on screen hasn't hidden. */
+async function visibleChannels(): Promise<Channel[]> {
+  const hidden = new Set(profiles.active.hiddenChannels ?? []);
+  const all = await channels();
+  return hidden.size ? all.filter((c) => !hidden.has(c.id)) : all;
+}
 const tileArt = new TileArtStore(join(config.stateDir, 'tiles'));
 const screenTime = new ScreenTime(config.stateDir);
 const plex = config.plex ? new PlexClient(config.plex) : undefined;
@@ -168,7 +174,7 @@ const bootId = Date.now().toString(36);
 const catalog = async (): Promise<IntentCatalog> => ({
   apps: visibleApps().map((a) => ({ id: a.id, name: a.name })),
   games: await visibleGames().catch(() => []),
-  channels: profiles.active.liveTv ? await channels().catch(() => []) : [],
+  channels: profiles.active.liveTv ? await visibleChannels().catch(() => []) : [],
   inputs: visibleApps()
     .filter((a) => a.id.startsWith('input-'))
     .map((a) => ({ id: a.id, name: a.name })),
@@ -372,15 +378,20 @@ app.post<{ Params: { id: string } }>('/api/apps/:id/launch', async (req) => {
 app.get<{ Querystring: { hours?: string } }>('/api/tv/guide', async (req) => {
   const hours = Math.min(Number(req.query.hours ?? 4), 24);
   const from = Date.now() - 60 * 60_000;
-  const [chs, programmes] = await Promise.all([channels(), tv.guide(from, Date.now() + hours * 3600_000)]);
-  return { demo: tv.demo, lastChannel: state.lastChannel, channels: chs, programmes };
+  const [chs, all] = await Promise.all([visibleChannels(), tv.guide(from, Date.now() + hours * 3600_000)]);
+  const shown = new Set(chs.map((c) => c.id));
+  return { demo: tv.demo, lastChannel: state.lastChannel, channels: chs, programmes: all.filter((p) => shown.has(p.channelId)) };
 });
+
+// Every channel (for choosing which ones a profile sees).
+app.get('/api/tv/channels', async () => ({ channels: await channels().catch(() => []) }));
 
 app.post<{ Body: { channelId: string } }>('/api/tv/watch', async (req) => {
   try {
     if (!profiles.active.liveTv) throw new PermissionError('Live TV is off for this profile');
     assertCanStart();
-    const chs = await channels();
+    const chs = await visibleChannels();
+    if (!chs.length) throw new Error('No channels to show. Choose some on the Live TV page.');
     const index = Math.max(0, chs.findIndex((c) => c.id === req.body.channelId));
     // A playlist of every channel lets CH+/CH- (PgUp/PgDn) zap inside mpv.
     const playlist = join(config.stateDir, 'channels.m3u');

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { post, useApi, type AppTile, type GameLibrary, type Limits, type Pin, type Profile, type ProfilesState, type ThemeChoice } from '../lib/api';
+import { post, useApi, type AppTile, type Channel, type GameLibrary, type Limits, type Pin, type Profile, type ProfilesState, type ThemeChoice } from '../lib/api';
 import { BACKGROUNDS, FONTS, PALETTES, findBackground, findFont, themeVars } from '../lib/theme';
 import type { Notify, useProfiles } from './Admin';
 
@@ -60,6 +60,7 @@ function ProfileEditor({ profile, profiles, notify, onDeleted }: { profile: Prof
   const [newPin, setNewPin] = useState('');
   useEffect(() => setDraft(profile), [profile]);
   const apps = useApi<AppTile[]>('/api/apps?all=1');
+  const tvChannels = useApi<{ channels: Channel[] }>('/api/tv/channels');
   const library = useApi<GameLibrary>('/api/games?all=1');
   const photos = useApi<{ files: Array<{ file: string }> }>('/api/admin/backgrounds');
   const dirty = JSON.stringify(draft) !== JSON.stringify(profile) || newPin !== '';
@@ -73,6 +74,7 @@ function ProfileEditor({ profile, profiles, notify, onDeleted }: { profile: Prof
       color: draft.color,
       kind: draft.kind,
       liveTv: draft.liveTv,
+      hiddenChannels: draft.hiddenChannels ?? [],
       apps: draft.apps,
       games: draft.games,
       theme: draft.theme,
@@ -153,6 +155,13 @@ function ProfileEditor({ profile, profiles, notify, onDeleted }: { profile: Prof
         <h2>Apps</h2>
         <AppsPicker all={apps.data ?? []} value={draft.apps} onChange={(a) => set({ apps: a })} />
       </div>
+
+      {draft.liveTv && tvChannels.data?.channels.length ? (
+        <div className="ad-card">
+          <h2>Live TV channels</h2>
+          <ChannelsPicker all={tvChannels.data.channels} hidden={draft.hiddenChannels ?? []} onChange={(h) => set({ hiddenChannels: h })} />
+        </div>
+      ) : null}
 
       <div className="ad-card">
         <h2>Games</h2>
@@ -356,5 +365,38 @@ function GamesPicker({ library, value, onChange }: { library: GameLibrary | null
         </>
       ) : null}
     </div>
+  );
+}
+
+/** Tick the channels this profile sees; unticked ones are hidden (new channels show by default). */
+function ChannelsPicker({ all, hidden, onChange }: { all: Channel[]; hidden: string[]; onChange: (hidden: string[]) => void }) {
+  const off = new Set(hidden);
+  const shown = all.filter((c) => !off.has(c.id)).length;
+  return (
+    <>
+      <p className="ad-muted">
+        {shown} of {all.length} shown in the guide, on Home and when changing channel.{' '}
+        <button className="ad-link" onClick={() => onChange([])}>
+          Show all
+        </button>{' '}
+        <button className="ad-link" onClick={() => onChange(all.map((c) => c.id))}>
+          Hide all
+        </button>
+      </p>
+      <div className="ad-channel-list">
+        {all.map((c) => (
+          <label key={c.id} className="ad-check">
+            <input
+              type="checkbox"
+              checked={!off.has(c.id)}
+              onChange={(e) => onChange(e.target.checked ? hidden.filter((x) => x !== c.id) : [...hidden, c.id])}
+            />
+            <span>
+              <b>{c.number}</b> {c.name}
+            </span>
+          </label>
+        ))}
+      </div>
+    </>
   );
 }

@@ -216,6 +216,10 @@ Live TV, the guide, "On now" on Home and voice ("watch channel 2") then use the 
 on the Plex server and plays it full screen; CH+/CH− still zap. Recordings stay in Plex (set them up in the Plex app;
 they appear under **Recently added** on Home).
 
+**Choosing channels per profile:** Live TV → **Choose channels** hides the ones that profile doesn't want; the guide,
+"On now" on Home, voice and CH+/CH− then skip them. Each profile keeps its own list (kids' lists are set by a parent,
+here or in the network editor → Profiles → *Live TV channels*). New channels show up by themselves.
+
 ## 3. Home Assistant dashboard and voice
 
 1. In Home Assistant: your profile → **Security** → **Long-lived access tokens** → create one for "Hearth".
