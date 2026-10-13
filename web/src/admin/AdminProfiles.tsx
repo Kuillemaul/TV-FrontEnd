@@ -156,12 +156,21 @@ function ProfileEditor({ profile, profiles, notify, onDeleted }: { profile: Prof
         <AppsPicker all={apps.data ?? []} value={draft.apps} onChange={(a) => set({ apps: a })} />
       </div>
 
-      {draft.liveTv && tvChannels.data?.channels.length ? (
-        <div className="ad-card">
-          <h2>Live TV channels</h2>
+      <div className="ad-card">
+        <h2>Live TV channels</h2>
+        {!draft.liveTv ? (
+          <p className="ad-muted">Live TV is off for this profile (tick “Can watch Live TV” above).</p>
+        ) : !tvChannels.data ? (
+          <p className="ad-muted">Loading channels…</p>
+        ) : !tvChannels.data.channels.length ? (
+          <p className="ad-muted">
+            No channels found. For the Plex tuner, add <code>livetv:</code> with <code>plex: true</code> in the Config file (Plex
+            set up under <code>plex:</code>), save, then come back here.
+          </p>
+        ) : (
           <ChannelsPicker all={tvChannels.data.channels} hidden={draft.hiddenChannels ?? []} onChange={(h) => set({ hiddenChannels: h })} />
-        </div>
-      ) : null}
+        )}
+      </div>
 
       <div className="ad-card">
         <h2>Games</h2>
