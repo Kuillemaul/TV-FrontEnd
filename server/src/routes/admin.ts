@@ -127,10 +127,16 @@ export function registerAdminApi(app: FastifyInstance, ctx: AdminContext): void 
   });
 
   app.post('/api/admin/update', async (_req, reply) => {
+    // Preferred: hearth-update.path (install.sh) starts the updater when this file changes.
+    if (existsSync('/etc/systemd/system/hearth-update.path')) {
+      mkdirSync(config.stateDir, { recursive: true });
+      writeFileSync(join(config.stateDir, 'update-request'), `${Date.now()}\n`);
+      return { ok: true };
+    }
     const err = await new Promise<string | null>((resolve) =>
       execFile('systemctl', ['start', '--no-block', 'hearth-update.service'], { timeout: 10_000 }, (e, _out, stderr) => resolve(e ? stderr.trim() || e.message : null)),
     );
-    if (err) return reply.code(500).send({ ok: false, error: `Couldn't start the updater (${err}). Re-run os/install.sh once to set it up.` });
+    if (err) return reply.code(500).send({ ok: false, error: `Couldn't start the updater (${err}). On the TV run: cd ~/hearth && git pull && sudo ./os/install.sh` });
     return { ok: true };
   });
 

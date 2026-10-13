@@ -155,7 +155,19 @@ Persistent=true
 [Install]
 WantedBy=timers.target
 UNIT
-# "Update now" in the network editor starts hearth-update.service as the tv user.
+# "Update now" in the network editor: Hearth (running as tv) touches update-request and this
+# path unit starts the updater as root. No polkit needed.
+sudo -u "$TV_USER" mkdir -p "$TV_HOME/.local/state/hearth"
+cat > /etc/systemd/system/hearth-update.path <<UNIT
+[Unit]
+Description=Start the Hearth updater when the network editor asks
+[Path]
+PathChanged=$TV_HOME/.local/state/hearth/update-request
+Unit=hearth-update.service
+[Install]
+WantedBy=multi-user.target
+UNIT
+# Older route, kept as a fallback: start hearth-update.service directly as the tv user.
 cat > /etc/polkit-1/rules.d/51-hearth-update.rules <<'RULES'
 polkit.addRule(function (action, subject) {
   if (subject.user == "tv" && action.id == "org.freedesktop.systemd1.manage-units" &&
@@ -179,6 +191,7 @@ UNIT
 systemctl daemon-reload
 systemctl enable --now ydotoold.service
 systemctl enable --now hearth-update-nightly.timer
+systemctl enable --now hearth-update.path
 echo
 echo "Done. Next:"
 echo "  1. Edit /opt/hearth/config/config.yaml (Home Assistant token, Tvheadend, gaming PCs)"
