@@ -473,6 +473,12 @@ Back or "hide the camera" closes it. Over Plex, games or Live TV the kiosk compo
 ### Recording a whole series
 In the guide, select a show → **Record series** (Tvheadend's "autorec" records every episode).
 
+### Wi-Fi
+Settings → **Wi-Fi** lists nearby networks; select one and type the password (keyboard, or the phone remote's typing
+box). It's easier from the network editor → **TV settings → Wi-Fi**. Hearth uses NetworkManager (installed by
+`install.sh`); a cable plugged into the router keeps working alongside. If no Wi-Fi adapter shows up, the card needs
+firmware: enable Debian's `non-free-firmware` section and `sudo apt install firmware-iwlwifi`, then reboot.
+
 ### TV power and other inputs
 With a Pulse-Eight USB-CEC adapter (see below), Settings has **Turn TV off/on** and **Switch TV to Hearth**, and
 "turn off the TV" works by voice. Add other HDMI devices under `tv.inputs` and they appear as app tiles; "switch to

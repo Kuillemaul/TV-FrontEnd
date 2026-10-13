@@ -4,6 +4,7 @@ import { extname, join } from 'node:path';
 import type { AlertService } from '../alerts.js';
 import { AudioControl } from '../audio.js';
 import { BluetoothControl } from '../bluetooth.js';
+import { WifiControl } from '../wifi.js';
 import { DisplayControl } from '../display.js';
 import type { RequestsClient } from '../providers/seerr.js';
 import type { SleepTimer } from '../sleep.js';
@@ -184,6 +185,42 @@ export function registerExtras(app: FastifyInstance, ctx: ExtrasContext): void {
     run(async () => {
       requireParent();
       await bt.forget(validMac(req.body.mac));
+    }),
+  );
+
+  /* ---------------- Wi-Fi ---------------- */
+
+  const wifi = new WifiControl();
+  const ssidOf = (v: unknown) => {
+    const ssid = String(v ?? '');
+    if (!ssid || ssid.length > 32) throw new Error('Pick a network');
+    return ssid;
+  };
+  app.get<{ Querystring: { rescan?: string } }>('/api/wifi', async (req) => wifi.status(req.query.rescan === '1'));
+  app.post<{ Body: { on: boolean } }>('/api/wifi/radio', async (req) =>
+    run(async () => {
+      requireParent();
+      await wifi.radio(Boolean(req.body.on));
+    }),
+  );
+  app.post<{ Body: { ssid: string; password?: string } }>('/api/wifi/connect', async (req) =>
+    run(async () => {
+      requireParent();
+      const pw = req.body.password ? String(req.body.password) : undefined;
+      if (pw !== undefined && (pw.length < 8 || pw.length > 63)) throw new Error('Wi-Fi passwords are 8 to 63 characters');
+      await wifi.connect(ssidOf(req.body.ssid), pw);
+    }),
+  );
+  app.post('/api/wifi/disconnect', async () =>
+    run(async () => {
+      requireParent();
+      await wifi.disconnect();
+    }),
+  );
+  app.post<{ Body: { ssid: string } }>('/api/wifi/forget', async (req) =>
+    run(async () => {
+      requireParent();
+      await wifi.forget(ssidOf(req.body.ssid));
     }),
   );
 

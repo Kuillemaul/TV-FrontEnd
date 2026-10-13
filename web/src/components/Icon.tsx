@@ -29,6 +29,7 @@ const PATHS: Record<string, string> = {
   pin: 'M9 4h6l-1 6 3 3H7l3-3zM12 13v8',
   download: 'M12 4v11M7 10l5 5 5-5M5 20h14',
   bluetooth: 'M7 7l10 10-5 4V3l5 4L7 17',
+  wifi: 'M2 9a15 15 0 0 1 20 0M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M12 19.5h.01',
   left: 'M15 5l-7 7 7 7',
   right: 'M9 5l7 7-7 7',
 };

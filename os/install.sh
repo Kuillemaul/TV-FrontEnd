@@ -13,7 +13,7 @@ TV_USER=tv
 echo "==> Packages"
 apt-get update
 apt-get install -y --no-install-recommends \
-  sudo git cage xwayland wlr-randr mpv curl ca-certificates gnupg flatpak polkitd bluez \
+  sudo git cage xwayland wlr-randr mpv curl ca-certificates gnupg flatpak polkitd bluez network-manager \
   pipewire pipewire-pulse pipewire-alsa wireplumber pulseaudio-utils alsa-utils \
   intel-media-va-driver vainfo \
   fonts-inter fonts-noto-color-emoji \
@@ -55,6 +55,11 @@ id "$TV_USER" >/dev/null 2>&1 || useradd -m -s /bin/bash "$TV_USER"
 # input: global Home key + keyboard/mouse detection; video/render: VAAPI; audio: sound
 usermod -aG video,render,audio,input,bluetooth "$TV_USER"
 loginctl enable-linger "$TV_USER"
+
+# Wi-Fi firmware (Intel cards, e.g. the OptiPlex's AX201). Needs Debian's non-free-firmware
+# section; don't stop the install if it isn't enabled.
+apt-get install -y --no-install-recommends firmware-iwlwifi 2>/dev/null \
+  || echo "   (firmware-iwlwifi not installed: enable non-free-firmware in /etc/apt/sources.list for Wi-Fi)"
 
 echo "==> Hearth to /opt/hearth"
 mkdir -p /opt/hearth
@@ -186,6 +191,15 @@ polkit.addRule(function (action, subject) {
   }
 });
 RULES
+# Settings → Wi-Fi: let Hearth (tv user, running as a service) manage Wi-Fi through NetworkManager.
+cat > /etc/polkit-1/rules.d/52-hearth-network.rules <<'RULES'
+polkit.addRule(function (action, subject) {
+  if (subject.user == "tv" && action.id.indexOf("org.freedesktop.NetworkManager.") == 0) {
+    return polkit.Result.YES;
+  }
+});
+RULES
+systemctl enable --now NetworkManager.service 2>/dev/null || true
 systemctl enable bluetooth.service 2>/dev/null || true
 
 # Phone remote → key presses into Plex/browser/Moonlight (ydotool needs its daemon).
