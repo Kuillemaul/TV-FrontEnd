@@ -15,6 +15,8 @@ import { Avatar, ProfileEditor, ProfileMenu, ProfilePicker, saveProfile } from '
 import { ThemeMenu } from './components/ThemeMenu';
 import { VoiceOverlay } from './components/VoiceOverlay';
 import { KeyboardHost, setInputValue, typeIntoKeyboard } from './components/OnScreenKeyboard';
+import { QuickPanel } from './components/QuickPanel';
+import { NotificationsPanel } from './components/Notifications';
 import {
   formatTime,
   get,
@@ -56,7 +58,7 @@ const TABS: Array<{ id: PageId; label: string; icon: string }> = [
 /** Pages a kid profile can reach. */
 const kidPages = (p: Profile): PageId[] => ['home', ...(p.liveTv ? (['tv'] as PageId[]) : []), 'apps', 'games', 'search', 'morning'];
 
-type Overlay = null | { type: 'pin'; pin: Pin; label?: string } | { type: 'menu' } | { type: 'theme' } | { type: 'apps' } | { type: 'editProfile'; id: string } | { type: 'game'; game: Game };
+type Overlay = null | { type: 'pin'; pin: Pin; label?: string } | { type: 'menu' } | { type: 'quick' } | { type: 'notifications' } | { type: 'theme' } | { type: 'apps' } | { type: 'editProfile'; id: string } | { type: 'game'; game: Game };
 
 interface Toast {
   id: number;
@@ -79,6 +81,7 @@ export function App() {
   const pipRef = useRef(pip);
   pipRef.current = pip;
   const [sleepEndsAt, setSleepEndsAt] = useState<number | null>(null);
+  const [unread, setUnread] = useState(0);
   const [kbmFor, setKbmFor] = useState<PlayRequest | null>(null);
   const [launch, setLaunch] = useState<LaunchProgress | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -310,6 +313,7 @@ export function App() {
         loadScreenTime();
         return void loadProfiles();
       case 'alert':
+        setUnread((n) => n + 1);
         // A new ring replaces an older doorbell card; keep at most three alerts on screen.
         return setAlerts((a) => [...a.filter((x) => !(x.kind === 'doorbell' && e.alert.kind === 'doorbell')), e.alert].slice(-3));
       case 'timesup':
@@ -347,6 +351,8 @@ export function App() {
           const el = document.activeElement;
           const pin = pinOf(el);
           if (pin) setOverlay({ type: 'pin', pin, label: el?.querySelector('.tile-title, .tile-wordmark')?.textContent ?? undefined });
+          // Nothing to pin here: Menu / X opens quick settings (the on-screen keyboard uses X to delete).
+          else if (!el?.closest('[data-osk]')) setOverlay({ type: 'quick' });
         }
         if (cmd === 'home') navigate('home');
         if ((cmd === 'prevTab' || cmd === 'nextTab') && !document.querySelector('[data-nav-scope]')) {
@@ -417,6 +423,10 @@ export function App() {
             <button className="icon-btn" data-nav onClick={openVoice} aria-label="Voice">
               <Icon name="mic" />
             </button>
+            <button className="icon-btn quick-open" data-nav onClick={() => setOverlay({ type: 'quick' })} aria-label={unread ? `Quick settings, ${unread} new notifications` : 'Quick settings'}>
+              <Icon name="sliders" />
+              {unread ? <span className="unread-dot" /> : null}
+            </button>
             {!isKid ? (
               <button className={`icon-btn ${page === 'settings' ? 'tab-active' : ''}`} data-nav onClick={() => navigate('settings')} aria-label="Settings">
                 <Icon name="settings" />
@@ -483,6 +493,23 @@ export function App() {
             onTheme={() => setOverlay({ type: 'theme' })}
           />
         ) : null}
+        {overlay?.type === 'quick' ? (
+          <QuickPanel
+            sleepEndsAt={sleepEndsAt}
+            unread={unread}
+            onClose={() => setOverlay(null)}
+            onSwitchProfile={() => {
+              setOverlay(null);
+              setPickerOpen(true);
+            }}
+            onTheme={() => setOverlay({ type: 'theme' })}
+            onNotifications={() => {
+              setUnread(0);
+              setOverlay({ type: 'notifications' });
+            }}
+          />
+        ) : null}
+        {overlay?.type === 'notifications' ? <NotificationsPanel onClose={() => setOverlay(null)} /> : null}
         {overlay?.type === 'theme' && profile ? (
           <ThemeMenu
             title={`${profile.name}'s theme`}

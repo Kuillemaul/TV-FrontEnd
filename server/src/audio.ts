@@ -227,6 +227,10 @@ export class AudioControl {
     await pactl(['set-sink-mute', '@DEFAULT_SINK@', '0']);
   }
 
+  async setMute(muted: boolean): Promise<void> {
+    await pactl(['set-sink-mute', '@DEFAULT_SINK@', muted ? '1' : '0']);
+  }
+
   /** Play the test sound on one speaker of the current output. */
   async test(channel: number): Promise<void> {
     const status = await this.status();

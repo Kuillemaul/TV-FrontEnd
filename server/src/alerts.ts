@@ -49,7 +49,7 @@ export class AlertService {
 
   raise(input: Omit<Alert, 'id' | 'at'>): Alert {
     const alert: Alert = { ...input, id: randomUUID().slice(0, 8), at: Date.now() };
-    this.recent = [alert, ...this.recent].slice(0, 20);
+    this.recent = [alert, ...this.recent].slice(0, 50);
     this.deliver(alert);
     return alert;
   }

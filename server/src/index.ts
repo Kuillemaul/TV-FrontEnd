@@ -312,6 +312,7 @@ app.get('/api/info', async () => ({
     requests: Boolean(config.requests.seerr),
     morning: ha && config.morning.enabled ? { start: config.morning.start, end: config.morning.end } : null,
     downloads: Boolean(config.requests.radarr || config.requests.sonarr || config.requests.lidarr),
+    doorbellCamera: config.alerts.doorbell?.camera ?? (demoHome ? 'camera.front_porch' : null),
   },
   screensaver: config.screensaver,
   ignoredExamples: config.ignoredExamples,

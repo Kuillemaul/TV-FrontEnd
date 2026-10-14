@@ -115,7 +115,9 @@ function GuideGrid({ onChoose }: { onChoose: () => void }) {
   const hearth = useHearth();
   const now = useNow(30_000);
   const { data } = useApi<Guide>(`/api/tv/guide?hours=${HOURS}`, 5 * 60_000);
+  const recs = useApi<{ recordings: Recording[] }>('/api/tv/recordings', 60_000);
   const [selected, setSelected] = useState<Programme | null>(null);
+  const [focused, setFocused] = useState<Programme | null>(null);
   const h24 = hearth.info?.clock24h ?? false;
 
   const start = Math.floor(now / SLOT) * SLOT;
@@ -155,12 +157,25 @@ function GuideGrid({ onChoose }: { onChoose: () => void }) {
     );
   }
   const homeChannel = data.channels.find((c) => c.id === data.lastChannel)?.id ?? data.channels[0]?.id;
+  const channelOf = (p: Programme) => data.channels.find((c) => c.id === p.channelId);
+  // Recordings don't carry the programme id, so match on channel, start and title.
+  const recordingOf = (p: Programme) => {
+    const ch = channelOf(p);
+    return recs.data?.recordings.find((r) => r.start === p.start && r.title === p.title && r.channelName === ch?.name && r.status !== 'failed');
+  };
+  const record = async (p: Programme, series: boolean) => {
+    setSelected(null);
+    const res = await post('/api/tv/record', { programmeId: p.id, series });
+    if (!res.ok) return hearth.toast(res.error ?? 'Couldn’t set up the recording', 'error');
+    void recs.reload();
+  };
   const channel = selected ? data.channels.find((c) => c.id === selected.channelId) : undefined;
   const airing = selected ? selected.start <= now && selected.end > now : false;
 
   return (
     <>
       {data.demo ? <DemoBanner>Demo guide. Connect Tvheadend and your USB tuner in config.yaml to see real channels.</DemoBanner> : null}
+      <GuideDetails programme={focused} channel={focused ? channelOf(focused) : undefined} recording={focused ? recordingOf(focused) : undefined} now={now} h24={h24} />
       <div className="guide">
         <div className="guide-row guide-times">
           <div className="guide-channel guide-corner">{formatTime(now, h24)}</div>
@@ -180,6 +195,7 @@ function GuideGrid({ onChoose }: { onChoose: () => void }) {
               data-nav
               data-pin={JSON.stringify({ kind: 'channel', id: ch.id, name: `${ch.number} ${ch.name}` })}
               onClick={() => hearth.watchChannel(ch.id)}
+              onFocus={() => setFocused((byChannel.get(ch.id) ?? []).find((p) => p.start <= now && p.end > now) ?? null)}
             >
               {ch.icon ? <img src={ch.icon} alt="" /> : null}
               <span className="guide-channel-num">{ch.number}</span>
@@ -191,6 +207,7 @@ function GuideGrid({ onChoose }: { onChoose: () => void }) {
                 const from = Math.max(p.start, start);
                 const to = Math.min(p.end, end);
                 const live = p.start <= now && p.end > now;
+                const rec = recordingOf(p);
                 return (
                   <button
                     key={p.id}
@@ -199,8 +216,12 @@ function GuideGrid({ onChoose }: { onChoose: () => void }) {
                     className={`guide-prog ${live ? 'live' : ''}`}
                     style={{ left: `${((from - start) / 60_000) * REM_PER_MIN}rem`, width: `${((to - from) / 60_000) * REM_PER_MIN}rem` }}
                     onClick={() => setSelected(p)}
+                    onFocus={() => setFocused(p)}
                   >
-                    <span className="guide-prog-title">{p.title}</span>
+                    <span className="guide-prog-title">
+                      {rec ? <span className="rec-dot" aria-label="Recording" /> : null}
+                      {p.title}
+                    </span>
                     <span className="guide-prog-time">
                       {formatTime(p.start, h24)} – {formatTime(p.end, h24)}
                     </span>
@@ -226,17 +247,79 @@ function GuideGrid({ onChoose }: { onChoose: () => void }) {
                 Watch now
               </Button>
             ) : null}
-            <Button icon="record" autoFocus={!airing} onClick={() => { void post('/api/tv/record', { programmeId: selected.id }); setSelected(null); }}>
-              Record
-            </Button>
-            <Button icon="record" onClick={() => { void post('/api/tv/record', { programmeId: selected.id, series: true }); setSelected(null); }}>
-              Record series
-            </Button>
+            {recordingOf(selected) ? null : (
+              <>
+                <Button icon="record" autoFocus={!airing} onClick={() => void record(selected, false)}>
+                  Record
+                </Button>
+                <Button icon="record" onClick={() => void record(selected, true)}>
+                  Record series
+                </Button>
+              </>
+            )}
             <Button onClick={() => setSelected(null)}>Close</Button>
           </div>
         </Modal>
       ) : null}
     </>
+  );
+}
+
+const minutes = (ms: number) => Math.max(1, Math.round(ms / 60_000));
+const untilText = (ms: number) => {
+  const m = minutes(ms);
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60 ? `${m % 60} min` : ''}`.trim();
+};
+
+/** What the focused guide cell is: title, episode, how long, description. */
+function GuideDetails({ programme: p, channel, recording, now, h24 }: { programme: Programme | null; channel?: Channel; recording?: Recording; now: number; h24: boolean }) {
+  if (!p) {
+    return (
+      <div className="guide-details guide-details-empty">
+        <Icon name="tv" size="2.4em" />
+        <div>Move through the guide to see what’s on. OK on a programme to watch or record it.</div>
+      </div>
+    );
+  }
+  const live = p.start <= now && p.end > now;
+  const done = p.end <= now;
+  const progress = live ? (now - p.start) / (p.end - p.start) : 0;
+  const day = new Date(p.start).toDateString() === new Date(now).toDateString() ? '' : `${new Date(p.start).toLocaleDateString([], { weekday: 'long' })} `;
+  return (
+    <div className="guide-details">
+      <div className="guide-details-channel">
+        {channel?.icon ? <img src={channel.icon} alt="" /> : <Icon name="tv" size="2.2em" />}
+        {channel ? (
+          <span>
+            {channel.number} {channel.name}
+          </span>
+        ) : null}
+      </div>
+      <div className="guide-details-main">
+        <div className="guide-details-title">
+          {p.title}
+          {live ? <span className="badge badge-live">Live</span> : null}
+          {channel?.hd ? <span className="ch-tag">HD</span> : null}
+          {recording ? (
+            <span className="guide-details-rec">
+              <span className="rec-dot" /> {recording.status === 'recording' ? 'Recording now' : 'Recording set'}
+            </span>
+          ) : null}
+        </div>
+        <div className="guide-details-meta">
+          {day}
+          {formatTime(p.start, h24)} – {formatTime(p.end, h24)} · {untilText(p.end - p.start)}
+          {live ? ` · ${untilText(p.end - now)} left` : done ? ' · Finished' : ` · Starts in ${untilText(p.start - now)}`}
+          {p.subtitle ? ` · ${p.subtitle}` : ''}
+        </div>
+        {p.description ? <p className="guide-details-desc">{p.description}</p> : null}
+        {live ? (
+          <div className="guide-details-bar">
+            <div style={{ width: `${Math.round(progress * 100)}%` }} />
+          </div>
+        ) : null}
+      </div>
+    </div>
   );
 }
 

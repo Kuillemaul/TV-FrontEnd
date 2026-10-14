@@ -115,6 +115,7 @@ export function registerExtras(app: FastifyInstance, ctx: ExtrasContext): void {
     }),
   );
   app.post<{ Body: { percent: number } }>('/api/audio/volume', async (req) => run(() => audio.setVolume(Number(req.body.percent))));
+  app.post<{ Body: { muted: boolean } }>('/api/audio/mute', async (req) => run(() => audio.setMute(Boolean(req.body.muted))));
   app.post<{ Body: { channel: number } }>('/api/audio/test', async (req) => run(() => audio.test(Number(req.body.channel))));
 
   /* ---------------- display: resolution & refresh rate ---------------- */

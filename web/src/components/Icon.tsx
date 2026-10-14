@@ -35,6 +35,7 @@ const PATHS: Record<string, string> = {
   doorbell: 'M7 3h10a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM12 17a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM10 7h4',
   backspace: 'M9 5h11a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H9l-6-7zM12 9l6 6M18 9l-6 6',
   space: 'M4 10v4h16v-4',
+  sliders: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4',
   shift: 'M12 4l8 8h-4.5v7h-7v-7H4z',
   left: 'M15 5l-7 7 7 7',
   right: 'M9 5l7 7-7 7',
