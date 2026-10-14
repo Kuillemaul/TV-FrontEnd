@@ -2,14 +2,16 @@ import { useEffect, useState } from 'react';
 import { get, post, useApi, type Info, type ProfilesState, type TvSettings } from '../lib/api';
 import { AppsSection, BackgroundsSection, ConfigSection, TvSection } from './AdminSections';
 import { ProfilesSection } from './AdminProfiles';
+import { LabSection } from './AdminLab';
 import './admin.css';
 
-type Section = 'overview' | 'profiles' | 'apps' | 'backgrounds' | 'tv' | 'config';
+type Section = 'overview' | 'profiles' | 'apps' | 'lab' | 'backgrounds' | 'tv' | 'config';
 
 const SECTIONS: Array<{ id: Section; label: string }> = [
   { id: 'overview', label: 'Overview' },
   { id: 'profiles', label: 'Profiles' },
   { id: 'apps', label: 'Apps' },
+  { id: 'lab', label: 'Home Lab' },
   { id: 'backgrounds', label: 'Backgrounds' },
   { id: 'tv', label: 'TV settings' },
   { id: 'config', label: 'Config file' },
@@ -77,6 +79,7 @@ export function AdminPage() {
         {section === 'overview' ? <Overview info={info.data} profiles={profiles.data} notify={notify} go={setSection} /> : null}
         {section === 'profiles' ? <ProfilesSection profiles={profiles} notify={notify} /> : null}
         {section === 'apps' ? <AppsSection profiles={profiles} notify={notify} /> : null}
+        {section === 'lab' ? <LabSection notify={notify} /> : null}
         {section === 'backgrounds' ? <BackgroundsSection profiles={profiles} notify={notify} /> : null}
         {section === 'tv' ? <TvSection notify={notify} /> : null}
         {section === 'config' ? <ConfigSection notify={notify} /> : null}

@@ -56,6 +56,19 @@ export function validateConfigText(text: string, configPath: string): string | n
   }
 }
 
+/** Save config.yaml, keeping the previous versions (newest first) so a bad edit can be rolled back. */
+export function writeConfig(configPath: string, text: string): void {
+  if (existsSync(configPath)) {
+    const dir = join(dirname(configPath), 'backups');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, `config-${new Date().toISOString().replace(/[:.]/g, '-')}.yaml`), readFileSync(configPath));
+    for (const old of listBackups(configPath).slice(KEEP_BACKUPS)) unlinkSync(join(dir, old));
+  }
+  const tmp = `${configPath}.new`;
+  writeFileSync(tmp, text);
+  renameSync(tmp, configPath);
+}
+
 /** Admin-only endpoints on the main server (they need the elevated context the editor sets). */
 export function registerAdminApi(app: FastifyInstance, ctx: AdminContext): void {
   const { config, configPath, log } = ctx;
@@ -81,16 +94,7 @@ export function registerAdminApi(app: FastifyInstance, ctx: AdminContext): void 
     const text = String(req.body?.yaml ?? '');
     const error = validateConfigText(text, configPath);
     if (error) return reply.code(400).send({ ok: false, error });
-    // Keep the previous versions, newest first, so a bad edit can be rolled back.
-    if (existsSync(configPath)) {
-      const dir = join(dirname(configPath), 'backups');
-      mkdirSync(dir, { recursive: true });
-      writeFileSync(join(dir, `config-${new Date().toISOString().replace(/[:.]/g, '-')}.yaml`), readFileSync(configPath));
-      for (const old of listBackups(configPath).slice(KEEP_BACKUPS)) unlinkSync(join(dir, old));
-    }
-    const tmp = `${configPath}.new`;
-    writeFileSync(tmp, text);
-    renameSync(tmp, configPath);
+    writeConfig(configPath, text);
     log.info('config.yaml saved from the network editor');
     if (req.body.restart) scheduleRestart(log);
     return { ok: true, restarting: Boolean(req.body.restart) };

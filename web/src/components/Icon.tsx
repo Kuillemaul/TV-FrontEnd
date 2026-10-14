@@ -14,6 +14,7 @@ const PATHS: Record<string, string> = {
   power: 'M12 3v9M6.3 6.3a8 8 0 1 0 11.4 0',
   check: 'M5 12.5 10 17 19 7',
   x: 'M6 6l12 12M18 6 6 18',
+  plus: 'M12 5v14M5 12h14',
   volumeUp: 'M4 9v6h4l5 4V5L8 9zM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11',
   volumeDown: 'M4 9v6h4l5 4V5L8 9zM16 9a4 4 0 0 1 0 6',
   mute: 'M4 9v6h4l5 4V5L8 9zM16 9l5 6M21 9l-5 6',

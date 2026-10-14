@@ -1189,6 +1189,16 @@ code { color: var(--text); }
 .order-btn:disabled { opacity: 0.25; }
 .order-btn:focus { background: var(--text); color: var(--bg); }
 .order-hide { color: var(--text-2); }
+.order-btn.danger { background: rgba(255, 93, 108, 0.25); color: #ffb3ba; }
+.order-btn.danger:focus { background: var(--bad); color: #fff; }
+.order-detail { display: block; margin-top: 0.15rem; color: var(--text-3); font-size: 0.9rem; font-weight: 500; overflow-wrap: anywhere; }
+.order-row:focus-within .order-detail { color: var(--text-2); }
+
+/* Entity picker (home lab editor). */
+.pick-list { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 1rem; max-height: 50vh; overflow-y: auto; padding: 0.3rem; }
+.pick-item { display: inline-flex; gap: 0.7rem; align-items: baseline; }
+.pick-value { color: var(--text-3); font-size: 0.9em; font-variant-numeric: tabular-nums; }
+.pick-item:focus .pick-value { color: inherit; opacity: 0.7; }
 
 .order-heading { margin: 1.4rem 0 0.7rem; color: var(--text-2); font-size: 1.05rem; }
 .order-hidden { display: flex; gap: 0.6rem; flex-wrap: wrap; }

@@ -155,7 +155,7 @@ export const pinKey = (p: Pin) => (p.kind === 'game' ? `game:${p.hostId}:${p.gam
 export interface ProfilesState {
   activeId: string;
   profiles: Profile[];
-  customApps: Array<{ id: string; name: string; url: string; color: string }>;
+  customApps: Array<{ id: string; name: string; url?: string; flatpak?: string; color: string }>;
 }
 
 export type MutationResult = Partial<ProfilesState> & { ok: boolean; error?: string; permission?: boolean };
@@ -363,6 +363,7 @@ export type ServerEvent =
   | { type: 'settings' }
   | { type: 'games' }
   | { type: 'apps' }
+  | { type: 'lab' }
   | { type: 'display' }
   | { type: 'sleep'; endsAt: number | null }
   | { type: 'pip'; entity: string | null; name?: string }

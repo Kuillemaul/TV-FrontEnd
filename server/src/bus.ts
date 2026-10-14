@@ -20,6 +20,8 @@ export type UiEvent =
   | { type: 'games' }
   /** App tiles changed look. */
   | { type: 'apps' }
+  /** Home lab services, sensors or actions were added, changed or removed. */
+  | { type: 'lab' }
   | { type: 'display' }
   | { type: 'sleep'; endsAt: number | null }
   | { type: 'pip'; entity: string | null; name?: string }

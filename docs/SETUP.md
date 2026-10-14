@@ -544,10 +544,21 @@ the Xbox" works by voice too.
 Install the **openWakeWord** add-on in Home Assistant and pick a wake word in your Assist pipeline. Then turn on
 Settings → *Wake word*. Say it, wait for the panel to appear, then speak your command.
 
-### Home lab charts and actions
-Every Lab sensor shows a 24-hour chart from Home Assistant history. Add `lab.actions` for one-button jobs like
-restarting a container: a Home Assistant service (e.g. a Portainer/Proxmox `button`) or a webhook URL. Actions are
-parents-only and ask for your PIN.
+### Home lab: adding services, sensors and actions
+No YAML needed: on the TV open **Lab → Edit lab**, or on your phone/laptop open the network editor
+(`http://<tv>:8780`) → **Home Lab**. Add, edit or remove:
+- **Services**: a name and address; Hearth checks every 30 s that it answers, and can open it full screen.
+- **Sensors**: search Home Assistant's sensors (CPU, disk, UPS…) and pick one; each gets a 24-hour chart.
+- **Actions**: one-button jobs like restarting a container: pick a Home Assistant button/script/scene/switch, or give a
+  webhook address. Actions are parents-only and ask for your PIN.
+
+Changes show straight away and are written into `config.yaml` under `lab:` for you (your comments are kept, and the
+previous version goes to `config/backups/`). You can still edit that section by hand if you prefer.
+
+### Adding apps
+On the TV: **Apps → Edit apps → Add a website** (any streaming site) or **Add an installed app** (any Flatpak program
+on the TV, e.g. Kodi or Spotify, picked from a list). The network editor's **Apps** section has the same two. To get
+a new program, install it once on the TV with `flatpak install flathub <app>`.
 
 ### Phone remote
 Set `server.host: 0.0.0.0`, restart, and open Settings → **Phone remote**. Scan the QR code with your phone, enter

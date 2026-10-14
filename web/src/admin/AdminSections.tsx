@@ -54,13 +54,15 @@ export function AppsSection({ profiles, notify }: { profiles: ProfilesApi; notif
         </button>
       </div>
 
+      <InstalledAppsCard profiles={profiles} notify={notify} onAdded={() => void apps.reload()} />
+
       <div className="ad-card">
         <h2>All apps</h2>
         <p className="ad-muted">Select a tile to change its look: pick a style and colours, or upload your own picture.</p>
         {apps.data ? <TileGallery apps={apps.data} notify={notify} onChanged={(list) => apps.setData(list)} /> : null}
         {custom.length ? (
           <>
-            <div className="ad-sub">Your web apps</div>
+            <div className="ad-sub">Apps you added</div>
             <div className="ad-chips">
               {custom.map((c) => (
                 <span key={c.id} className="ad-chip">
@@ -74,11 +76,39 @@ export function AppsSection({ profiles, notify }: { profiles: ProfilesApi; notif
           </>
         ) : null}
         <p className="ad-muted">
-          Which apps each person sees, and in what order, is set per profile (Profiles → Apps). Apps that launch programs
-          (Plex HTPC, Moonlight…) live in the config file under <code>apps:</code>.
+          Which apps each person sees, and in what order, is set per profile (Profiles → Apps). New apps show on parent
+          profiles that list all apps; add them to others there.
         </p>
       </div>
     </section>
+  );
+}
+
+/** Programs installed on the TV (Flatpak) that aren't tiles yet. */
+function InstalledAppsCard({ profiles, notify, onAdded }: { profiles: ProfilesApi; notify: Notify; onAdded: () => void }) {
+  const installed = useApi<Array<{ id: string; name: string }>>('/api/apps/installed');
+  const add = async (app: { id: string; name: string }) => {
+    const res = await post<MutationReply>('/api/custom-apps', { name: app.name, flatpak: app.id, color: '#3b4252' });
+    if (profiles.apply(res, notify, `Added ${app.name}`)) {
+      void installed.reload();
+      onAdded();
+    }
+  };
+  return (
+    <div className="ad-card">
+      <h2>Add an installed app</h2>
+      <p className="ad-muted">
+        Programs installed on the TV. To install more, run <code>flatpak install flathub &lt;app&gt;</code> on the TV, then refresh this page.
+      </p>
+      <div className="ad-chips">
+        {installed.data?.map((a) => (
+          <button key={a.id} className="ad-chip" onClick={() => void add(a)} title={a.id}>
+            + {a.name}
+          </button>
+        ))}
+        {installed.data && installed.data.length === 0 ? <span className="ad-note">Everything installed is already a tile.</span> : null}
+      </div>
+    </div>
   );
 }
 

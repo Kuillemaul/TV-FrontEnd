@@ -11,6 +11,7 @@ import { DisplaySettings } from '../components/DisplaySettings';
 import { BluetoothSettings } from '../components/BluetoothSettings';
 import { WifiSettings } from '../components/WifiSettings';
 import { Icon } from '../components/Icon';
+import { LabEditor } from '../components/LabEditor';
 import { Button, DemoBanner, Modal, NotSetUp, PageHeader, Tile } from '../components/Layout';
 import { post, useApi, useServerEvents, type AppTile, type Dashboard, type HaEntity, type LabStatus } from '../lib/api';
 import { useHearth } from '../lib/hearth';
@@ -87,21 +88,30 @@ export function SmartHomePage() {
 }
 
 export function LabPage() {
-  const { data, setData } = useApi<LabStatus>('/api/lab', 15_000);
+  const hearth = useHearth();
+  const { data, setData, reload } = useApi<LabStatus>('/api/lab', 15_000);
+  const [editing, setEditing] = useState(false);
   useServerEvents((e) => {
     if (e.type === 'ha-state' && data) setData({ ...data, sensors: patchEntities(data.sensors, e.entity) });
+    if (e.type === 'lab') void reload();
   });
 
   return (
     <div className="page">
-      <PageHeader title="Home Lab" />
-      {data?.demo ? <DemoBanner>Demo services. List your homelab services under lab.services in config.yaml.</DemoBanner> : null}
+      <PageHeader title="Home Lab">
+        {!hearth.isKid ? (
+          <Button icon="settings" onClick={() => setEditing(true)}>
+            Edit lab
+          </Button>
+        ) : null}
+      </PageHeader>
+      {data?.demo ? <DemoBanner>Demo services. Choose Edit lab to add your own servers, sensors and actions.</DemoBanner> : null}
       {data && !data.demo && !data.services.length && !data.sensors.length ? (
         <NotSetUp icon="server" title="No home lab services yet">
-          List your servers under <code>lab.services</code> in config.yaml (and HA sensors under <code>lab.sensors</code>) to see
-          whether they’re up.
+          Choose <b>Edit lab</b> to add your servers (Hearth checks they’re up), Home Assistant sensors and one-button actions.
         </NotSetUp>
       ) : null}
+      {editing ? <LabEditor onClose={() => setEditing(false)} /> : null}
 
       {data?.sensors.length ? (
         <div className="grid grid-stats">
@@ -352,7 +362,8 @@ export function SettingsPage() {
 /** One-button homelab actions (restart a container, reboot a Pi…). Parents only, PIN-confirmed. */
 function LabActions() {
   const hearth = useHearth();
-  const { data } = useApi<{ demo: boolean; actions: Array<{ index: number; name: string }> }>(hearth.isKid ? null : '/api/lab/actions');
+  const { data, reload } = useApi<{ demo: boolean; actions: Array<{ index: number; name: string }> }>(hearth.isKid ? null : '/api/lab/actions');
+  useServerEvents((e) => e.type === 'lab' && void reload());
   const [pending, setPending] = useState<{ index: number; name: string } | null>(null);
   const [error, setError] = useState('');
   if (!data?.actions.length) return null;

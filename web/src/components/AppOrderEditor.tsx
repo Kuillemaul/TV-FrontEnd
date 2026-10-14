@@ -22,7 +22,7 @@ export function AppOrderEditor({
   onClose: () => void;
 }) {
   const { data: all, reload } = useApi<AppTile[]>('/api/apps?all=1');
-  const [adding, setAdding] = useState(false);
+  const [adding, setAdding] = useState<null | 'web' | 'installed'>(null);
   // Local copy so quick successive edits never race the server round-trip.
   const [local, setLocal] = useState<string[] | null>(order);
   if (!all) return null;
@@ -83,17 +83,21 @@ export function AppOrderEditor({
         <Button variant="primary" onClick={onClose} autoFocus={visible.length === 0 && hidden.length === 0}>
           Done
         </Button>
-        <Button icon="external" onClick={() => setAdding(true)}>
-          Add a web app
+        <Button icon="external" onClick={() => setAdding('web')}>
+          Add a website
+        </Button>
+        <Button icon="plus" onClick={() => setAdding('installed')}>
+          Add an installed app
         </Button>
         {all.some((a) => a.custom) ? <RemoveCustom apps={all.filter((a) => a.custom)} onRemoved={() => void reload()} /> : null}
       </div>
 
       {adding ? (
-        <AddWebApp
-          onClose={() => setAdding(false)}
+        <AddApp
+          kind={adding}
+          onClose={() => setAdding(null)}
           onAdded={(id) => {
-            setAdding(false);
+            setAdding(null);
             void reload();
             change([...ids, id]);
           }}
@@ -108,10 +112,10 @@ function RemoveCustom({ apps, onRemoved }: { apps: AppTile[]; onRemoved: () => v
   return (
     <>
       <Button icon="trash" variant="ghost" onClick={() => setOpen(true)}>
-        Delete web apps
+        Delete added apps
       </Button>
       {open ? (
-        <Modal title="Delete a web app" onClose={() => setOpen(false)}>
+        <Modal title="Delete an app you added" onClose={() => setOpen(false)}>
           <div className="order-hidden" data-nav-group>
             {apps.map((a) => (
               <button
@@ -137,6 +141,39 @@ function RemoveCustom({ apps, onRemoved }: { apps: AppTile[]; onRemoved: () => v
   );
 }
 
+function AddApp({ kind, onClose, onAdded }: { kind: 'web' | 'installed'; onClose: () => void; onAdded: (id: string) => void }) {
+  return kind === 'web' ? <AddWebApp onClose={onClose} onAdded={onAdded} /> : <AddInstalledApp onClose={onClose} onAdded={onAdded} />;
+}
+
+/** Programs installed on the TV (Flatpak) that aren't tiles yet: pick one, done. */
+function AddInstalledApp({ onClose, onAdded }: { onClose: () => void; onAdded: (id: string) => void }) {
+  const { data } = useApi<Array<{ id: string; name: string }>>('/api/apps/installed');
+  const [error, setError] = useState('');
+  const add = async (app: { id: string; name: string }, i: number) => {
+    const res = await post<MutationResult>('/api/custom-apps', { name: app.name, flatpak: app.id, color: COLORS[i % COLORS.length] });
+    if (!res.ok) return setError(res.error ?? 'Could not add app');
+    const added = res.customApps?.at(-1);
+    if (added) onAdded(added.id);
+  };
+  return (
+    <Modal title="Add an installed app" onClose={onClose} wide>
+      <p className="modal-sub">Programs installed on this TV (Flatpak). To get more: flatpak install flathub &lt;app&gt; on the TV.</p>
+      {error ? <div className="form-error">{error}</div> : null}
+      <div className="order-hidden" data-nav-group>
+        {data?.map((a, i) => (
+          <button key={a.id} className="chip" data-nav onClick={() => void add(a, i)}>
+            + {a.name}
+          </button>
+        ))}
+        {data && data.length === 0 ? <div className="empty">Everything installed is already a tile (or Flatpak isn’t set up).</div> : null}
+      </div>
+      <div className="modal-actions">
+        <Button onClick={onClose}>Cancel</Button>
+      </div>
+    </Modal>
+  );
+}
+
 function AddWebApp({ onClose, onAdded }: { onClose: () => void; onAdded: (id: string) => void }) {
   const [name, setName] = useState('');
   const [url, setUrl] = useState('https://');
@@ -151,7 +188,7 @@ function AddWebApp({ onClose, onAdded }: { onClose: () => void; onAdded: (id: st
   };
 
   return (
-    <Modal title="Add a web app" onClose={onClose}>
+    <Modal title="Add a website" onClose={onClose}>
       <p className="modal-sub">Any website, opened full screen like the other apps (e.g. Twitch, Crunchyroll, PBS Kids).</p>
       <div className="form">
         <label className="field">

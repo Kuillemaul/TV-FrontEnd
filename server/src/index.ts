@@ -1,6 +1,7 @@
 import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
 import Fastify from 'fastify';
+import { execFile } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -26,6 +27,7 @@ import { RequestsClient } from './providers/seerr.js';
 import { SleepTimer, sayMinutes } from './sleep.js';
 import { score } from './intents.js';
 import { registerAdminApi, startAdminServer } from './routes/admin.js';
+import { registerLabEdit } from './routes/labedit.js';
 import { installElevation, isElevated } from './elevate.js';
 import { ScreenTime } from './screentime.js';
 import { StateStore } from './state.js';
@@ -174,7 +176,12 @@ setInterval(() => {
 function allApps(): AppTile[] {
   return [
     ...config.apps,
-    ...profiles.customApps.map((c) => ({ id: c.id, name: c.name, color: c.color, launch: { type: 'web' as const, url: c.url } })),
+    ...profiles.customApps.map((c) => ({
+      id: c.id,
+      name: c.name,
+      color: c.color,
+      launch: c.flatpak ? { type: 'command' as const, command: ['flatpak', 'run', c.flatpak] } : { type: 'web' as const, url: c.url ?? 'about:blank' },
+    })),
     ...config.tv.inputs.map((i) => ({
       id: `input-${i.id}`,
       name: i.name,
@@ -716,7 +723,7 @@ app.post('/api/ha/open-dashboard', async () => {
 app.get('/api/lab', async () => ({
   demo: config.demo && config.lab.services.length === 0,
   services: config.lab.services.length ? lab.services : config.demo ? DEMO_SERVICES : [],
-  sensors: entities(ha ? config.lab.sensors : (demoHome?.labSensors ?? [])),
+  sensors: entities(ha || config.lab.sensors.length ? config.lab.sensors : (demoHome?.labSensors ?? [])),
 }));
 
 app.post<{ Body: { index: number } }>('/api/lab/open', async (req) => {
@@ -789,7 +796,21 @@ app.delete<{ Params: { id: string } }>('/api/profiles/:id', async (req) => mutat
 app.post<{ Body: { pin: unknown } }>('/api/pins', async (req) => mutate(() => profiles.togglePin(req.body.pin)));
 app.post<{ Body: { key: string; delta: number } }>('/api/pins/move', async (req) => mutate(() => profiles.movePin(String(req.body.key), Number(req.body.delta))));
 app.get<{ Querystring: { ids?: string } }>('/api/ha/entities', async (req) => (isKid() ? [] : entities((req.query.ids ?? '').split(',').filter(Boolean))));
-app.post<{ Body: { name: string; url: string; color?: string } }>('/api/custom-apps', async (req) =>
+/** Installed Flatpak programs that aren't app tiles yet, to add from the TV or phone. */
+app.get('/api/apps/installed', async () => {
+  const out = await new Promise<string>((resolve) =>
+    execFile('flatpak', ['list', '--app', '--columns=application,name'], { timeout: 10_000 }, (err, stdout) => resolve(err ? '' : stdout)),
+  );
+  const used = new Set(allApps().flatMap((a) => (a.launch.type === 'command' ? a.launch.command : [])));
+  return out
+    .split('\n')
+    .map((line) => line.split('\t'))
+    .filter(([id]) => id && /\./.test(id) && !used.has(id))
+    .map(([id, name]) => ({ id, name: name?.trim() || id }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+});
+
+app.post<{ Body: { name: string; url?: string; flatpak?: string; color?: string } }>('/api/custom-apps', async (req) =>
   mutate(() => profiles.addCustomApp(req.body)),
 );
 app.delete<{ Params: { id: string } }>('/api/custom-apps/:id', async (req) => mutate(() => profiles.removeCustomApp(req.params.id)));
@@ -807,6 +828,7 @@ app.get('/ws/voice', { websocket: true }, (socket) => voice.handle(socket));
 /* ---------------- UI ---------------- */
 
 registerAdminApi(app, { config, configPath: resolveConfigPath(), bus, log });
+registerLabEdit(app, { config, configPath: resolveConfigPath(), bus, lab, ha, demoHome, log, fail, isKid });
 
 const webDist = fileURLToPath(new URL('../../web/dist', import.meta.url));
 if (existsSync(webDist)) {

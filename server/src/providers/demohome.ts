@@ -43,6 +43,10 @@ export class DemoHome {
       .map((e) => ({ id: e.entity_id, name: String(e.attributes.friendly_name ?? e.entity_id.slice(7).replace(/_/g, ' ')) }));
   }
 
+  byDomain(domains: string[]): HaEntity[] {
+    return [...this.states.values()].filter((e) => domains.includes(e.entity_id.split('.')[0]));
+  }
+
   entities(ids: string[]): HaEntity[] {
     return ids.map((id) => this.states.get(id) ?? { entity_id: id, state: 'unavailable', attributes: {} });
   }

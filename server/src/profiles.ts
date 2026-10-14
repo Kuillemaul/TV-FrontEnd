@@ -74,7 +74,10 @@ export type PublicProfile = Omit<Profile, 'pinHash'> & { hasPin: boolean };
 export interface CustomApp {
   id: string;
   name: string;
-  url: string;
+  /** A website… */
+  url?: string;
+  /** …or an installed Flatpak program (its app id, e.g. com.spotify.Client). */
+  flatpak?: string;
   color: string;
 }
 
@@ -216,15 +219,20 @@ export class ProfileStore {
     this.save();
   }
 
-  addCustomApp(input: { name: string; url: string; color?: string }): CustomApp {
+  addCustomApp(input: { name: string; url?: string; flatpak?: string; color?: string }): CustomApp {
     this.requireAdmin();
-    if (!/^https?:\/\//.test(input.url)) throw new Error('Enter a full web address starting with https://');
-    const app: CustomApp = {
-      id: `custom-${randomUUID().slice(0, 8)}`,
-      name: input.name.trim().slice(0, 24) || new URL(input.url).hostname,
-      url: input.url,
-      color: input.color ?? '#3b4252',
-    };
+    const id = `custom-${randomUUID().slice(0, 8)}`;
+    const color = input.color ?? '#3b4252';
+    let app: CustomApp;
+    if (input.flatpak) {
+      if (!/^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+){2,}$/.test(input.flatpak)) throw new Error('That isn’t a Flatpak app id');
+      if (this.data.customApps.some((a) => a.flatpak === input.flatpak)) throw new Error('That app is already added');
+      app = { id, name: String(input.name ?? '').trim().slice(0, 24) || input.flatpak.split('.').at(-1)!, flatpak: input.flatpak, color };
+    } else {
+      const url = String(input.url ?? '');
+      if (!/^https?:\/\//.test(url)) throw new Error('Enter a full web address starting with https://');
+      app = { id, name: String(input.name ?? '').trim().slice(0, 24) || new URL(url).hostname, url, color };
+    }
     // Which profiles show it is up to the app editor that added it.
     this.data.customApps.push(app);
     this.save();
