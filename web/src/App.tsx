@@ -193,7 +193,8 @@ export function App() {
 
   const toast = useCallback((message: string, level: 'info' | 'error' = 'info') => {
     const id = Date.now() + Math.random();
-    setToasts((t) => [...t, { id, message, level }]);
+    // Same message twice (e.g. the server and the page both confirming) shows once; at most two at a time.
+    setToasts((t) => (t.some((x) => x.message === message) ? t : [...t, { id, message, level }].slice(-2)));
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4500);
   }, []);
 
@@ -463,8 +464,9 @@ export function App() {
 
         <div className="toasts">
           {toasts.map((t) => (
-            <div key={t.id} className={`toast toast-${t.level}`}>
-              {t.message}
+            <div key={t.id} className={`toast toast-${t.level}`} role="status">
+              <Icon name={t.level === 'error' ? 'x' : 'check'} size="1.1em" />
+              <span>{t.message}</span>
             </div>
           ))}
         </div>
