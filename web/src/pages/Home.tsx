@@ -1,3 +1,4 @@
+import { NowPlaying } from '../components/NowPlaying';
 import { useEffect, useMemo, useState } from 'react';
 import { EntityCard } from '../components/EntityCard';
 import { PinnedRow } from '../components/Pins';
@@ -103,6 +104,8 @@ export function HomePage() {
           </div>
         ) : null}
       </section>
+
+      {!hearth.isKid ? <NowPlaying dash={dash.data} /> : null}
 
       <PinnedRow apps={apps.data} library={library.data} />
 

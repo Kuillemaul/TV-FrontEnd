@@ -1,3 +1,4 @@
+import { NowPlaying } from '../components/NowPlaying';
 import { useState } from 'react';
 import { EntityCard } from '../components/EntityCard';
 import { AddProfile, Avatar, PinPad } from '../components/Profiles';
@@ -68,6 +69,7 @@ export function SmartHomePage() {
         </NotSetUp>
       ) : null}
       {data?.setup && !data.connected ? <DemoBanner>Reconnecting to Home Assistant…</DemoBanner> : null}
+      <NowPlaying dash={data} />
       {data?.sections.map((s) => (
         <section className="ha-section" key={s.title}>
           <h2>{s.title}</h2>

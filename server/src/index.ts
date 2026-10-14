@@ -660,6 +660,14 @@ app.get<{ Params: { entity: string } }>('/api/ha/camera/:entity', async (req, re
   return reply.code(res.status).send(Buffer.from(await res.arrayBuffer()));
 });
 
+// Album art for the now-playing strip, through Hearth so the HA token never reaches the browser.
+app.get<{ Params: { entity: string } }>('/api/ha/media-art/:entity', async (req, reply) => {
+  if (!ha || !/^media_player\.[a-z0-9_]+$/.test(req.params.entity)) return reply.code(404).send();
+  const res = await ha.fetch(`/api/media_player_proxy/${encodeURIComponent(req.params.entity)}`);
+  reply.header('Cache-Control', 'no-store').type(res.headers.get('content-type') ?? 'image/jpeg');
+  return reply.code(res.status).send(Buffer.from(await res.arrayBuffer()));
+});
+
 // Only TTS audio is proxied; the HA token never reaches the browser.
 app.get<{ Querystring: { path: string } }>('/api/ha/proxy', async (req, reply) => {
   if (!ha || !req.query.path?.startsWith('/api/tts_proxy/')) return reply.code(404).send();
