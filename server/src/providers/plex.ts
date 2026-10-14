@@ -120,6 +120,27 @@ export class PlexClient {
     return String(ep?.ratingKey ?? hit.ratingKey);
   }
 
+  /** Films, shows and episodes in your libraries matching a search. */
+  async search(query: string): Promise<SearchItem[]> {
+    const data = await this.api(`/hubs/search?query=${encodeURIComponent(query)}&limit=12`);
+    const out: SearchItem[] = [];
+    for (const hub of data.MediaContainer?.Hub ?? []) {
+      if (!['movie', 'show', 'episode'].includes(hub.type)) continue;
+      for (const m of hub.Metadata ?? []) {
+        const thumb = m.type === 'episode' ? (m.grandparentThumb ?? m.thumb) : m.thumb;
+        out.push({
+          id: String(m.ratingKey),
+          type: m.type,
+          title: m.type === 'episode' ? `${m.grandparentTitle ?? ''}: ${m.title}` : m.title,
+          year: m.year,
+          subtitle: m.type === 'episode' ? `S${m.parentIndex} · E${m.index}` : m.type === 'show' && m.childCount ? `${m.childCount} season${m.childCount === 1 ? '' : 's'}` : undefined,
+          thumb: thumb ? `/api/plex/thumb?path=${encodeURIComponent(thumb)}` : undefined,
+        });
+      }
+    }
+    return out.slice(0, 18);
+  }
+
   /** Plex Web link straight to an item (used when the Plex tile is a web app). */
   async itemUrl(id: string): Promise<string> {
     const base = this.cfg.webUrl ?? `${this.cfg.url}/web/index.html`;
@@ -169,6 +190,15 @@ export class PlexClient {
     if (!res.ok) throw new Error(`Plex HTPC refused to play it (HTTP ${res.status})`);
     return String(item.grandparentTitle ?? item.title);
   }
+}
+
+export interface SearchItem {
+  id: string;
+  type: 'movie' | 'show' | 'episode';
+  title: string;
+  year?: number;
+  subtitle?: string;
+  thumb?: string;
 }
 
 export interface WatchlistItem {

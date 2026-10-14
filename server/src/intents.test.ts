@@ -100,3 +100,10 @@ test('cameras', () => {
   assert.equal((matchIntent('who’s at the door', withCams)?.action as { entity: string }).entity, 'camera.front_door');
   assert.deepEqual(matchIntent('hide the camera', withCams)?.action, { type: 'camera', entity: null });
 });
+
+test('search: "search for", "find", "look up"', () => {
+  assert.deepEqual(matchIntent('search for dune part two', catalog)?.action, { type: 'search', query: 'dune part two' });
+  assert.deepEqual(matchIntent('find bluey', catalog)?.action, { type: 'search', query: 'bluey' });
+  assert.deepEqual(matchIntent('look up the cricket', catalog)?.action, { type: 'search', query: 'the cricket' });
+  assert.deepEqual(matchIntent('open search', catalog)?.action, { type: 'navigate', page: 'search' });
+});

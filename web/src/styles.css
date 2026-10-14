@@ -1908,3 +1908,11 @@ body.is-alert { background: transparent; }
 .row-arrow-right { right: calc(-1 * var(--gutter) + 0.6rem); }
 body.mouse-active .row-body:hover .row-arrow { opacity: 1; pointer-events: auto; transform: translateY(-50%) scale(1); }
 .row-arrow:hover { background: var(--text); color: var(--bg); }
+
+/* Search */
+.search-box { position: relative; max-width: 52rem; margin-bottom: 2rem; }
+.search-box input { width: 100%; font: inherit; font-size: 1.6rem; padding: 1rem 1.4rem; border-radius: var(--radius); border: 2px solid var(--border); background: var(--surface); color: var(--text); }
+.search-box input:focus { outline: none; border-color: var(--text); background: var(--surface-2); }
+.search-spinner { position: absolute; right: 1.3rem; top: 50%; width: 1.4rem; height: 1.4rem; margin-top: -0.7rem; border-radius: 50%; border: 3px solid var(--border); border-top-color: var(--text); animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.badge-live { background: #e5484d; color: #fff; }

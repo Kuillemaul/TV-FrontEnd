@@ -216,6 +216,9 @@ Live TV, the guide, "On now" on Home and voice ("watch channel 2") then use the 
 on the Plex server and plays it full screen; CH+/CH− still zap. Recordings stay in Plex (set them up in the Plex app;
 they appear under **Recently added** on Home).
 
+**Recording:** in the guide (or Search), choose **Record** or **Record series** and Hearth sets it up in Plex's DVR.
+Live TV → Recordings lists what's coming up (Cancel removes the rule); finished recordings land in your Plex library.
+
 **Choosing channels per profile:** Live TV → **Choose channels** hides the ones that profile doesn't want; the guide,
 "On now" on Home, voice and CH+/CH− then skip them. Each profile keeps its own list (kids' lists are set by a parent,
 here or in the network editor → Profiles → *Live TV channels*). New channels show up by themselves.
@@ -468,6 +471,17 @@ listed in the Lab raise an alert when they go down. Alerts appear as cards with 
 a game or Live TV is on screen, Hearth briefly opens the alert on top and then returns you to what you were
 watching. Under the kiosk compositor that window is full screen; the game keeps streaming behind it. Test it from
 Settings → *Test doorbell*.
+
+### Search
+The magnifier in the top bar (or "search for Gruen" by voice) searches your Plex library, the next two days of the TV
+guide, Seerr (things you could request), games and apps at once. Select a programme that's on now to watch it, or a
+later one to record it.
+
+### Battery cameras (Eufy)
+Eufy doorbells and eufyCams only stream when asked. With the Eufy Security integration in Home Assistant, Hearth starts
+the live stream whenever a camera is on screen (doorbell alert, picture-in-picture, the camera tile) and stops it 20
+seconds after, to save the battery. Other camera systems that need a "start stream" service can use
+`homeassistant.cameraStream: { start: domain.service, stop: domain.service }`.
 
 ### Plex: continue watching
 Add your server under `plex:` (URL + token) to get a **Continue watching** row on Home. Selecting an item opens it

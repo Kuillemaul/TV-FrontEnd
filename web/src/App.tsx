@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GameLaunch, type LaunchProgress } from './components/GameLaunch';
 import { Icon } from './components/Icon';
 import { AlertStack, CameraPip } from './components/Alerts';
+import { openSearchLater, SearchPage } from './pages/Search';
 import { openMediaLater } from './pages/Requests';
 import { AppOrderEditor } from './components/AppOrderEditor';
 import { GameDetailsModal } from './components/GameDetails';
@@ -253,6 +254,9 @@ export function App() {
           return openMediaLater(a.media);
         case 'downloads':
           return navigate('requests');
+        case 'search':
+          navigate('search');
+          return openSearchLater(a.query);
         case 'pin-focused': {
           const el = focusBeforeVoice.current;
           const pin = pinOf(el);
@@ -390,6 +394,9 @@ export function App() {
             ))}
           </div>
           <div className="topbar-right">
+            <button className={`icon-btn ${page === 'search' ? 'tab-active' : ''}`} data-nav onClick={() => navigate('search')} aria-label="Search">
+              <Icon name="search" />
+            </button>
             <button className="icon-btn" data-nav onClick={openVoice} aria-label="Voice">
               <Icon name="mic" />
             </button>
@@ -423,6 +430,7 @@ export function App() {
           {page === 'smarthome' && <SmartHomePage />}
           {page === 'lab' && <LabPage />}
           {page === 'settings' && <SettingsPage />}
+          {page === 'search' && <SearchPage />}
         </main>
 
         <div className="toasts">

@@ -58,6 +58,8 @@ export interface HomeAssistantConfig {
   weather?: string;
   /** Full Lovelace dashboard to open in the kiosk browser. */
   lovelacePath?: string;
+  /** Services that start/stop a battery camera's live stream (Eufy's are found automatically). */
+  cameraStream?: { start: string; stop?: string };
   voice: {
     /** Assist pipeline id; omit for the preferred pipeline. */
     pipeline?: string;
@@ -407,6 +409,9 @@ export function loadConfig(path = resolveConfigPath()): HearthConfig {
       favorites: Array.isArray(ha.favorites) ? ha.favorites : [],
       weather: ha.weather,
       lovelacePath: ha.lovelacePath,
+      cameraStream: /^\w+\.\w+$/.test(String(ha.cameraStream?.start ?? ''))
+        ? { start: String(ha.cameraStream.start), stop: /^\w+\.\w+$/.test(String(ha.cameraStream.stop ?? '')) ? String(ha.cameraStream.stop) : undefined }
+        : undefined,
       voice: { ...(ha.voice ?? {}) },
     };
   }

@@ -38,8 +38,16 @@ export function describeChannel(c: { vcn?: string; title?: string; callSign?: st
   return { name, hd: c.isHd === true, radio: Boolean(c.callSign && AU_RADIO.test(c.callSign)) };
 }
 
+/** What Plex needs to record a programme. */
+export interface PlexAiring {
+  guid: string;
+  /** The show's guid, for "record series". */
+  showGuid?: string;
+  type: string;
+}
+
 /** Plex grid entries → programmes (one per airing; a show can air on several channels). */
-export function gridToProgrammes(metadata: any[]): Programme[] {
+export function gridToProgrammes(metadata: any[], airings?: Map<string, PlexAiring>): Programme[] {
   const out: Programme[] = [];
   for (const m of metadata ?? []) {
     const episode = m.type === 'episode';
@@ -47,8 +55,10 @@ export function gridToProgrammes(metadata: any[]): Programme[] {
     const subtitle = episode && m.title && m.title !== show ? m.title : undefined;
     for (const media of m.Media ?? []) {
       if (!media.channelIdentifier || !media.beginsAt || !media.endsAt) continue;
+      const id = `${media.channelIdentifier}|${media.beginsAt}`;
+      if (airings && m.guid) airings.set(id, { guid: String(m.guid), showGuid: m.grandparentGuid, type: String(m.type) });
       out.push({
-        id: `${media.channelIdentifier}|${media.beginsAt}`,
+        id,
         channelId: media.channelIdentifier,
         title: show ?? 'Unknown',
         subtitle,
@@ -59,6 +69,49 @@ export function gridToProgrammes(metadata: any[]): Programme[] {
     }
   }
   return out;
+}
+
+/**
+ * Turn Plex's recording template (GET /media/subscriptions/template?guid=…) into the POST that creates
+ * the recording, the way Plex Web does: the template's own parameters plus each setting's default.
+ * series=false picks the single-airing option (episode/movie), series=true the whole-show one.
+ */
+export function subscriptionQuery(template: any, series: boolean): string | null {
+  const subs: any[] = (template?.MediaContainer?.SubscriptionTemplate ?? []).flatMap((t: any) => t.MediaSubscription ?? []);
+  if (!subs.length) return null;
+  // Plex types: 1 movie, 2 show, 4 episode.
+  const pick = series ? subs.find((s) => Number(s.type) === 2) : (subs.find((s) => Number(s.type) === 4) ?? subs.find((s) => Number(s.type) === 1));
+  if (!pick?.parameters) return null;
+  const q = new URLSearchParams(String(pick.parameters));
+  q.set('type', String(pick.type));
+  if (pick.targetLibrarySectionID !== undefined) q.set('targetLibrarySectionID', String(pick.targetLibrarySectionID));
+  if (pick.targetSectionLocationID !== undefined) q.set('targetSectionLocationID', String(pick.targetSectionLocationID));
+  q.set('includeGrabs', '1');
+  for (const setting of pick.Setting ?? []) {
+    if (setting.id && !q.has(`prefs[${setting.id}]`)) q.set(`prefs[${setting.id}]`, String(setting.value ?? setting.default ?? ''));
+  }
+  return q.toString();
+}
+
+/** Plex's scheduled recordings (GET /media/subscriptions/scheduled) → Hearth recordings. */
+export function scheduledToRecordings(data: any, channelNames?: Map<string, string>): Recording[] {
+  const ops: any[] = data?.MediaContainer?.MediaGrabOperation ?? [];
+  return ops.map((op) => {
+    const m = op.Metadata ?? {};
+    const media = (m.Media ?? [])[0] ?? {};
+    const show = m.type === 'episode' ? (m.grandparentTitle ?? m.title) : m.title;
+    return {
+      id: String(op.mediaSubscriptionID ?? op.id),
+      title: m.type === 'episode' && m.title && m.title !== show ? `${show}: ${m.title}` : String(show ?? 'Recording'),
+      channelName:
+        channelNames?.get(String(media.channelIdentifier)) ??
+        shortChannelName(String(media.channelTitle ?? media.channelCallSign ?? '').replace(/^\d+\s+\S+\s+\((.*)\)$/, '$1')),
+      start: Number(media.beginsAt ?? 0) * 1000,
+      end: Number(media.endsAt ?? 0) * 1000,
+      description: m.summary,
+      status: op.status === 'inprogress' ? 'recording' : op.status === 'error' ? 'failed' : 'scheduled',
+    } satisfies Recording;
+  });
 }
 
 /** The HLS address in a /tune answer (MediaSubscription → MediaGrabOperation → Metadata → Media → Part). */
@@ -76,6 +129,8 @@ export class PlexLiveTvProvider implements LiveTvProvider {
   private channelCache: { at: number; list: Channel[] } | null = null;
   private guideCache: { at: number; from: number; to: number; list: Programme[] } | null = null;
   private lastOperation: string | undefined;
+  /** Programme id → what Plex needs to record it (from the last guide fetch). */
+  private airings = new Map<string, PlexAiring>();
 
   constructor(
     private readonly plex: { url: string; token: string },
@@ -129,7 +184,7 @@ export class PlexLiveTvProvider implements LiveTvProvider {
     const e = Math.ceil(to / 1000);
     // Plex filters: ">>=" / "<<=" (tested against a real server; a fully encoded ">=" is rejected).
     const data = await this.api(`/${epg}/grid?type=1%2C4&endsAt%3E%3E=${s}&beginsAt%3C%3C=${e}`);
-    const list = gridToProgrammes(data.MediaContainer?.Metadata ?? []);
+    const list = gridToProgrammes(data.MediaContainer?.Metadata ?? [], this.airings);
     this.guideCache = { at: Date.now(), from, to, list };
     return list;
   }
@@ -164,17 +219,37 @@ export class PlexLiveTvProvider implements LiveTvProvider {
     return url;
   }
 
+  /** Upcoming and in-progress recordings; finished ones are in the Plex library (Recently added). */
   async recordings(): Promise<Recording[]> {
-    return [];
+    const [data, channels] = await Promise.all([this.api('/media/subscriptions/scheduled'), this.channels().catch(() => [])]);
+    return scheduledToRecordings(data, new Map(channels.map((c) => [c.id, c.name])));
   }
   recordingUrl(): string {
-    throw new Error('Plex keeps the recordings: find them in Plex (and Recently added on Home)');
+    throw new Error('Finished recordings are in Plex: find them under Recently added on Home');
   }
-  async record(): Promise<void> {
-    throw new Error('Set up recordings in the Plex app for now');
+  async record(programmeId: string): Promise<void> {
+    await this.subscribe(programmeId, false);
   }
-  async recordSeries(): Promise<void> {
-    throw new Error('Set up recordings in the Plex app for now');
+  async recordSeries(programmeId: string): Promise<void> {
+    await this.subscribe(programmeId, true);
   }
-  async deleteRecording(): Promise<void> {}
+  /** Cancels the recording rule (for a series, every future episode). */
+  async deleteRecording(id: string): Promise<void> {
+    if (!/^\d+$/.test(id)) throw new Error('Not a Plex recording');
+    await this.api(`/media/subscriptions/${id}`, 'DELETE');
+  }
+
+  private async subscribe(programmeId: string, series: boolean): Promise<void> {
+    let airing = this.airings.get(programmeId);
+    if (!airing) {
+      // Not in the cached guide (e.g. after a restart): fetch the next day and look again.
+      await this.guide(Date.now(), Date.now() + 24 * 3600_000);
+      airing = this.airings.get(programmeId);
+    }
+    if (!airing) throw new Error('That programme isn’t in the guide any more');
+    const template = await this.api(`/media/subscriptions/template?guid=${encodeURIComponent(airing.guid)}`);
+    const query = subscriptionQuery(template, series);
+    if (!query) throw new Error(series ? 'Plex can’t record this as a series' : 'Plex can’t record this programme');
+    await this.api(`/media/subscriptions?${query}`, 'POST');
+  }
 }

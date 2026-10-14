@@ -245,7 +245,14 @@ function Recordings() {
   const { data, reload } = useApi<{ demo: boolean; recordings: Recording[] }>('/api/tv/recordings', 30_000);
   const h24 = hearth.info?.clock24h ?? false;
   if (!data) return <div className="empty">Loading recordings…</div>;
-  if (!data.recordings.length) return <div className="empty">Nothing recorded yet. Pick a show in the guide and choose Record.</div>;
+  if (!data.recordings.length) {
+    return (
+      <div className="empty">
+        Nothing recording or coming up. Pick a show in the guide and choose Record. Finished recordings from Plex appear
+        under Recently added on Home.
+      </div>
+    );
+  }
 
   const remove = async (id: string) => {
     await post(`/api/tv/recordings/${id}`, {}, 'DELETE');

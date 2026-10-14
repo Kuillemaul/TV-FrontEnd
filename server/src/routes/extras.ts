@@ -5,6 +5,7 @@ import type { AlertService } from '../alerts.js';
 import { AudioControl } from '../audio.js';
 import { BluetoothControl } from '../bluetooth.js';
 import { WifiControl } from '../wifi.js';
+import { CameraStreams } from '../camerastreams.js';
 import { DisplayControl } from '../display.js';
 import type { RequestsClient } from '../providers/seerr.js';
 import type { SleepTimer } from '../sleep.js';
@@ -334,10 +335,18 @@ export function registerExtras(app: FastifyInstance, ctx: ExtrasContext): void {
     }),
   );
 
-  // Live camera (MJPEG) for the doorbell pop-up, proxied so the HA token stays here.
+  // Live camera (MJPEG) for the doorbell pop-up, PiP and camera page, proxied so the HA token stays
+  // here. Battery cameras (Eufy) get their live stream started while someone is watching.
+  const cameraStreams = new CameraStreams(ha, config.homeassistant?.cameraStream, app.log);
   app.get<{ Params: { entity: string } }>('/api/camera/:entity/stream', async (req, reply) => {
     if (!ha) return reply.code(404).send();
-    const res = await ha.fetch(`/api/camera_proxy_stream/${encodeURIComponent(req.params.entity)}`);
+    const entity = req.params.entity;
+    if (!/^camera\.[a-z0-9_]+$/.test(entity)) return reply.code(404).send();
+    const started = await cameraStreams.open(entity);
+    req.raw.once('close', () => cameraStreams.close(entity));
+    // Give a just-woken camera a moment, so the first frames are live rather than the last snapshot.
+    if (started) await new Promise((r) => setTimeout(r, 2500));
+    const res = await ha.fetch(`/api/camera_proxy_stream/${encodeURIComponent(entity)}`);
     if (!res.ok || !res.body) return reply.code(res.status).send();
     reply.header('Cache-Control', 'no-store').type(res.headers.get('content-type') ?? 'multipart/x-mixed-replace');
     const { Readable } = await import('node:stream');

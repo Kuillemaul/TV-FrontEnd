@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-export type PageId = 'home' | 'tv' | 'apps' | 'games' | 'requests' | 'smarthome' | 'lab' | 'settings';
+export type PageId = 'home' | 'tv' | 'apps' | 'games' | 'requests' | 'smarthome' | 'lab' | 'settings' | 'search';
 
 export interface Info {
   name: string;
@@ -329,7 +329,8 @@ export type UiAction =
   | { type: 'downloads' }
   | { type: 'pin-focused' }
   | { type: 'sleep-timer'; minutes: number }
-  | { type: 'camera'; entity: string | null; name?: string };
+  | { type: 'camera'; entity: string | null; name?: string }
+  | { type: 'search'; query: string };
 
 export type ServerEvent =
   | { type: 'session'; session: Session | null }

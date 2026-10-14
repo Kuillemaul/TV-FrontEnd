@@ -4,7 +4,7 @@
  * on to Home Assistant's conversation agent ("turn off the kitchen lights").
  */
 
-export type PageId = 'home' | 'tv' | 'apps' | 'games' | 'requests' | 'smarthome' | 'lab' | 'settings';
+export type PageId = 'home' | 'tv' | 'apps' | 'games' | 'requests' | 'smarthome' | 'lab' | 'settings' | 'search';
 
 export interface MediaRef {
   id: number;
@@ -31,7 +31,9 @@ export type UiAction =
   /** minutes > 0 sets, 0 cancels, -1 asks how long is left. Handled by the server. */
   | { type: 'sleep-timer'; minutes: number }
   /** Camera picture-in-picture; entity null hides it. */
-  | { type: 'camera'; entity: string | null; name?: string };
+  | { type: 'camera'; entity: string | null; name?: string }
+  /** "Search for Dune": the Search page with results from everywhere. */
+  | { type: 'search'; query: string };
 
 export interface IntentCatalog {
   apps: Array<{ id: string; name: string }>;
@@ -59,6 +61,7 @@ const PAGES: Array<[RegExp, PageId, string]> = [
   [/^(smart home|home dashboard|dashboard|devices)$/, 'smarthome', 'Smart Home'],
   [/^(lab|home ?lab|servers|server status)$/, 'lab', 'Home Lab'],
   [/^(settings|system)$/, 'settings', 'Settings'],
+  [/^(search|search page)$/, 'search', 'Search'],
 ];
 
 const NUMBER_WORDS: Record<string, number> = {
@@ -194,6 +197,12 @@ export function matchIntent(text: string, catalog: IntentCatalog): IntentMatch |
     const q = cam[1] ?? cam[2];
     const hit = best(q, catalog.cameras, (c) => c.name.replace(/ camera$/i, ''), 0.5);
     if (hit) return { action: { type: 'camera', entity: hit.id, name: hit.name }, speech: `Showing ${hit.name}` };
+  }
+
+  // "Search for Dune", "find Bluey", "look for the cricket"
+  const search = t.match(/^(?:search for|search|find|look for|look up)(?: me)? (.+)$/);
+  if (search && !/^(a |the )?(app|game|camera)s?$/.test(search[1])) {
+    return { action: { type: 'search', query: search[1] }, speech: `Searching for ${search[1]}` };
   }
 
   // "Request Dune Part Three" (looked up in Seerr by the server)

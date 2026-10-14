@@ -30,6 +30,7 @@ import { installElevation, isElevated } from './elevate.js';
 import { ScreenTime } from './screentime.js';
 import { StateStore } from './state.js';
 import { TileArtStore } from './tileart.js';
+import { matchScore, searchGuide } from './search.js';
 import { hardExit } from './exit.js';
 import { VoiceService } from './voice.js';
 
@@ -391,6 +392,53 @@ app.get<{ Querystring: { hours?: string } }>('/api/tv/guide', async (req) => {
   const [chs, all] = await Promise.all([visibleChannels(), tv.guide(from, Date.now() + hours * 3600_000)]);
   const shown = new Set(chs.map((c) => c.id));
   return { demo: tv.demo, lastChannel: state.lastChannel, channels: chs, programmes: all.filter((p) => shown.has(p.channelId)) };
+});
+
+/* ---------------- search everything ---------------- */
+
+/** One search across the Plex library, the Live TV guide, Seerr, games and apps. Slow sources are skipped. */
+app.get<{ Querystring: { q?: string } }>('/api/search', async (req) => {
+  const q = String(req.query.q ?? '').trim().slice(0, 80);
+  if (q.length < 2) return { q, library: [], tv: [], requests: [], games: [], apps: [] };
+  const within = <T>(p: Promise<T>, fallback: T, ms = 6000) =>
+    Promise.race([p.catch(() => fallback), new Promise<T>((r) => setTimeout(() => r(fallback), ms))]);
+  const kid = isKid();
+  const plexAllowed = visibleApps().some((a) => a.id === 'plex');
+  const [library, tvHits, requestHits, gameList] = await Promise.all([
+    plex && plexAllowed ? within(plex.search(q), []) : Promise.resolve([]),
+    profiles.active.liveTv
+      ? within(
+          (async () => {
+            const chs = await visibleChannels();
+            const programmes = await tv.guide(Date.now(), Date.now() + 48 * 3600_000);
+            const dupes = findDuplicates(chs, programmes);
+            const marked = chs.map((c) => (dupes.has(c.id) ? { ...c, duplicateOf: dupes.get(c.id) } : c));
+            return searchGuide(q, marked, programmes, Date.now());
+          })(),
+          [],
+          8000,
+        )
+      : Promise.resolve([]),
+    requests.hasSeerr && !kid ? within(requests.search(q), []) : Promise.resolve([]),
+    within(visibleGames(), []),
+  ]);
+  const games = gameList
+    .map((g) => ({ g, score: matchScore(g.title, q) }))
+    .filter((x) => x.score)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 12)
+    .map((x) => x.g);
+  const apps = visibleApps()
+    .filter((a) => matchScore(a.name, q))
+    .map(publicApp);
+  return {
+    q,
+    library,
+    tv: tvHits.map((h) => ({ ...h.programme, channelName: h.channel.name, channelNumber: h.channel.number, hd: h.channel.hd, live: h.live })),
+    requests: requestHits.filter((r) => r.status !== 'available').slice(0, 12),
+    games,
+    apps,
+  };
 });
 
 // Every channel (for choosing which ones a profile sees), with which SD ones simulcast an HD one.
