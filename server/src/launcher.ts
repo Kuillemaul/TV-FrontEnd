@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { closeSync, mkdirSync, openSync } from 'node:fs';
+import { createWriteStream, mkdirSync, type WriteStream } from 'node:fs';
 import { join } from 'node:path';
 import type { EventBus, ForegroundSession } from './bus.js';
 import { expand, type HearthConfig, type LaunchSpec } from './config.js';
@@ -9,6 +9,8 @@ interface Running extends ForegroundSession {
   onExit?: (code: number | null) => void;
   /** Set for `flatpak run <app>`: the app lives in Flatpak's sandbox and needs `flatpak kill` too. */
   flatpak: string | null;
+  /** Game streams: what Moonlight has printed so far (the tail), and who's waiting for a line. */
+  output?: { text: string; waiters: Array<{ re: RegExp; done: (hit: boolean) => void }> };
 }
 
 /** The app id in a `flatpak run [--options] <app.id> [args]` command, else null. */
@@ -95,22 +97,24 @@ export class Launcher {
     const { argv, env } = this.commandFor(id, spec);
     this.log.info(`launch ${id}: ${argv.join(' ')}`);
 
-    // Game streams keep Moonlight's output (moonlight.log in the state folder) for troubleshooting.
-    let logFd: number | undefined;
-    if (id.startsWith('game:')) {
+    // Game streams: Moonlight's output goes to moonlight.log (state folder) and is watched, so Hearth can
+    // tell when the stream window starts drawing (waitForOutput).
+    const watchOutput = id.startsWith('game:');
+    let logFile: WriteStream | undefined;
+    if (watchOutput) {
       try {
         mkdirSync(this.config.stateDir, { recursive: true });
-        logFd = openSync(join(this.config.stateDir, 'moonlight.log'), 'w');
+        logFile = createWriteStream(join(this.config.stateDir, 'moonlight.log'));
+        logFile.on('error', () => undefined);
       } catch {
-        logFd = undefined;
+        logFile = undefined;
       }
     }
     const proc = spawn(argv[0], argv.slice(1), {
       env: { ...process.env, ...env },
-      stdio: logFd === undefined ? 'ignore' : ['ignore', logFd, logFd],
+      stdio: watchOutput ? ['ignore', 'pipe', 'pipe'] : 'ignore',
       detached: true, // own process group so stop() can take children with it
     });
-    if (logFd !== undefined) closeSync(logFd);
 
     await new Promise<void>((resolveSpawn, reject) => {
       proc.once('spawn', resolveSpawn);
@@ -118,6 +122,26 @@ export class Launcher {
     });
 
     const running: Running = { id, title, startedAt: Date.now(), proc, onExit, flatpak: flatpakAppId(argv) };
+    if (watchOutput) {
+      const output: NonNullable<Running['output']> = { text: '', waiters: [] };
+      running.output = output;
+      const onData = (chunk: Buffer) => {
+        logFile?.write(chunk);
+        output.text = (output.text + chunk.toString()).slice(-32_768);
+        for (const w of [...output.waiters]) {
+          if (w.re.test(output.text)) {
+            output.waiters.splice(output.waiters.indexOf(w), 1);
+            w.done(true);
+          }
+        }
+      };
+      proc.stdout?.on('data', onData);
+      proc.stderr?.on('data', onData);
+      proc.once('exit', () => {
+        logFile?.end();
+        for (const w of output.waiters.splice(0)) w.done(false);
+      });
+    }
     this.current = running;
     this.bus.emit({ type: 'session', session: this.session });
     this.notify('start', this.session!);
@@ -130,6 +154,30 @@ export class Launcher {
       }
       running.onExit?.(code);
       this.notify('stop', { id: running.id, title: running.title, startedAt: running.startedAt });
+    });
+  }
+
+  /**
+   * Resolve true once the current session's app prints something matching `re` (game streams only), false
+   * on timeout, exit or for other sessions.
+   */
+  waitForOutput(sessionId: string, re: RegExp, timeoutMs: number): Promise<boolean> {
+    const output = this.current?.id === sessionId ? this.current.output : undefined;
+    if (!output) return Promise.resolve(false);
+    if (re.test(output.text)) return Promise.resolve(true);
+    return new Promise((resolve) => {
+      const waiter = {
+        re,
+        done: (hit: boolean) => {
+          clearTimeout(timer);
+          resolve(hit);
+        },
+      };
+      const timer = setTimeout(() => {
+        output.waiters.splice(output.waiters.indexOf(waiter), 1);
+        resolve(false);
+      }, timeoutMs);
+      output.waiters.push(waiter);
     });
   }
 

@@ -93,6 +93,9 @@ interface AgentHealth {
   covering?: boolean;
 }
 
+/** Moonlight lines that mean the stream window is up and drawing video (moonlight-qt + FFmpeg/SDL logs). */
+const STREAM_DRAWING = /Decode context initialised|Decoded frame|EGLRenderer|Received first video packet/i;
+
 /** How often to ask a PC whether its library changed (a cheap "no changes" answer when it hasn't). */
 const RECHECK_MS = 60 * 1000;
 const HEALTH_MS = 5 * 1000;
@@ -153,6 +156,8 @@ export class GameService {
   allowDemo = false;
   /** Where the loading screen page is served (set by the server), e.g. http://127.0.0.1:8787 */
   uiBase = '';
+  /** Set by the server: notes for the log (how a game session ended…). */
+  log?: (message: string) => void;
 
   get demo(): boolean {
     return this.allowDemo && this.cfg.hosts.length === 0;
@@ -503,8 +508,9 @@ export class GameService {
     // Moonlight's quit pops up its own "quitting" window on the TV, so it's only the fallback for
     // when the agent couldn't end the session itself (no Apollo login in agent.json).
     if (h.endSessionOnExit && !ended) {
+      this.log?.(`${h.name}: the PC couldn't end the Apollo session itself (add the Apollo login to agent.json); using Moonlight's quit, which shows its window`);
       await this.launcher.run([...this.moonlightBase(), 'quit', h.moonlightHost]).catch(() => undefined);
-    }
+    } else if (ended) this.log?.(`${h.name}: the PC ended the Apollo session`);
   }
 
   /**
@@ -530,14 +536,19 @@ export class GameService {
       if (!ours()) return;
       cover();
     }
-    // Wait for the stream window: with Apollo, its virtual display appears when the stream connects.
-    const deadline = Date.now() + 25_000;
-    let display: boolean | null | undefined = h.virtualDisplay ? false : null;
-    while (h.virtualDisplay && display === false && Date.now() < deadline && ours()) {
-      display = (await this.health(h))?.streamDisplay;
-      if (display === false) await sleep(400);
-    }
-    await sleep(display ? 300 : 2500);
+    // Moonlight's stream window opens when the video starts decoding, seconds after the PC's virtual display
+    // appears: watch Moonlight's own output for that, then cover the new window straight away.
+    const drawing = await this.launcher.waitForOutput(sessionId, STREAM_DRAWING, 40_000);
+    if (!drawing) {
+      // No output to go on (another Moonlight build): fall back to the PC's virtual display, then a margin.
+      const deadline = Date.now() + 25_000;
+      let display: boolean | null | undefined = h.virtualDisplay ? false : null;
+      while (h.virtualDisplay && display === false && Date.now() < deadline && ours()) {
+        display = (await this.health(h))?.streamDisplay;
+        if (display === false) await sleep(400);
+      }
+      await sleep(display ? 3000 : 2500);
+    } else await sleep(150);
     if (!ours()) return;
     cover();
 
