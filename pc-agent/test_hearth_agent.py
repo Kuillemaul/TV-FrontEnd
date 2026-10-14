@@ -387,5 +387,15 @@ class PresenceTest(unittest.TestCase):
             self.assertEqual(p, {"idleSeconds": None, "locked": None, "foreground": None})
 
 
+
+class PlayniteExportPathTest(unittest.TestCase):
+    def test_folder_means_the_file_inside(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "hearth-library.json").write_text(json.dumps([{"id": "a1", "name": "Hades", "favorite": True}]), encoding="utf-8")
+            src = agent.PlayniteSource({"exportPath": d})
+            self.assertEqual(src.path.name, "hearth-library.json")
+            self.assertEqual([e["title"] for e in src.entries().values()], ["Hades"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -528,6 +528,9 @@ class PlayniteSource:
         if not default.exists() and (data / "hearth-favorites.json").exists():
             default = data / "hearth-favorites.json"  # older exporter: favourites only
         self.path = Path(cfg.get("exportPath") or default)
+        # exportPath pointing at the ExtensionsData folder (portable Playnite) instead of the file: use the file in it.
+        if self.path.is_dir():
+            self.path = self.path / "hearth-library.json"
         self.kbm_tags = {t.lower() for t in cfg.get("kbmTags", ["Hearth: KBM", "Keyboard & Mouse"])}
         self.pad_tags = {t.lower() for t in cfg.get("controllerTags", ["Hearth: Controller"])}
         self.cache_key: tuple[float, ...] | None = None
