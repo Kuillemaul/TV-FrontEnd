@@ -190,7 +190,9 @@ export class Launcher {
     // A Flatpak app (Plex HTPC, Moonlight…) runs in its own sandbox: signalling the `flatpak run`
     // wrapper can leave the app itself on screen. Ask Flatpak to close it as well.
     if (running.flatpak) this.flatpakKill(running.flatpak);
-    killGroup(pid, 'SIGTERM');
+    // A game stream has nothing to save, and Moonlight shows its own window while it shuts down politely:
+    // end it at once. Everything else gets the chance to close cleanly first.
+    killGroup(pid, running.id.startsWith('game:') ? 'SIGKILL' : 'SIGTERM');
     const timer = setTimeout(() => {
       killGroup(pid, 'SIGKILL');
       if (running.flatpak) this.flatpakKill(running.flatpak);

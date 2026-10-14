@@ -580,7 +580,7 @@ export class GameService {
         this.bus.toast(`${health.playing ?? 'The game'} closed on ${h.name}`);
         await this.stopCovered();
       }
-    }, 4000);
+    }, 1500);
   }
 
   /* ---------------- launching ---------------- */
