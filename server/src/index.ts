@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { EventBus } from './bus.js';
 import { expand, loadConfig, resolveConfigPath, type AppTile } from './config.js';
 import { HotkeyWatcher, kbmStatus } from './input.js';
-import { ControllerKeys, KEY_NAMES, wantsControllerKeys } from './padkeys.js';
+import { ControllerKeys, KEY_NAMES, wantsControllerKeys, wantsPointer } from './padkeys.js';
 import type { IntentCatalog, UiAction } from './intents.js';
 import { Launcher } from './launcher.js';
 import { DemoHome } from './providers/demohome.js';
@@ -113,12 +113,21 @@ const scenes = new SceneAutomation(config.scenes, (c) => callService(c.service, 
 launcher.onSession((event, s) => scenes.handle(event, s));
 
 // Controllers type arrow/Enter/Esc keys into keyboard-only apps (Plex HTPC, YouTube TV…).
-const padKeys = new ControllerKeys((code) => {
-  launcher.run(expand(config.remote.keyCommand, { code, key: KEY_NAMES[code] ?? '' })).catch((err) => log.warn(`controller keys: ${(err as Error).message}`));
-}, log);
+const padKeyWarn = (err: unknown) => log.warn(`controller keys: ${(err as Error).message}`);
+const padKeys = new ControllerKeys(
+  (code) => {
+    launcher.run(expand(config.remote.keyCommand, { code, key: KEY_NAMES[code] ?? '' })).catch(padKeyWarn);
+  },
+  log,
+  // Pointer mode for websites made for a mouse (Prime Video…): stick moves the pointer, A clicks.
+  {
+    move: (dx, dy) => void launcher.run(expand(config.remote.pointerMoveCommand, { dx, dy })).catch(padKeyWarn),
+    click: () => void launcher.run(config.remote.clickCommand).catch(padKeyWarn),
+  },
+);
 launcher.onSession((event, s) => {
   const tile = event === 'start' ? config.apps.find((a) => `app:${a.id}` === s.id) : undefined;
-  if (tile && wantsControllerKeys(tile)) padKeys.start();
+  if (tile && wantsControllerKeys(tile)) padKeys.start(wantsPointer(tile));
   else padKeys.stop();
 });
 

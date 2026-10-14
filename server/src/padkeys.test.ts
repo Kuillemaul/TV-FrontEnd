@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { PAD_KEYS, PadTranslator, wantsControllerKeys } from './padkeys.js';
+import { PAD_KEYS, PadTranslator, wantsControllerKeys, wantsPointer } from './padkeys.js';
 
 const EV_KEY = 1;
 const EV_ABS = 3;
@@ -45,4 +45,31 @@ test('Moonlight keeps its own controller support', () => {
   assert.equal(wantsControllerKeys({ id: 'yt', name: 'YouTube', launch: { type: 'web', url: 'https://www.youtube.com/tv' } }), true);
   assert.equal(wantsControllerKeys({ id: 'm', name: 'Moonlight', launch: { type: 'command', command: ['flatpak', 'run', 'com.moonlight_stream.Moonlight'] } }), false);
   assert.equal(wantsControllerKeys({ id: 'j', name: 'Jellyfin', controllerKeys: false, launch: { type: 'web', url: 'x' } }), false);
+});
+
+test('pointer mode: the stick moves the pointer, A clicks, the d-pad still sends arrows', async () => {
+  const keys: number[] = [];
+  const moves: Array<[number, number]> = [];
+  let clicks = 0;
+  const pad = new PadTranslator((k) => keys.push(k), { move: (dx, dy) => moves.push([dx, dy]), click: () => clicks++ });
+  pad.handle(EV_ABS, 0, 32767); // stick full right
+  await new Promise((r) => setTimeout(r, 120));
+  pad.handle(EV_ABS, 0, 0); // let go
+  const count = moves.length;
+  await new Promise((r) => setTimeout(r, 80));
+  pad.handle(EV_KEY, 0x130, 1); // A
+  pad.handle(EV_KEY, 0x223, 1); // d-pad right
+  pad.handle(EV_KEY, 0x223, 0);
+  pad.stop();
+  assert.ok(count >= 2 && moves.every(([dx, dy]) => dx > 0 && dy === 0), JSON.stringify(moves));
+  assert.equal(moves.length, count, 'stops moving when the stick is released');
+  assert.equal(clicks, 1);
+  assert.deepEqual(keys, [PAD_KEYS.right]);
+});
+
+test('mouse-made websites get the pointer; TV web apps and native apps keep arrow keys', () => {
+  assert.equal(wantsPointer({ id: 'prime', name: 'Prime', launch: { type: 'web', url: 'https://www.primevideo.com' } }), true);
+  assert.equal(wantsPointer({ id: 'yt', name: 'YouTube', launch: { type: 'web', url: 'https://www.youtube.com/tv', userAgent: 'TV' } }), false);
+  assert.equal(wantsPointer({ id: 'plex', name: 'Plex', launch: { type: 'command', command: ['flatpak', 'run', 'tv.plex.PlexHTPC'] } }), false);
+  assert.equal(wantsPointer({ id: 'n', name: 'Netflix', controllerPointer: false, launch: { type: 'web', url: 'https://www.netflix.com' } }), false);
 });

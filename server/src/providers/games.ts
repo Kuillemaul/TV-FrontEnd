@@ -515,17 +515,25 @@ export class GameService {
     if (!h.loadingScreen || !this.uiBase) return;
     const ours = () => this.launcher.session?.id === sessionId;
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const q = new URLSearchParams({ host: info.hostId, game: info.gameId, title: info.title, ...(info.art ? { art: info.art } : {}) });
+    const cover = () => this.launcher.showOverlay(`${this.uiBase}/launching?${q}`, 180);
+    // The newest window is the one on screen. Cover Moonlight's own "Connecting…" window as soon as it's up,
+    // then again once the stream window opens on top of that.
+    if (h.virtualDisplay) {
+      await sleep(900);
+      if (!ours()) return;
+      cover();
+    }
     // Wait for the stream window: with Apollo, its virtual display appears when the stream connects.
     const deadline = Date.now() + 25_000;
     let display: boolean | null | undefined = h.virtualDisplay ? false : null;
     while (h.virtualDisplay && display === false && Date.now() < deadline && ours()) {
       display = (await this.health(h))?.streamDisplay;
-      if (display === false) await sleep(500);
+      if (display === false) await sleep(400);
     }
-    await sleep(display ? 700 : 2500);
+    await sleep(display ? 300 : 2500);
     if (!ours()) return;
-    const q = new URLSearchParams({ host: info.hostId, game: info.gameId, title: info.title, ...(info.art ? { art: info.art } : {}) });
-    this.launcher.showOverlay(`${this.uiBase}/launching?${q}`, 180);
+    cover();
 
     try {
       await gameStarted;

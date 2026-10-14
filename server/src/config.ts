@@ -20,6 +20,11 @@ export interface AppTile {
   launch: LaunchSpec;
   /** Translate controller buttons into arrow/Enter/Esc key presses for this app (default on, off for Moonlight). */
   controllerKeys?: boolean;
+  /**
+   * Left stick moves the mouse pointer and A clicks, for websites made for a mouse (Prime Video, Disney+…).
+   * Default: on for web apps without a TV user agent; the D-pad still sends arrow keys.
+   */
+  controllerPointer?: boolean;
 }
 
 export interface TvheadendConfig {
@@ -222,6 +227,10 @@ export interface HearthConfig {
   remote: {
     /** Injects keys into apps (Plex, browser…) when the phone remote is used. {key} = Linux key name. */
     keyCommand: string[];
+    /** Moves the pointer by {dx},{dy} pixels (controller pointer mode). */
+    pointerMoveCommand: string[];
+    /** Left click (controller pointer mode). */
+    clickCommand: string[];
   };
   system: {
     volumeUp: string[];
@@ -289,7 +298,11 @@ function defaults(): HearthConfig {
       inputs: [],
     },
     screensaver: { idleMinutes: 5, pickerAfterMinutes: 30 },
-    remote: { keyCommand: ['ydotool', 'key', '{code}:1', '{code}:0'] },
+    remote: {
+      keyCommand: ['ydotool', 'key', '{code}:1', '{code}:0'],
+      pointerMoveCommand: ['ydotool', 'mousemove', '-x', '{dx}', '-y', '{dy}'],
+      clickCommand: ['ydotool', 'click', '0xC0'],
+    },
     gaming: { moonlight: ['flatpak', 'run', 'com.moonlight_stream.Moonlight', 'stream', '{host}', '{app}'], hosts: [], kbmOverrides: {} },
     homeKeys: [
       { key: 'KEY_HOMEPAGE', holdMs: 0 },
@@ -481,6 +494,8 @@ export function loadConfig(path = resolveConfigPath()): HearthConfig {
   if (raw.plex?.url && raw.plex?.token && !isPlaceholder(raw.plex.token)) cfg.plex = { url: String(raw.plex.url).replace(/\/$/, ''), token: raw.plex.token, webUrl: raw.plex.webUrl };
   Object.assign(cfg.screensaver, raw.screensaver);
   if (Array.isArray(raw.remote?.keyCommand)) cfg.remote.keyCommand = raw.remote.keyCommand;
+  if (Array.isArray(raw.remote?.pointerMoveCommand)) cfg.remote.pointerMoveCommand = raw.remote.pointerMoveCommand;
+  if (Array.isArray(raw.remote?.clickCommand)) cfg.remote.clickCommand = raw.remote.clickCommand;
 
   if (raw.gaming) {
     if (Array.isArray(raw.gaming.moonlight)) cfg.gaming.moonlight = raw.gaming.moonlight;

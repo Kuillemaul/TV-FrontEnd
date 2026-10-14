@@ -9,6 +9,9 @@ import { readDevices } from './input.js';
  * never doubles up with Hearth's own controller support, Moonlight or Live TV.
  *
  *   D-pad / left stick → arrows    A → Enter    B / View → Esc (back)    X / Y → Space (play/pause)
+ *
+ * Pointer mode, for websites made for a mouse (Prime Video, Disney+…): the left stick moves the mouse
+ * pointer (faster the further you push) and A clicks. The D-pad still sends arrow keys.
  */
 
 const EV_KEY = 1;
@@ -23,6 +26,22 @@ export function wantsControllerKeys(tile: AppTile): boolean {
   if (tile.controllerKeys !== undefined) return tile.controllerKeys;
   return !(tile.launch.type === 'command' && /moonlight/i.test(tile.launch.command.join(' ')));
 }
+
+/** Mouse-made websites get the stick as a pointer. TV-style web apps (a TV user agent, e.g. YouTube TV) and native apps don't. */
+export function wantsPointer(tile: AppTile): boolean {
+  if (tile.controllerPointer !== undefined) return tile.controllerPointer;
+  return tile.launch.type === 'web' && !tile.launch.userAgent;
+}
+
+export interface Pointer {
+  move(dx: number, dy: number): void;
+  click(): void;
+}
+
+/** Pointer speed: pixels per tick at full tilt, ticks per second, and the stick's dead zone. */
+const POINTER_MAX = 28;
+const POINTER_HZ = 30;
+const POINTER_DEAD = 0.18;
 
 const BUTTONS: Record<number, number> = {
   0x130: PAD_KEYS.enter, // A / south
@@ -50,11 +69,21 @@ export class PadTranslator {
   private unsigned: Partial<Record<number, boolean>> = {};
   private held: Dir | null = null;
   private timer?: NodeJS.Timeout;
+  /** Pointer mode: the left stick's position (−1…1) and the timer that moves the pointer while it's pushed. */
+  private analog = { x: 0, y: 0 };
+  private pointerTimer?: NodeJS.Timeout;
 
-  constructor(private readonly press: (code: number) => void) {}
+  constructor(
+    private readonly press: (code: number) => void,
+    private readonly pointer?: Pointer,
+  ) {}
 
   handle(type: number, code: number, value: number): void {
     if (type === EV_KEY) {
+      if (this.pointer && code === 0x130) {
+        if (value === 1) this.pointer.click();
+        return;
+      }
       if (code in BUTTONS) {
         if (value === 1) this.press(BUTTONS[code]);
         return;
@@ -72,6 +101,11 @@ export class PadTranslator {
     else if (code === ABS_X || code === ABS_Y) {
       this.unsigned[code] ??= value >= 100 && value <= 156;
       const v = this.unsigned[code] ? (value - 128) / 128 : value / 32768;
+      if (this.pointer) {
+        this.analog[code === ABS_X ? 'x' : 'y'] = Math.max(-1, Math.min(1, v));
+        this.steer();
+        return;
+      }
       const axis = Math.abs(v) > 0.6 ? Math.sign(v) : 0;
       if (code === ABS_X) this.stick.x = axis;
       else this.stick.y = axis;
@@ -103,8 +137,29 @@ export class PadTranslator {
     this.timer = setTimeout(repeat, REPEAT_DELAY_MS);
   }
 
+  /** Pointer mode: move while the stick is outside the dead zone, speed growing with the square of the push. */
+  private steer(): void {
+    const pushed = Math.hypot(this.analog.x, this.analog.y) > POINTER_DEAD;
+    if (!pushed) {
+      clearInterval(this.pointerTimer);
+      this.pointerTimer = undefined;
+      return;
+    }
+    if (this.pointerTimer) return;
+    const tick = () => {
+      const speed = (v: number) => (Math.abs(v) < POINTER_DEAD ? 0 : Math.round(Math.sign(v) * v * v * POINTER_MAX));
+      const dx = speed(this.analog.x);
+      const dy = speed(this.analog.y);
+      if (dx || dy) this.pointer!.move(dx, dy);
+    };
+    tick();
+    this.pointerTimer = setInterval(tick, 1000 / POINTER_HZ);
+  }
+
   stop(): void {
     clearTimeout(this.timer);
+    clearInterval(this.pointerTimer);
+    this.pointerTimer = undefined;
     this.held = null;
   }
 }
@@ -113,18 +168,23 @@ export class ControllerKeys {
   private streams = new Map<string, { stream: ReadStream; pad: PadTranslator }>();
   private timer?: NodeJS.Timeout;
   private warned = new Set<string>();
+  private pointerMode = false;
 
   constructor(
     private readonly press: (code: number) => void,
     private readonly log: { info: (m: string) => void; warn: (m: string) => void },
+    private readonly pointer?: Pointer,
   ) {}
 
   get active(): boolean {
     return this.timer !== undefined;
   }
 
-  start(): void {
+  /** pointer: the left stick moves the mouse and A clicks (websites made for a mouse). */
+  start(pointer = false): void {
+    if (this.active && pointer !== this.pointerMode) this.stop();
     if (this.active || process.platform !== 'linux') return;
+    this.pointerMode = pointer;
     this.scan();
     this.timer = setInterval(() => this.scan(), 3000);
   }
@@ -151,7 +211,7 @@ export class ControllerKeys {
   private watch(event: string, name: string): void {
     const path = `/dev/input/${event}`;
     const stream = createReadStream(path, { highWaterMark: EVENT_SIZE * 32 });
-    const pad = new PadTranslator(this.press);
+    const pad = new PadTranslator(this.press, this.pointerMode ? this.pointer : undefined);
     this.streams.set(event, { stream, pad });
     let rest = Buffer.alloc(0);
     stream.on('open', () => this.log.info(`controller keys: ${name} (${event})`));

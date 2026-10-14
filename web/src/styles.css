@@ -2137,3 +2137,10 @@ body.mouse-active .row-body:hover .row-arrow { opacity: 1; pointer-events: auto;
 .crash p { color: var(--text-2); font-size: 1.3rem; margin: 0; }
 .crash button { padding: 1rem 2rem; border-radius: 0.8rem; background: var(--text); color: var(--bg); font-weight: 700; font-size: 1.2rem; }
 .crash pre { max-width: 70rem; white-space: pre-wrap; color: var(--text-3); font-size: 1rem; }
+
+/* Losing focus is instant everywhere (tiles, buttons, chips, keyboard keys…): only the newly focused item
+   animates, so moving quickly with the remote or controller never shows the previous item still lit. */
+[data-nav]:not(:focus),
+[data-nav]:not(:focus) * {
+  transition-duration: 0s !important;
+}
