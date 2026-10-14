@@ -9,7 +9,7 @@ import { CameraStreams } from '../camerastreams.js';
 import { DisplayControl } from '../display.js';
 import type { RequestsClient } from '../providers/seerr.js';
 import type { SleepTimer } from '../sleep.js';
-import { ArrWatcher } from '../providers/arrwatch.js';
+import { ArrWatcher, type ReadyItem } from '../providers/arrwatch.js';
 import type { EventBus } from '../bus.js';
 import { expand, type HearthConfig, type LabAction } from '../config.js';
 import type { Launcher } from '../launcher.js';
@@ -457,10 +457,7 @@ export function registerExtras(app: FastifyInstance, ctx: ExtrasContext): void {
       await openPlexItem(id);
     }),
   );
-  const watcher = new ArrWatcher(
-    config.requests,
-    config.requests.notify ?? 'all',
-    (item) => {
+  const announce = (item: ReadyItem) => {
       const watchable = item.kind !== 'music' && Boolean(plex);
       alerts.raise({
         kind: 'info',
@@ -472,6 +469,46 @@ export function registerExtras(app: FastifyInstance, ctx: ExtrasContext): void {
           ? { label: 'Watch', kind: 'watch', title: item.title, year: item.year, mediaType: item.kind as 'movie' | 'tv', season: item.season, episode: item.episode }
           : undefined,
       });
+  };
+  // Radarr/Sonarr say "imported" before Plex has scanned the file. With Plex set up, only say "ready to
+  // watch" once Plex can find it (checked every minute, for up to 3 hours).
+  const waiting: Array<{ item: ReadyItem; since: number }> = [];
+  const PLEX_WAIT_MS = 3 * 3600_000;
+  let checking = false;
+  const checkPlex = async () => {
+    if (checking) return; // one pass at a time, so nothing is announced twice
+    checking = true;
+    try {
+      await checkWaiting();
+    } finally {
+      checking = false;
+    }
+  };
+  const checkWaiting = async () => {
+    for (const w of [...waiting]) {
+      const drop = () => waiting.splice(waiting.indexOf(w), 1);
+      try {
+        const found = await plex!.find({ title: w.item.title, year: w.item.year, mediaType: w.item.kind as 'movie' | 'tv', season: w.item.season, episode: w.item.episode });
+        if (found) {
+          drop();
+          announce(w.item);
+        } else if (Date.now() - w.since > PLEX_WAIT_MS) {
+          drop();
+          app.log.warn(`ready to watch: Plex never showed ${w.item.title}; no pop-up`);
+        }
+      } catch (err) {
+        app.log.warn(`ready to watch: Plex check failed: ${(err as Error).message}`);
+      }
+    }
+  };
+  if (plex) setInterval(() => void checkPlex(), 60_000).unref();
+  const watcher = new ArrWatcher(
+    config.requests,
+    config.requests.notify ?? 'all',
+    (item) => {
+      if (!plex || item.kind === 'music') return announce(item);
+      waiting.push({ item, since: Date.now() });
+      void checkPlex();
     },
     app.log,
     requests.hasSeerr ? () => requests.requestedIds() : undefined,
