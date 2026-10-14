@@ -247,7 +247,6 @@ h1, h2 { margin: 0; font-weight: 650; letter-spacing: -0.01em; }
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
-  transition: transform 0.22s var(--ease);
 }
 
 .tile-art {
@@ -259,7 +258,9 @@ h1, h2 { margin: 0; font-weight: 650; letter-spacing: -0.01em; }
   display: grid;
   place-items: center;
   color: var(--text-2);
-  transition: box-shadow 0.22s var(--ease);
+  /* Only the artwork grows on focus, mostly upwards, so the caption underneath stays put. */
+  transform-origin: 50% 70%;
+  transition: transform 0.22s var(--ease), box-shadow 0.22s var(--ease);
 }
 
 .tile-art img {
@@ -302,7 +303,7 @@ h1, h2 { margin: 0; font-weight: 650; letter-spacing: -0.01em; }
   color: var(--text);
 }
 
-.tile-meta { padding: 0 0.2rem; max-width: 20rem; }
+.tile-meta { position: relative; padding: 0 0.2rem; max-width: 20rem; } /* above the focused art's shadow */
 .tile-poster .tile-meta { max-width: 12rem; }
 
 .tile-title {
@@ -354,8 +355,8 @@ h1, h2 { margin: 0; font-weight: 650; letter-spacing: -0.01em; }
 
 .tile-progress div { height: 100%; background: var(--text); }
 
-.tile:focus { transform: scale(1.07); }
 .tile:focus .tile-art {
+  transform: scale(1.07);
   box-shadow: 0 0 0 0.22rem var(--focus), 0 1.2rem 2.6rem rgba(0, 0, 0, 0.6);
 }
 .tile:focus .tile-title { color: var(--text); }
@@ -1910,7 +1911,10 @@ body.mouse-active .row-body:hover .row-arrow { opacity: 1; pointer-events: auto;
 .row-arrow:hover { background: var(--text); color: var(--bg); }
 
 /* Search */
-.search-box { position: relative; max-width: 52rem; margin-bottom: 2rem; }
+.search-top { display: grid; grid-template-columns: minmax(0, 52rem) minmax(0, 1fr); gap: 3rem; align-items: start; margin-bottom: 2.4rem; }
+.search-aside { color: var(--text-3); font-size: 1.2rem; line-height: 1.5; padding-top: 1.1rem; max-width: 34rem; }
+.search-aside p { margin: 0; }
+.search-box { position: relative; max-width: 52rem; margin-bottom: 1.2rem; }
 .search-box input { width: 100%; font: inherit; font-size: 1.6rem; padding: 1rem 1.4rem; border-radius: var(--radius); border: 2px solid var(--border); background: var(--surface); color: var(--text); }
 .search-box input:focus { outline: none; border-color: var(--text); background: var(--surface-2); }
 .search-spinner { position: absolute; right: 1.3rem; top: 50%; width: 1.4rem; height: 1.4rem; margin-top: -0.7rem; border-radius: 50%; border: 3px solid var(--border); border-top-color: var(--text); animation: spin 0.8s linear infinite; }
@@ -1947,3 +1951,50 @@ body.mouse-active .row-body:hover .row-arrow { opacity: 1; pointer-events: auto;
 .morning-todo li { padding: 0.45rem 0.2rem 0.45rem 1.6rem; position: relative; font-size: 1.15rem; }
 .morning-todo li::before { content: ''; position: absolute; left: 0; top: 0.75rem; width: 0.9rem; height: 0.9rem; border: 2px solid var(--text-3); border-radius: 0.25rem; }
 @media (max-width: 1400px) { .morning-grid { grid-template-columns: 1fr 1fr; } .morning-todo { grid-column: span 2; } }
+
+/* On-screen keyboard */
+.osk { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 0.45rem; }
+.osk-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 3.4rem;
+  border-radius: 0.6rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font: inherit;
+  font-size: 1.35rem;
+  font-weight: 550;
+  transition: transform 0.14s var(--ease), background 0.14s, color 0.14s;
+}
+.osk-key-action { font-size: 1rem; color: var(--text-2); background: var(--surface-2); }
+.osk-key-on { background: rgba(var(--accent-rgb), 0.35); border-color: rgba(var(--accent-rgb), 0.7); color: var(--text); }
+.osk-key:focus { background: var(--text); color: var(--bg); border-color: var(--text); transform: scale(1.08); outline: none; }
+
+.osk-backdrop { position: fixed; inset: 0; z-index: 60; background: rgba(3, 4, 8, 0.35); animation: fade-in 0.15s var(--ease); }
+.osk-popover {
+  position: fixed;
+  padding: 1rem;
+  border-radius: 1.1rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 1.6rem 4rem rgba(0, 0, 0, 0.6);
+  animation: pop-in 0.2s var(--ease);
+}
+.osk-display {
+  display: flex;
+  align-items: center;
+  min-height: 3.2rem;
+  padding: 0 1rem;
+  margin-bottom: 0.8rem;
+  border-radius: 0.6rem;
+  background: var(--surface);
+  font-size: 1.4rem;
+  white-space: pre;
+  overflow: hidden;
+}
+.osk-placeholder { color: var(--text-3); }
+.osk-caret { width: 2px; height: 1.6rem; margin-left: 2px; background: var(--text); animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }

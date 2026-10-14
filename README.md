@@ -53,6 +53,7 @@ For UI development with hot reload, run `npm run dev:server` and `npm run dev:we
 | Voice | Mic key / `M` / F2 | Y |
 | Home | Home | Start |
 | Close any app, back to Hearth | Remote **Home** key | Hold **Xbox/PS** button 1s |
+| Type (on-screen keyboard) | OK on a text box, Back closes | A on a text box, **X** deletes |
 
 The mouse works everywhere too. Hovering focuses, clicking selects, and the cursor hides when idle.
 

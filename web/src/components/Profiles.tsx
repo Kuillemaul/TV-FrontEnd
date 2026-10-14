@@ -154,7 +154,7 @@ export function ProfileMenu({ onClose, onSwitch, onTheme }: { onClose: () => voi
           <Icon name="refresh" /> Switch profile
         </button>
         <button className="menu-item" data-nav onClick={onTheme}>
-          <Icon name="bulb" /> Change theme
+          <Icon name="palette" /> Change theme
         </button>
       </div>
     </Modal>
@@ -262,7 +262,7 @@ export function ProfileEditor({ profileId, onClose }: { profileId: string; onClo
         <EditorCard icon="apps" title="Apps" detail={`${appCount} · order & hide`} onClick={() => setSub('apps')} autoFocus />
         <EditorCard icon="gamepad" title="Games" detail={gameCount} onClick={() => setSub('games')} />
         <EditorCard icon="tv" title="Live TV" detail={p.liveTv ? 'Allowed' : 'Hidden'} onClick={() => void save({ liveTv: !p.liveTv })} toggled={p.liveTv} />
-        <EditorCard icon="bulb" title="Theme" detail="Background, colours, font" onClick={() => setSub('theme')} />
+        <EditorCard icon="palette" title="Theme" detail="Background, colours, font" onClick={() => setSub('theme')} />
         {p.kind === 'kid' ? (
           <EditorCard
             icon="moon"

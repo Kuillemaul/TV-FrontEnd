@@ -14,6 +14,7 @@ import { KbmPrompt } from './components/KbmPrompt';
 import { Avatar, ProfileEditor, ProfileMenu, ProfilePicker, saveProfile } from './components/Profiles';
 import { ThemeMenu } from './components/ThemeMenu';
 import { VoiceOverlay } from './components/VoiceOverlay';
+import { KeyboardHost, setInputValue, typeIntoKeyboard } from './components/OnScreenKeyboard';
 import {
   formatTime,
   get,
@@ -384,12 +385,8 @@ export function App() {
     if (cmd === 'back' || cmd === 'voice') return dispatchNav(cmd);
     if (cmd === 'text' && text) {
       const el = document.activeElement;
-      if (el instanceof HTMLInputElement) {
-        // Set through the native setter so React sees the change.
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(el, el.value + text);
-        el.dispatchEvent(new Event('input', { bubbles: true }));
-        return;
-      }
+      if (el instanceof HTMLInputElement) return setInputValue(el, el.value + text);
+      if (typeIntoKeyboard(el, text)) return;
       void post<{ action?: UiAction; speech: string }>('/api/voice/text', { text }).then((r) => {
         if (r.action) runAction(r.action);
         else if (r.speech) toast(r.speech);
@@ -524,6 +521,7 @@ export function App() {
         <AlertStack alerts={alerts} onExpire={expireAlert} />
         {pip ? <CameraPip entity={pip.entity} name={pip.name} onClose={() => setPip(null)} /> : null}
         {saver ? <Screensaver clock24h={info?.clock24h ?? false} onWake={wakeFromSaver} /> : null}
+        <KeyboardHost />
       </div>
     </HearthContext.Provider>
   );

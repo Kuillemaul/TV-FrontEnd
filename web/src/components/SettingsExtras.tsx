@@ -105,10 +105,10 @@ export function SettingsExtras() {
           />
         </div>
         <div className="settings-row" data-nav-group style={{ marginTop: '0.8rem' }}>
-          <Button icon="bulb" variant="ghost" onClick={() => void post('/api/alerts/test', { kind: 'doorbell' })}>
+          <Button icon="doorbell" variant="ghost" onClick={() => void post('/api/alerts/test', { kind: 'doorbell' })}>
             Test doorbell
           </Button>
-          <Button icon="bulb" variant="ghost" onClick={() => void post('/api/alerts/test', { kind: 'info' })}>
+          <Button icon="bell" variant="ghost" onClick={() => void post('/api/alerts/test', { kind: 'info' })}>
             Test alert
           </Button>
           <Button icon="play" variant="ghost" onClick={() => void post('/api/alerts/test', { kind: 'ready' })}>

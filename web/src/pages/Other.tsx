@@ -173,7 +173,7 @@ export function SettingsPage() {
       <section className="settings-group">
         <h2>Look & apps</h2>
         <div className="settings-row" data-nav-group>
-          <Button icon="bulb" onClick={hearth.openTheme}>Theme</Button>
+          <Button icon="palette" onClick={hearth.openTheme}>Theme</Button>
           <Button icon="apps" onClick={hearth.editApps}>Arrange apps</Button>
         </div>
       </section>

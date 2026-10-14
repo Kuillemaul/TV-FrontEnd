@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, Modal, PageHeader, Row, Tile } from '../components/Layout';
+import { OnScreenKeyboard } from '../components/OnScreenKeyboard';
 import { appArt } from '../components/TileArt';
 import { formatTime, get, post, type AppTile, type Game, type MediaResult, type Programme } from '../lib/api';
 import { useHearth } from '../lib/hearth';
@@ -108,24 +109,39 @@ export function SearchPage() {
   return (
     <div className="page">
       <PageHeader title="Search" />
-      <div className="search-box">
-        <input
-          ref={input}
-          data-nav
-          data-nav-default
-          autoFocus
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Films, shows, channels, games…"
-          aria-label="Search"
-        />
-        {loading ? <span className="search-spinner" /> : null}
+      <div className="search-top">
+        <div className="search-entry">
+          <div className="search-box">
+            <input
+              ref={input}
+              data-nav
+              data-osk-off
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Films, shows, channels, games…"
+              aria-label="Search"
+            />
+            {loading ? <span className="search-spinner" /> : null}
+          </div>
+          <OnScreenKeyboard value={query} onChange={setQuery} autoFocus />
+        </div>
+        <div className="search-aside">
+          {!query.trim() ? (
+            <p>
+              Searches Plex, the TV guide, requests, games and apps. Type here, with a keyboard or the phone remote, or say
+              “search for…”.
+            </p>
+          ) : query.trim().length < 2 ? (
+            <p>Keep typing…</p>
+          ) : r && !loading && total === 0 ? (
+            <p>Nothing found for “{r.q}”.</p>
+          ) : r && total ? (
+            <p>
+              {total} result{total === 1 ? '' : 's'} for “{r.q}”. Press down to see them.
+            </p>
+          ) : null}
+        </div>
       </div>
-      {!query.trim() ? (
-        <p className="empty">Type with a keyboard or the phone remote, or say “search for…”. Searches Plex, the TV guide, requests, games and apps.</p>
-      ) : r && !loading && total === 0 ? (
-        <p className="empty">Nothing found for “{r.q}”.</p>
-      ) : null}
 
       {r?.tv.length ? (
         <Row title="On TV">

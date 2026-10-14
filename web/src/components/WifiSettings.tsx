@@ -155,7 +155,7 @@ function JoinNetwork({ network, onClose, onJoined }: { network: WifiNetwork; onC
 
   return (
     <Modal title={`Join ${network.ssid}`} onClose={onClose}>
-      <p className="modal-sub">Type the Wi-Fi password with a keyboard, or with the phone remote's typing box.</p>
+      <p className="modal-sub">Press OK on the box for the on-screen keyboard, or type with a keyboard or the phone remote's typing box.</p>
       <label className="field">
         <span>Password</span>
         <input
@@ -164,7 +164,11 @@ function JoinNetwork({ network, onClose, onJoined }: { network: WifiNetwork; onC
           type={show ? 'text' : 'password'}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && password.length >= 8 && void join()}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter' || password.length < 8) return;
+            e.preventDefault();
+            void join();
+          }}
         />
       </label>
       {error ? <div className="form-error">{error}</div> : null}
