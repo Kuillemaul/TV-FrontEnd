@@ -404,6 +404,13 @@ class PlayniteNullsTest(unittest.TestCase):
             self.assertEqual(src.browse()["total"], 2)
 
 
+class PlaynitePlatformTest(unittest.TestCase):
+    def test_pc_like_platforms_are_pc(self):
+        for p in (["PC (Windows)"], ["Microsoft Xbox Series"], ["Microsoft Xbox One", "PC (Windows)"], [], ["PC"]):
+            self.assertEqual(agent.playnite_platform(p), "PC", p)
+        self.assertEqual(agent.playnite_platform(["Nintendo Switch"]), "Nintendo Switch")
+
+
 class PlayniteExportPathTest(unittest.TestCase):
     def test_folder_means_the_file_inside(self):
         with tempfile.TemporaryDirectory() as d:

@@ -513,6 +513,17 @@ class LaunchBoxSource:
 # ---- Playnite -------------------------------------------------------------------------
 
 
+# Playnite calls PC games "PC (Windows)", and Game Pass games "Microsoft Xbox Series" / "Xbox One", but they
+# all run on this PC. Only emulated platforms set up in Playnite (e.g. "Nintendo Switch") keep their name.
+PC_LIKE = re.compile(r"^(pc\b|.*windows|.*xbox|ms-dos|dos\b|linux|macintosh|mac\b)", re.I)
+
+
+def playnite_platform(platforms: list[str]) -> str:
+    if not platforms or any(PC_LIKE.match(p) for p in platforms):
+        return "PC"
+    return platforms[0]
+
+
 class PlayniteSource:
     """
     Reads the library file that the Hearth Exporter Playnite extension writes (see
@@ -563,7 +574,7 @@ class PlayniteSource:
         return {
             "id": f"pn-{g['id']}",
             "title": g.get("name") or "Unknown",
-            "platform": platforms[0] if platforms else "PC",
+            "platform": playnite_platform(platforms),
             "source": "playnite",
             "store": g.get("source") or "",
             "art": bool(cover),
