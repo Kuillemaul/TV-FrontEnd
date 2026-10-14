@@ -29,7 +29,7 @@ export function HomePage() {
   const now = useNow();
   const apps = useApi<AppTile[]>('/api/apps');
   const liveTv = (hearth.profile?.liveTv ?? true) && (hearth.info?.setup.tv ?? true);
-  const guide = useApi<Guide>(liveTv ? '/api/tv/guide?hours=1' : null, 60_000);
+  const guide = useApi<Guide>(liveTv ? '/api/tv/guide?hours=2' : null, 60_000);
   const library = useApi<GameLibrary>('/api/games');
   useServerEvents((e) => e.type === 'games' && void library.reload());
   useServerEvents((e) => e.type === 'apps' && void apps.reload());
@@ -72,6 +72,7 @@ export function HomePage() {
     return guide.data.channels.slice(0, 12).map((ch) => ({
       ch,
       prog: guide.data!.programmes.find((p) => p.channelId === ch.id && p.start <= now && p.end > now),
+      next: guide.data!.programmes.filter((p) => p.channelId === ch.id && p.start > now).sort((a, b) => a.start - b.start)[0],
     }));
   }, [guide.data, now]);
 
@@ -131,9 +132,26 @@ export function HomePage() {
               subtitle={item.subtitle}
               image={item.thumb}
               icon="play"
-              color="#1f1a10"
               progress={item.progress}
               onSelect={() => void post(`/api/plex/open/${encodeURIComponent(item.id)}`)}
+            />
+          ))}
+        </Row>
+      ) : null}
+
+      {onNow.length ? (
+        <Row title="On now">
+          {onNow.map(({ ch, prog, next }) => (
+            <Tile
+              key={ch.id}
+              pin={{ kind: 'channel', id: ch.id, name: `${ch.number} ${ch.name}` }}
+              title={prog?.title ?? 'No listing'}
+              subtitle={`${ch.number} ${ch.name}${prog ? ` · until ${formatTime(prog.end, h24)}` : ''}${next ? ` · then ${next.title}` : ''}`}
+              logo={ch.icon}
+              icon="tv"
+              label={ch.icon ? undefined : `${ch.number} ${ch.name}`}
+              progress={prog ? (now - prog.start) / (prog.end - prog.start) : undefined}
+              onSelect={() => hearth.watchChannel(ch.id)}
             />
           ))}
         </Row>
@@ -150,7 +168,6 @@ export function HomePage() {
               subtitle={item.subtitle}
               image={item.thumb}
               icon="play"
-              color="#14161f"
               badge={<span className="badge req-available">New</span>}
               onSelect={() => void post(`/api/plex/open/${encodeURIComponent(item.id)}`)}
             />
@@ -168,23 +185,6 @@ export function HomePage() {
               subtitle={[w.mediaType === 'tv' ? 'Series' : 'Film', w.year].filter(Boolean).join(' · ')}
               image={w.thumb}
               onSelect={() => void openWatchlist(w)}
-            />
-          ))}
-        </Row>
-      ) : null}
-
-      {onNow.length ? (
-        <Row title="On now">
-          {onNow.map(({ ch, prog }) => (
-            <Tile
-              key={ch.id}
-              pin={{ kind: 'channel', id: ch.id, name: `${ch.number} ${ch.name}` }}
-              title={prog?.title ?? 'No listing'}
-              subtitle={`${ch.number} · ${ch.name}${prog ? ` · until ${formatTime(prog.end, h24)}` : ''}`}
-              image={ch.icon}
-              icon="tv"
-              progress={prog ? (now - prog.start) / (prog.end - prog.start) : undefined}
-              onSelect={() => hearth.watchChannel(ch.id)}
             />
           ))}
         </Row>

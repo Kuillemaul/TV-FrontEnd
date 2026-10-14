@@ -303,6 +303,29 @@ h1, h2 { margin: 0; font-weight: 650; letter-spacing: -0.01em; }
   color: var(--text);
 }
 
+.tile-art.tile-generated {
+  background:
+    radial-gradient(120% 80% at 85% 10%, hsl(calc(var(--hue) + 40) 55% 40% / 0.55), transparent 60%),
+    linear-gradient(160deg, hsl(var(--hue) 45% 30%), hsl(calc(var(--hue) + 25) 50% 12%));
+  color: rgba(255, 255, 255, 0.85);
+}
+.tile-generated .tile-poster-title { font-size: 1.3rem; text-shadow: 0 0.1rem 0.8rem rgba(0, 0, 0, 0.4); }
+.tile-art .tile-logo { position: static; width: 38%; height: 50%; object-fit: contain; filter: drop-shadow(0 0.2rem 0.6rem rgba(0, 0, 0, 0.35)); }
+.tile-label {
+  position: absolute;
+  left: 0.7rem;
+  bottom: 0.7rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.4rem;
+  background: rgba(0, 0, 0, 0.35);
+  font-size: 0.8rem;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.tile-wide .tile-label { top: 0.7rem; bottom: auto; }
+
 .tile-meta { position: relative; padding: 0 0.2rem; max-width: 20rem; } /* above the focused art's shadow */
 .tile-poster .tile-meta { max-width: 12rem; }
 

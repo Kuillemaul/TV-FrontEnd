@@ -70,9 +70,23 @@ interface TileProps {
   pin?: Pin;
   /** Full-bleed artwork (designed app tiles); replaces image/wordmark. */
   art?: ReactNode;
+  /** Small label on the generated artwork when there's no picture (e.g. the game's platform). */
+  label?: string;
+  /** No generated artwork (e.g. "Show more" tiles). */
+  plain?: boolean;
+  /** A logo shown whole in the middle of the generated artwork (TV channels). */
+  logo?: string;
 }
 
-export function Tile({ title, subtitle, image, color, shape = 'wide', badge, icon, progress, onSelect, autoFocus, pin, art }: TileProps) {
+/** A stable colour per title, so tiles without a picture still look distinct (and the same every time). */
+function titleHue(title: string): number {
+  let h = 0;
+  for (let i = 0; i < title.length; i++) h = (h * 31 + title.charCodeAt(i)) >>> 0;
+  return h % 360;
+}
+
+export function Tile({ title, subtitle, image, color, shape = 'wide', badge, icon, progress, onSelect, autoFocus, pin, art, label, plain, logo }: TileProps) {
+  const generated = !art && !color && !plain && shape !== 'app';
   return (
     <button
       className={`tile tile-${shape}`}
@@ -82,11 +96,14 @@ export function Tile({ title, subtitle, image, color, shape = 'wide', badge, ico
       onClick={onSelect}
       style={color ? ({ '--tile-color': color } as React.CSSProperties) : undefined}
     >
-      <div className="tile-art">
+      {/* The generated colour sits under the picture, so it shows while loading and if the picture is missing. */}
+      <div className={`tile-art ${generated ? 'tile-generated' : ''}`} style={generated ? ({ '--hue': titleHue(title) } as React.CSSProperties) : undefined}>
+        {generated && label ? <span className="tile-label">{label}</span> : null}
         {/* Poster titles sit under the artwork so they show if the image is missing or fails. */}
         {shape === 'poster' ? <span className="tile-poster-title">{title}</span> : null}
         {art ? <div className="tile-art-layer">{art}</div> : null}
-        {!art && !image && icon ? <Icon name={icon} size="3em" /> : null}
+        {!art && !image && icon && !logo ? <Icon name={icon} size="3em" /> : null}
+        {logo && !art ? <img className="tile-logo" src={logo} alt="" loading="lazy" onError={(e) => ((e.target as HTMLImageElement).style.display = 'none')} /> : null}
         {!art && !image && !icon && shape === 'app' ? <span className="tile-wordmark">{title}</span> : null}
         {image && !art ? (
           <img src={image} alt="" loading="lazy" onError={(e) => ((e.target as HTMLImageElement).style.display = 'none')} />

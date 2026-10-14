@@ -63,6 +63,7 @@ function GameGrid({ games, total, loading, error, more, onSelect }: ReturnType<t
             shape="poster"
             title={g.title}
             subtitle={`${g.store || g.platform}${g.favorite ? ' · ★' : ''}`}
+            label={g.platform === 'PC' ? g.store || 'PC' : g.platform}
             image={g.art}
             badge={
               <>
@@ -74,7 +75,7 @@ function GameGrid({ games, total, loading, error, more, onSelect }: ReturnType<t
           />
         ))}
         {games.length < total ? (
-          <Tile shape="poster" title={loading ? 'Loading…' : `Show more`} subtitle={`${total - games.length} more`} onSelect={more} />
+          <Tile shape="poster" plain title={loading ? 'Loading…' : `Show more`} subtitle={`${total - games.length} more`} onSelect={more} />
         ) : null}
       </div>
     </>

@@ -106,6 +106,7 @@ export function GamesPage() {
                 shape="poster"
                 title={g.title}
                 subtitle={`${g.store || g.platform} · ${g.hostName}`}
+                label={g.platform === 'PC' ? g.store || 'PC' : g.platform}
                 image={g.art}
                 badge={
                   <>
@@ -128,6 +129,7 @@ export function GamesPage() {
             {games.length > limit ? (
               <Tile
                 shape="poster"
+                plain
                 title={`Show ${Math.min(PAGE_SIZE, games.length - limit)} more`}
                 subtitle={`${games.length - limit} not shown · search or filter to narrow`}
                 onSelect={() => setLimit((l) => l + PAGE_SIZE)}
