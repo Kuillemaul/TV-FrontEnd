@@ -93,11 +93,13 @@ interface AgentHealth {
   covering?: boolean;
 }
 
-/** Moonlight lines that mean the stream window is up and drawing video (moonlight-qt + FFmpeg/SDL logs). */
-// Moonlight tests its decoder in its first second (same FFmpeg lines as the real stream), so wait for the
-// connection's last stage ("Starting input stream establishment…", moonlight-common-c), after which the
-// stream window opens; or failing that, a second decoder start-up (the test's, then the stream's).
-const STREAM_DRAWING = /Starting input stream establishment|Decode context initialised[\s\S]*Decode context initialised/i;
+// When Moonlight's stream window is up (moonlight-qt + moonlight-common-c log lines).
+// Moonlight tests its decoder in its first seconds (the same FFmpeg lines as the real stream), so wait for
+// the connection's last stage instead: "Starting input stream..." then "done". The stream window opens
+// right after it.
+const STREAM_CONNECTED = /Starting input stream[^\n]*\n[^\n]*done/i;
+/** Then its renderer starts drawing: EGLRenderer on Intel/VAAPI (the decoder test doesn't print it). */
+const STREAM_RENDERING = /EGLRenderer|PlVkRenderer/;
 
 /** How often to ask a PC whether its library changed (a cheap "no changes" answer when it hasn't). */
 const RECHECK_MS = 60 * 1000;
@@ -542,7 +544,8 @@ export class GameService {
     }
     // Moonlight's stream window opens when the video starts decoding, seconds after the PC's virtual display
     // appears: watch Moonlight's own output for that, then cover the new window straight away.
-    const drawing = await this.launcher.waitForOutput(sessionId, STREAM_DRAWING, 40_000);
+    const drawing = await this.launcher.waitForOutput(sessionId, STREAM_CONNECTED, 40_000);
+    if (drawing) await this.launcher.waitForOutput(sessionId, STREAM_RENDERING, 2500);
     if (!drawing) {
       // No output to go on (another Moonlight build): fall back to the PC's virtual display, then a margin.
       const deadline = Date.now() + 25_000;
@@ -552,7 +555,7 @@ export class GameService {
         if (display === false) await sleep(400);
       }
       await sleep(display ? 3000 : 2500);
-    } else await sleep(400);
+    } else await sleep(150);
     if (!ours()) return;
     cover();
 

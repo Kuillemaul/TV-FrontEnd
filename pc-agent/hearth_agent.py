@@ -955,23 +955,28 @@ def processes_under(directory: str, paths=process_paths) -> list[int]:
     return [pid for pid, exe in paths() if os.path.normcase(exe).startswith(directory + os.sep)]
 
 
-def kill_processes_under(directory: str) -> None:
-    """Close every process whose executable lives under `directory` (used for Steam/Playnite games)."""
-    directory = os.path.normcase(os.path.abspath(directory))
-    if len(directory) < 8:
-        return
-    if IS_WINDOWS:
-        ps = (
-            "Get-Process | Where-Object { $_.Path -and $_.Path.ToLower().StartsWith($args[0]) } "
-            "| Stop-Process -Force"
-        )
-        subprocess.run(["powershell", "-NoProfile", "-Command", ps, directory.lower()], capture_output=True)
-        return
-    for pid in processes_under(directory):
-        try:
-            os.kill(pid, signal.SIGTERM)
-        except OSError:
-            pass
+def kill_processes_under(directory: str) -> int:
+    """Close every process whose executable lives under `directory` (used for Steam/Playnite games).
+    Uses the same process list as game detection (PowerShell's Get-Process often can't read a game's
+    path, so it silently closed nothing). Checks again and retries once. Returns how many it closed."""
+    closed = 0
+    for attempt in range(2):
+        pids = processes_under(directory)
+        if not pids:
+            break
+        for pid in pids:
+            if IS_WINDOWS:
+                subprocess.run(["taskkill", "/T", "/F", "/PID", str(pid)], capture_output=True)
+            else:
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                except OSError:
+                    pass
+        closed += len(pids)
+        time.sleep(1.0)
+    left = processes_under(directory)
+    log(f"closed {closed} process(es) in {directory}" + (f"; {len(left)} still running" if left else ""))
+    return closed
 
 
 # --------------------------------------------------------------------------------------
@@ -1213,6 +1218,8 @@ class Launcher:
 
     def stop(self) -> None:
         self.generation += 1
+        if self.current:
+            log(f"stopping {self.current['title']}")
         if self.proc and self.proc.poll() is None:
             log("stopping game process")
             if IS_WINDOWS:
