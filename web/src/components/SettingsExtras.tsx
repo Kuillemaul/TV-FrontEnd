@@ -19,7 +19,7 @@ function Toggle({ label, detail, on, onChange }: { label: string; detail: string
 
 /** Settings sections for screen time, TV power, automations, alerts and the phone remote. */
 /** One part of Settings: family screen time, TV power, alerts & automations, or the phone remote. */
-export function SettingsExtras({ part }: { part: 'family' | 'tv' | 'alerts' | 'remote' }) {
+export function SettingsExtras({ part }: { part: 'family' | 'tv' | 'alerts' | 'remote' | 'look' }) {
   const hearth = useHearth();
   const { data: settings, setData: setSettings } = useApi<TvSettings>('/api/settings');
   const { data: st, reload: reloadSt } = useApi<{ profiles: Array<ScreenTimeStatus & { name: string }> }>('/api/screentime', 30_000);
@@ -123,6 +123,20 @@ export function SettingsExtras({ part }: { part: 'family' | 'tv' | 'alerts' | 'r
       ) : null}
 
       {part === 'remote' ? <PhoneRemote /> : null}
+
+      {part === 'look' ? (
+        <section className="settings-group">
+          <h2>Sounds</h2>
+          <div className="editor-grid" data-nav-group>
+            <Toggle
+              label="Interface sounds"
+              detail="A soft tick when moving around, a click when choosing, a note for Back"
+              on={settings?.uiSounds ?? true}
+              onChange={(uiSounds) => void update({ uiSounds })}
+            />
+          </div>
+        </section>
+      ) : null}
       {limitsFor ? <LimitsEditor profile={limitsFor} onClose={() => setLimitsFor(null)} /> : null}
     </>
   );

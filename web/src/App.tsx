@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GameLaunch, type LaunchProgress } from './components/GameLaunch';
 import { Icon } from './components/Icon';
 import { Logo } from './components/Logo';
+import { setUiSoundsEnabled } from './lib/sounds';
 import { AlertStack, CameraPip } from './components/Alerts';
 import { openSearchLater, SearchPage } from './pages/Search';
 import { markMorningShown, morningDue, MorningPage } from './pages/Morning';
@@ -128,7 +129,12 @@ export function App() {
       .catch(() => {});
   }, []);
   const loadSettings = useCallback(() => {
-    get<TvSettings>('/api/settings').then(setTvSettings).catch(() => {});
+    get<TvSettings>('/api/settings')
+      .then((s) => {
+        setTvSettings(s);
+        setUiSoundsEnabled(s.uiSounds !== false);
+      })
+      .catch(() => {});
   }, []);
   useEffect(() => {
     loadScreenTime();

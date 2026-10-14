@@ -96,7 +96,7 @@ export function registerExtras(app: FastifyInstance, ctx: ExtrasContext): void {
   app.put<{ Body: Partial<StateStore['settings']> }>('/api/settings', async (req) =>
     run(() => {
       requireParent();
-      const allowed = ['scenes', 'wakeWord', 'alertsOverApps', 'autoUpdate'] as const;
+      const allowed = ['scenes', 'wakeWord', 'alertsOverApps', 'autoUpdate', 'uiSounds'] as const;
       state.updateSettings(Object.fromEntries(allowed.filter((k) => k in req.body).map((k) => [k, Boolean(req.body[k])])));
       bus.emit({ type: 'settings' });
       return state.settings;

@@ -17,7 +17,7 @@ interface PersistedState {
   /** Recent wake-up durations (seconds) per gaming PC. */
   wakeTimes: Record<string, number[]>;
   /** TV-wide switches set from Settings. */
-  settings: { scenes: boolean; wakeWord: boolean; alertsOverApps: boolean; autoUpdate: boolean };
+  settings: { scenes: boolean; wakeWord: boolean; alertsOverApps: boolean; autoUpdate: boolean; uiSounds: boolean };
   /** Phone remotes that have been paired (token → label). */
   remoteTokens: Record<string, { label: string; pairedAt: number }>;
   /** Screen mode chosen in Settings → Display, re-applied when Hearth starts. */
@@ -41,7 +41,7 @@ export class StateStore {
     recentGames: [],
     playtime: {},
     wakeTimes: {},
-    settings: { scenes: true, wakeWord: false, alertsOverApps: true, autoUpdate: true },
+    settings: { scenes: true, wakeWord: false, alertsOverApps: true, autoUpdate: true, uiSounds: true },
     remoteTokens: {},
   };
   private readonly file: string;

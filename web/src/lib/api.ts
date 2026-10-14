@@ -49,6 +49,8 @@ export interface Alert {
 }
 
 export interface TvSettings {
+  /** Soft sounds when moving around and choosing things. */
+  uiSounds: boolean;
   scenes: boolean;
   wakeWord: boolean;
   alertsOverApps: boolean;

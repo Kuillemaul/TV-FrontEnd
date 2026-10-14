@@ -225,6 +225,7 @@ export function SettingsPage() {
               </div>
             </section>
           ) : null}
+          {section.id === 'look' ? <SettingsExtras part="look" /> : null}
           {section.id === 'tv' ? (
             <>
               <SettingsExtras part="tv" />

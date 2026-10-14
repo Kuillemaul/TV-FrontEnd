@@ -14,6 +14,8 @@
  *   mouse                        → hover focuses, click activates
  */
 
+import { playUiSound } from '../lib/sounds';
+
 export type Dir = 'up' | 'down' | 'left' | 'right';
 export type NavCommand = 'back' | 'voice' | 'home' | 'menu' | 'prevTab' | 'nextTab';
 
@@ -27,6 +29,7 @@ export function onNavCommand(fn: (cmd: NavCommand) => void): () => void {
 }
 
 function emit(cmd: NavCommand): void {
+  if (cmd === 'back') playUiSound('back');
   for (const fn of listeners) fn(cmd);
 }
 
@@ -125,6 +128,7 @@ export function move(dir: Dir): void {
     }
   }
   focusElement(best);
+  playUiSound('move');
 }
 
 export function activateFocused(): void {
@@ -291,6 +295,11 @@ function onContextMenu(e: MouseEvent): void {
   emit('menu');
 }
 
+/** Choosing anything (OK / A / Enter / a click) makes the select sound. */
+function onClick(e: MouseEvent): void {
+  if ((e.target as Element | null)?.closest?.(SELECTOR)) playUiSound('select');
+}
+
 function onFocusIn(e: FocusEvent): void {
   const el = e.target as HTMLElement;
   const group = el.closest('[data-nav-group]');
@@ -304,6 +313,7 @@ export function installNavigation(): () => void {
   document.addEventListener('mouseover', onMouseOver);
   document.addEventListener('focusin', onFocusIn);
   document.addEventListener('contextmenu', onContextMenu);
+  document.addEventListener('click', onClick, true);
   if (navigator.getGamepads().some(Boolean)) startPolling();
   return () => {
     window.removeEventListener('keydown', onKeyDown);
@@ -312,6 +322,7 @@ export function installNavigation(): () => void {
     document.removeEventListener('mouseover', onMouseOver);
     document.removeEventListener('focusin', onFocusIn);
     document.removeEventListener('contextmenu', onContextMenu);
+    document.removeEventListener('click', onClick, true);
   };
 }
 
