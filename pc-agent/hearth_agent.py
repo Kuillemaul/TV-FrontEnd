@@ -552,12 +552,14 @@ class PlayniteSource:
         return self.all
 
     def _entry(self, g: dict[str, Any], legacy: bool) -> dict[str, Any]:
-        features = {f.lower() for f in g.get("features") or []}
-        tags = {t.lower() for t in g.get("tags") or []}
+        # Older exporters wrote [null] for a game with no features/tags/genres/platforms (a PowerShell quirk).
+        names = lambda key: [str(x) for x in (g.get(key) or []) if x]  # noqa: E731
+        features = {f.lower() for f in names("features")}
+        tags = {t.lower() for t in names("tags")}
         controller = "full" if "full controller support" in features else "partial" if "partial controller support" in features else "unknown"
         cover = g.get("cover")
-        platforms = g.get("platforms") or []
-        ratings = g.get("ageRatings") or []
+        platforms = names("platforms")
+        ratings = names("ageRatings")
         return {
             "id": f"pn-{g['id']}",
             "title": g.get("name") or "Unknown",
@@ -581,13 +583,17 @@ class PlayniteSource:
             "_details": {
                 "description": re.sub(r"<[^>]+>", " ", g.get("description") or "").strip()[:1500],
                 "year": g.get("releaseYear"),
-                "genres": (g.get("genres") or [])[:3],
+                "genres": names("genres")[:3],
                 "playtimeMinutes": int((g.get("playtime") or 0) / 60),
             },
         }
 
     def entries(self) -> dict[str, dict[str, Any]]:
-        return {e["id"]: e for e in self._load() if e["favorite"]}
+        games = self._load()
+        favourites = [e for e in games if e["favorite"]]
+        # Nothing starred in Playnite yet: show what's installed rather than nothing.
+        chosen = favourites or [e for e in games if e["installed"]]
+        return {e["id"]: e for e in chosen}
 
     def browse(self, q: str = "", offset: int = 0, limit: int = 120) -> dict[str, Any]:
         return page(self._load(), q, offset, limit)

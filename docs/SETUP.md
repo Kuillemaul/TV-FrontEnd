@@ -387,7 +387,7 @@ The TV still uses Moonlight to receive the stream; Apollo is only on the PCs.
 
 ### Big libraries: favourites only
 
-Hearth is built for huge collections. With LaunchBox and Playnite it lists **only your favourites** by default.
+Hearth is built for huge collections. With LaunchBox and Playnite it lists **only your favourites** by default. (Playnite with nothing starred yet shows its installed games instead.)
 Star a game there and it appears on the TV within about 15 seconds. Scanning happens in the background:
 LaunchBox's XML is streamed and only re-read when it changes (a 20,000-game library takes under a second),
 so opening the Games page never waits on the PC. If you do send thousands of games, the TV draws 120 at a time

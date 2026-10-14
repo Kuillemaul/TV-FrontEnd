@@ -3,6 +3,8 @@
 # under Games > Browse. Covers Steam, Epic, GOG, Xbox / Game Pass, EA, Ubisoft, emulated games
 # and games added by hand.
 #
+# (Where-Object skips the $null that PowerShell pipes through for an empty list.)
+#
 # Exported automatically when Playnite starts and closes, after a library update and after
 # you play something. Use Extensions > Hearth > "Send library to Hearth" after starring games.
 #
@@ -26,11 +28,11 @@ function Export-HearthLibrary {
             favorite         = $g.Favorite
             installed        = $g.IsInstalled
             source           = if ($g.Source) { $g.Source.Name } else { '' }
-            platforms        = @($g.Platforms | ForEach-Object { $_.Name })
-            features         = @($g.Features | ForEach-Object { $_.Name })
-            tags             = @($g.Tags | ForEach-Object { $_.Name })
-            genres           = @($g.Genres | ForEach-Object { $_.Name })
-            ageRatings       = @($g.AgeRatings | ForEach-Object { $_.Name })
+            platforms        = @($g.Platforms | Where-Object { $_ } | ForEach-Object { $_.Name })
+            features         = @($g.Features | Where-Object { $_ } | ForEach-Object { $_.Name })
+            tags             = @($g.Tags | Where-Object { $_ } | ForEach-Object { $_.Name })
+            genres           = @($g.Genres | Where-Object { $_ } | ForEach-Object { $_.Name })
+            ageRatings       = @($g.AgeRatings | Where-Object { $_ } | ForEach-Object { $_.Name })
             releaseYear      = if ($g.ReleaseDate) { $g.ReleaseDate.Year } else { $null }
             playtime         = $g.Playtime
             description      = $description

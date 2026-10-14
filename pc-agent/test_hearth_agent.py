@@ -388,6 +388,22 @@ class PresenceTest(unittest.TestCase):
 
 
 
+class PlayniteNullsTest(unittest.TestCase):
+    def test_null_lists_and_no_favourites(self):
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "hearth-library.json"
+            f.write_text(json.dumps([
+                {"id": "a", "name": "Hades", "favorite": False, "installed": True, "features": [None], "tags": [None],
+                 "genres": [None], "platforms": [None], "ageRatings": [None]},
+                {"id": "b", "name": "Not here", "favorite": False, "installed": False, "features": [None]},
+            ]), encoding="utf-8")
+            src = agent.PlayniteSource({"exportPath": str(f)})
+            got = src.entries()
+            self.assertEqual([e["title"] for e in got.values()], ["Hades"])  # installed, as nothing is starred
+            self.assertEqual(got["pn-a"]["platform"], "PC")
+            self.assertEqual(src.browse()["total"], 2)
+
+
 class PlayniteExportPathTest(unittest.TestCase):
     def test_folder_means_the_file_inside(self):
         with tempfile.TemporaryDirectory() as d:
