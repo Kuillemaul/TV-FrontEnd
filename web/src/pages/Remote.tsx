@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Logo } from '../components/Logo';
 import { Icon } from '../components/Icon';
 
 type Cmd = 'up' | 'down' | 'left' | 'right' | 'ok' | 'back' | 'home' | 'voice' | 'playpause' | 'volumeUp' | 'volumeDown' | 'mute' | 'text';
@@ -51,7 +52,7 @@ export function RemotePage() {
     return (
       <div className="remote remote-pair">
         <div className="brand">
-          <span className="brand-mark" /> Hearth
+          <Logo className="brand-mark" size="1.6rem" /> Hearth
         </div>
         <h1>Pair this phone</h1>
         <p>On the TV, open Settings → Phone remote and enter the 4-digit code shown there.</p>

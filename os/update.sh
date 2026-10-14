@@ -108,6 +108,7 @@ fi
 
 status updating "Installing $(git_tv rev-list --count "$old..$new") update(s)…" "$old" "$new"
 os_changed=$(git_tv diff --name-only "$old" "$new" -- os/ | grep -v -E '^os/(update\.sh|plymouth/)' || true)
+splash_changed=$(git_tv diff --name-only "$old" "$new" -- os/plymouth/ || true)
 port=$(server_port)
 boot_before=$(curl -fs --max-time 3 "http://127.0.0.1:$port/api/info" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("bootId",""))' 2>/dev/null || true)
 
@@ -118,6 +119,11 @@ if build; then
   if [[ -n "$os_changed" ]]; then
     echo "[hearth-update] system files changed: $os_changed"
     HEARTH_FROM_UPDATER=1 bash "$REPO/os/install.sh" || echo "[hearth-update] install.sh reported a problem"
+  fi
+  # A new boot logo: install the theme and rebuild the initramfs it lives in (shows from the next boot).
+  if [[ -n "$splash_changed" ]] && command -v plymouth-set-default-theme >/dev/null; then
+    cp "$REPO"/os/plymouth/hearth/* /usr/share/plymouth/themes/hearth/ && plymouth-set-default-theme -R hearth >/dev/null 2>&1 \
+      || echo "[hearth-update] couldn't update the boot splash"
   fi
   restart_hearth
   if healthy "$boot_before"; then

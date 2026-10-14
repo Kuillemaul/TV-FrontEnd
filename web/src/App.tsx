@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GameLaunch, type LaunchProgress } from './components/GameLaunch';
 import { Icon } from './components/Icon';
+import { Logo } from './components/Logo';
 import { AlertStack, CameraPip } from './components/Alerts';
 import { openSearchLater, SearchPage } from './pages/Search';
 import { markMorningShown, morningDue, MorningPage } from './pages/Morning';
@@ -421,7 +422,7 @@ export function App() {
       <div className="shell">
         <nav className="topbar" data-nav-group>
           <div className="brand">
-            <span className="brand-mark" />
+            <Logo className="brand-mark" />
             {info?.name ?? 'Hearth'}
           </div>
           <div className="tabs">

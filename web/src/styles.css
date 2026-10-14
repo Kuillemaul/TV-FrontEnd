@@ -100,11 +100,9 @@ h1, h2 { margin: 0; font-weight: 650; letter-spacing: -0.01em; }
 }
 
 .brand-mark {
-  width: 1.5rem;
-  height: 1.5rem;
-  border-radius: 0.5rem;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  box-shadow: 0 0 1.5rem rgba(var(--accent-rgb), 0.5);
+  flex: none;
+  /* Always Hearth purple, whatever the profile's theme. */
+  filter: drop-shadow(0 0 0.7rem rgba(123, 140, 255, 0.45));
 }
 
 .tabs {
