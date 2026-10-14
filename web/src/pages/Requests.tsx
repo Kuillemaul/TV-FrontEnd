@@ -148,8 +148,6 @@ export function RequestsPage() {
         ) : null}
       </PageHeader>
 
-      {features?.downloads ? <DownloadsList /> : null}
-
       {!seerr ? (
         <NotSetUp icon="download" title="Seerr isn’t set up">
           Add your Seerr address and API key under <code>requests</code> in config.yaml (Seerr → Settings → General → API Key).
@@ -166,6 +164,9 @@ export function RequestsPage() {
           <MediaRow title="Coming soon" items={upcoming.items} onOpen={setOpen} />
         </>
       )}
+
+      {/* What's downloading sits under the things to request. */}
+      {features?.downloads ? <DownloadsList /> : null}
 
       {open ? <MediaModal media={open} onClose={() => setOpen(null)} onRequested={updated} /> : null}
     </div>
