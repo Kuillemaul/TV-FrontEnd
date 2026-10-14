@@ -3,6 +3,7 @@ import type { EventBus, GameStage } from '../bus.js';
 import { expand, type GameHostConfig, type GamingConfig } from '../config.js';
 import type { Launcher } from '../launcher.js';
 import type { StateStore } from '../state.js';
+import { hostBusy, type HostBusy, type Presence } from '../presence.js';
 import { wake } from '../wol.js';
 
 export type Rating = 'E' | 'E10' | 'T' | 'M';
@@ -63,6 +64,8 @@ export interface HostStatus {
   playing: string | null;
   /** Typical wake-up time in seconds (learned). */
   wakeEstimate: number | null;
+  /** Someone is using the PC (or streaming from it to another device); Hearth asks before streaming. */
+  busy: HostBusy | null;
 }
 
 export interface BrowseSources {
@@ -84,6 +87,8 @@ interface AgentHealth {
   gameRunning?: boolean | null;
   /** Apollo's virtual display exists (the stream is connected); null when the agent can't tell. */
   streamDisplay?: boolean | null;
+  /** Who's at the PC (idle time, locked, window in front). Older agents don't send it. */
+  presence?: Presence | null;
 }
 
 /** How often to ask a PC whether its library changed (a cheap "no changes" answer when it hasn't). */
@@ -104,6 +109,8 @@ export class GameService {
   private inflight = new Map<string, Promise<void>>();
   private healthCache = new Map<string, { at: number; value: AgentHealth | null; pending?: Promise<AgentHealth | null> }>();
   private launching = false;
+  /** When Hearth's last stream from each PC ended, so input from it isn't mistaken for someone at the PC. */
+  private streamEnded = new Map<string, number>();
   private demoAwake = new Set(['gaming-pc']);
 
   constructor(
@@ -177,6 +184,18 @@ export class GameService {
     return value;
   }
 
+  private busyFrom(h: GameHostConfig, health: AgentHealth | null): HostBusy | null {
+    const ours = Boolean(this.launcher.session?.id.startsWith(`game:${h.id}:`) || this.launcher.session?.id === `pair:${h.id}`);
+    return hostBusy({ name: h.name, health, ours, oursEndedAt: this.streamEnded.get(h.id), now: Date.now(), idleMinutes: h.busyIdleMinutes });
+  }
+
+  /** Is someone using this PC right now? Asks it fresh (asleep or unreachable: not busy). */
+  async busy(hostId: string): Promise<HostBusy | null> {
+    if (this.demo) return null;
+    const h = this.host(hostId);
+    return this.busyFrom(h, await this.health(h));
+  }
+
   private async online(h: GameHostConfig): Promise<boolean> {
     return (await this.health(h)) !== null;
   }
@@ -192,6 +211,7 @@ export class GameService {
         uptime: this.demoAwake.has(id) ? 3 * 3600 + 1240 : null,
         playing: null,
         wakeEstimate: this.state.wakeEstimate(id) ?? 25,
+        busy: null,
       }));
     }
     return Promise.all(
@@ -206,6 +226,7 @@ export class GameService {
           uptime: health?.uptime ?? null,
           playing: health?.playing ?? null,
           wakeEstimate: this.state.wakeEstimate(h.id),
+          busy: this.busyFrom(h, health),
         };
       }),
     );
@@ -563,6 +584,7 @@ export class GameService {
       const started = Date.now();
       let failed = false;
       const onStreamEnd = () => {
+        this.streamEnded.set(hostId, Date.now());
         this.state.addPlaytime(`${hostId}:${gameId}`, (Date.now() - started) / 60_000);
         if (!failed) this.status(hostId, gameId, 'ended', `${title} closed`);
         this.launcher.closeOverlay();

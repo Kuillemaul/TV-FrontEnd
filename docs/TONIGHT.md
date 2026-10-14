@@ -72,3 +72,15 @@ sudo journalctl _SYSTEMD_USER_UNIT=hearth.service --since "-10 min" --no-pager |
 4. On the TV say "good morning" (or fire `command: morning`): calendar, weather and to-do lists should show.
 
 Automations to copy: [HOME-ASSISTANT.md](HOME-ASSISTANT.md).
+
+## 7. "In use" PCs (new)
+
+1. Update the agent on both PCs: run `C:\Hearth\pc-agent\setup-windows.ps1` again (or wait for the 4am update).
+2. Sit at the gaming PC and move the mouse. Within 15 seconds, Games on the TV should show **Gaming PC · In use**,
+   the games greyed out, and picking one should ask *Stream anyway?*.
+3. Lock the PC (Win+L): it should clear within 15 seconds.
+4. If it never shows, run this on the TV (use the gaming PC's IP) and paste the output:
+   ```bash
+   curl -s http://<gaming-pc-ip>:47800/health
+   ```
+   It should include `"presence": {"idleSeconds": …}`.

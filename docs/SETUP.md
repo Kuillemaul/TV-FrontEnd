@@ -306,6 +306,21 @@ The TV runs **Moonlight** to show the stream.
    - Windows must auto-login (`netplwiz`, or Sysinternals Autologon) so the agent and Sunshine run after a wake.
    - Give the PC a DHCP reservation so its IP never changes.
 
+### "In use": someone is at the PC
+
+So a stream doesn't take over someone's screen by accident, the agent tells the TV how long ago the PC's keyboard,
+mouse or controller was last used, whether it's locked, and which full-screen app is in front. A PC is **in use**
+when:
+
+- someone used it in the last 5 minutes (`busyIdleMinutes` on the host in `config.yaml`; `0` turns this off),
+- a full-screen app (a game, a film) has been open for under 30 minutes without input, or
+- it's already streaming to another device (Apollo's virtual display is up and it isn't the TV's stream).
+
+A locked PC is never in use, and neither is input from the TV's own stream. When a PC is in use, its games are
+greyed out with an **In use** badge and a note at the top of Games. Choosing one anyway asks *Stream anyway?*
+(Cancel is selected), and so do voice and pinned games. The game details say *Play anyway* and select Close.
+Windows only. The PC needs the updated agent, which it installs by itself overnight, or run `setup-windows.ps1` again.
+
 ### Closing a game
 
 Any of these closes the game on the PC and brings the TV back to Hearth:

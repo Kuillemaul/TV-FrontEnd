@@ -9,6 +9,8 @@ export interface PlayRequest {
   art?: string;
   /** Controllers to set up in the emulator (Eden/yuzu); defaults to how many are connected. */
   players?: number;
+  /** Stream even though someone is using the PC. */
+  force?: boolean;
 }
 
 export interface Hearth {

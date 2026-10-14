@@ -8,7 +8,7 @@ Moonlight on the TV can stream it through Sunshine. Standard library only.
     python hearth_agent.py --config agent.json
 
 Endpoints (all but /health need "Authorization: Bearer <token>"):
-    GET  /health          -> {"ok": true, "host": "..."}
+    GET  /health          -> {"ok": true, "host": "...", "presence": {idleSeconds, locked, foreground}, ...}
     GET  /games           -> [{id, title, platform, source, art, controller, requiresKbm}]
     GET  /art/<id>        -> local cover image for ROMs / custom games
     POST /launch {"id"}   -> start a game (closes the previous one)
@@ -1364,6 +1364,69 @@ def apollo_close(apollo: dict[str, Any]) -> bool:
         return False
 
 
+def presence() -> dict[str, Any]:
+    """Is someone sitting at this PC? Seconds since the last keyboard/mouse/controller input, whether
+    the desktop is locked, and the window in front (and whether it fills its screen, like a game).
+    Hearth uses it to grey out this PC's games so a stream doesn't take over the screen by accident.
+    Windows only; elsewhere every value is None ("can't tell")."""
+    out: dict[str, Any] = {"idleSeconds": None, "locked": None, "foreground": None}
+    if not IS_WINDOWS:
+        return out
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.windll.user32  # type: ignore[attr-defined]
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+
+        class LASTINPUTINFO(ctypes.Structure):
+            _fields_ = [("cbSize", wintypes.UINT), ("dwTime", wintypes.DWORD)]
+
+        info = LASTINPUTINFO(ctypes.sizeof(LASTINPUTINFO), 0)
+        if user32.GetLastInputInfo(ctypes.byref(info)):
+            # Both are 32-bit millisecond tick counts; the mask handles the 49-day wrap.
+            out["idleSeconds"] = int(((kernel32.GetTickCount() - info.dwTime) & 0xFFFFFFFF) / 1000)
+
+        # The lock screen (and UAC prompts) live on a secure desktop we're not allowed to open.
+        DESKTOP_SWITCHDESKTOP = 0x0100
+        desk = user32.OpenInputDesktop(0, False, DESKTOP_SWITCHDESKTOP)
+        out["locked"] = not desk
+        if desk:
+            user32.CloseDesktop(desk)
+
+        hwnd = user32.GetForegroundWindow()
+        if hwnd and not out["locked"]:
+            title = ctypes.create_unicode_buffer(256)
+            user32.GetWindowTextW(hwnd, title, 256)
+            rect = wintypes.RECT()
+            user32.GetWindowRect(hwnd, ctypes.byref(rect))
+
+            class MONITORINFO(ctypes.Structure):
+                _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT), ("rcWork", wintypes.RECT), ("dwFlags", wintypes.DWORD)]
+
+            mon = MONITORINFO(ctypes.sizeof(MONITORINFO))
+            fullscreen = False
+            if user32.GetMonitorInfoW(user32.MonitorFromWindow(hwnd, 2), ctypes.byref(mon)):  # 2 = nearest
+                m = mon.rcMonitor
+                fullscreen = rect.left <= m.left and rect.top <= m.top and rect.right >= m.right and rect.bottom >= m.bottom
+            pid = wintypes.DWORD()
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            exe = ""
+            handle = kernel32.OpenProcess(0x1000, False, pid.value)  # PROCESS_QUERY_LIMITED_INFORMATION
+            if handle:
+                buf = ctypes.create_unicode_buffer(1024)
+                size = wintypes.DWORD(1024)
+                if kernel32.QueryFullProcessImageNameW(handle, 0, buf, ctypes.byref(size)):
+                    exe = Path(buf.value).name
+                kernel32.CloseHandle(handle)
+            # The desktop itself (explorer's wallpaper window) "fills the screen" but isn't an app.
+            desktop = exe.lower() == "explorer.exe" and not title.value
+            out["foreground"] = {"title": title.value, "exe": exe, "fullscreen": bool(fullscreen and not desktop)}
+    except Exception as err:  # noqa: BLE001 - presence is best-effort
+        log(f"presence: {err}")
+    return out
+
+
 def uptime_seconds() -> int:
     try:
         if IS_WINDOWS:
@@ -1448,7 +1511,8 @@ def make_handler(cfg: dict[str, Any], library: Library, launcher: Launcher):
                 current = launcher.current["title"] if launcher.current else None
                 running = launcher.game_running() if launcher.current else None
                 return self._json(200, {"ok": True, "host": socket.gethostname(), "uptime": uptime_seconds(), "playing": current,
-                                        "gameRunning": running, "streamDisplay": stream_display_active(cfg)})
+                                        "gameRunning": running, "streamDisplay": stream_display_active(cfg),
+                                        "presence": presence()})
             if not self._authed():
                 return
             url = urllib.parse.urlsplit(self.path)

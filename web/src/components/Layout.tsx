@@ -76,6 +76,8 @@ interface TileProps {
   plain?: boolean;
   /** A logo shown whole in the middle of the generated artwork (TV channels). */
   logo?: string;
+  /** Greyed out but still selectable (e.g. a game on a PC someone is using). */
+  dimmed?: boolean;
 }
 
 /** A stable colour per title, so tiles without a picture still look distinct (and the same every time). */
@@ -85,11 +87,11 @@ function titleHue(title: string): number {
   return h % 360;
 }
 
-export function Tile({ title, subtitle, image, color, shape = 'wide', badge, icon, progress, onSelect, autoFocus, pin, art, label, plain, logo }: TileProps) {
+export function Tile({ title, subtitle, image, color, shape = 'wide', badge, icon, progress, onSelect, autoFocus, pin, art, label, plain, logo, dimmed }: TileProps) {
   const generated = !art && !color && !plain && shape !== 'app';
   return (
     <button
-      className={`tile tile-${shape}`}
+      className={`tile tile-${shape} ${dimmed ? 'tile-dimmed' : ''}`}
       data-nav
       data-pin={pin ? JSON.stringify(pin) : undefined}
       data-nav-default={autoFocus || undefined}
@@ -176,7 +178,7 @@ export function Button({
   );
 }
 
-export function Chip({ active, children, onClick, dot }: { active: boolean; children: ReactNode; onClick: () => void; dot?: 'on' | 'off' }) {
+export function Chip({ active, children, onClick, dot }: { active: boolean; children: ReactNode; onClick: () => void; dot?: 'on' | 'off' | 'busy' }) {
   return (
     <button className={`chip ${active ? 'chip-active' : ''}`} data-nav onClick={onClick}>
       {dot ? <span className={`dot dot-${dot}`} /> : null}

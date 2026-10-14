@@ -2123,3 +2123,12 @@ body.mouse-active .row-body:hover .row-arrow { opacity: 1; pointer-events: auto;
 .now-playing-btn { flex: none; width: 2.8rem; height: 2.8rem; border-radius: 50%; display: grid; place-items: center; color: var(--text-2); transition: transform 0.15s var(--ease), background 0.15s; }
 .now-playing-main { background: var(--surface-2); color: var(--text); }
 .now-playing-btn:focus { background: var(--text); color: var(--bg); transform: scale(1.1); outline: none; }
+
+/* A PC someone is using: its games are greyed out (still selectable; Hearth asks first). */
+.tile-dimmed .tile-art { filter: grayscale(0.85) brightness(0.55); }
+.tile-dimmed .tile-meta { opacity: 0.55; }
+.tile-dimmed:focus .tile-art { filter: grayscale(0.6) brightness(0.7); }
+.tile-dimmed:focus .tile-meta { opacity: 0.9; }
+.badge-busy { background: rgba(255, 181, 71, 0.92); color: #1b1300; }
+.dot-busy { background: var(--warn); box-shadow: 0 0 0.6rem var(--warn); }
+.busy-note { display: flex; align-items: center; gap: 0.6rem; padding: 0.7rem 1rem; margin-bottom: 1rem; border-radius: 0.7rem; background: rgba(255, 181, 71, 0.12); border: 1px solid rgba(255, 181, 71, 0.35); color: #ffd99a; }

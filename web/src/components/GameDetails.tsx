@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { formatMinutes, get, useApi, type Game, type GameDetails as Details, type KbmStatus } from '../lib/api';
+import { useEffect, useRef, useState } from 'react';
+import { busyText, formatMinutes, get, useApi, useGameHosts, type Game, type GameDetails as Details, type KbmStatus } from '../lib/api';
 import { useHearth } from '../lib/hearth';
 import { Icon } from './Icon';
 import { Button, Chip, Modal } from './Layout';
@@ -35,6 +35,13 @@ export function GameDetailsModal({ game, onClose }: { game: Game; onClose: () =>
   }, [game.hostId, game.id]);
 
   const info = d ?? game;
+  const busy = useGameHosts()?.find((h) => h.id === game.hostId)?.busy ?? null;
+  // If "in use" arrives after the dialog opened with Play focused, move to Close so OK doesn't stream by accident.
+  const actions = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = actions.current;
+    if (busy && el && el.firstElementChild === document.activeElement) (el.lastElementChild as HTMLElement | null)?.focus();
+  }, [busy]);
   const backdrop = d?.screenshots[shot];
   const play = () => {
     onClose();
@@ -45,6 +52,8 @@ export function GameDetailsModal({ game, onClose }: { game: Game; onClose: () =>
       requiresKbm: game.requiresKbm,
       art: game.art,
       players: emulated ? chosenPlayers : undefined,
+      // You've seen the "in use" note and chose Play anyway.
+      force: Boolean(busy),
     });
   };
   const playedLib = d?.libraryPlaytimeMinutes ?? 0;
@@ -100,9 +109,14 @@ export function GameDetailsModal({ game, onClose }: { game: Game; onClose: () =>
                 ))}
               </div>
             ) : null}
-            <div className="modal-actions" data-nav-group>
-              <Button variant="primary" icon="play" onClick={play} autoFocus>
-                {info.installed ? 'Play' : 'Install & play'}
+            {busy ? (
+              <div className="busy-note">
+                <Icon name="mouse" size="1.2em" /> {busyText(busy)}. Playing will take over that screen.
+              </div>
+            ) : null}
+            <div className="modal-actions" data-nav-group ref={actions}>
+              <Button variant={busy ? 'default' : 'primary'} icon="play" onClick={play} autoFocus={!busy}>
+                {busy ? 'Play anyway' : info.installed ? 'Play' : 'Install & play'}
               </Button>
               <Button icon="pin" onClick={() => void hearth.togglePin({ kind: 'game', hostId: game.hostId, gameId: game.id, title: game.title, art: game.art })}>
                 {hearth.profile?.pins?.some((p) => p.kind === 'game' && p.hostId === game.hostId && p.gameId === game.id) ? 'Unpin from Home' : 'Pin to Home'}
@@ -112,7 +126,9 @@ export function GameDetailsModal({ game, onClose }: { game: Game; onClose: () =>
                   Screenshot {shot + 1}/{d.screenshots.length}
                 </Button>
               ) : null}
-              <Button onClick={onClose}>Close</Button>
+              <Button onClick={onClose} autoFocus={Boolean(busy)}>
+                Close
+              </Button>
             </div>
             {!info.installed ? <p className="modal-sub">Playnite will install it on {info.hostName} first; the TV shows the PC so you can follow along.</p> : null}
           </div>

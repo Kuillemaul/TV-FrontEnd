@@ -223,6 +223,20 @@ export interface GameHost {
   uptime: number | null;
   playing: string | null;
   wakeEstimate: number | null;
+  /** Someone is using the PC (or it's streaming to another device): grey its games out, ask before streaming. */
+  busy: HostBusy | null;
+}
+
+export interface HostBusy {
+  reason: string;
+  idleSeconds: number | null;
+}
+
+/** "Someone is using Gaming PC · 2 min ago" */
+export function busyText(b: HostBusy): string {
+  if (b.idleSeconds == null) return b.reason;
+  const min = Math.floor(b.idleSeconds / 60);
+  return `${b.reason} · ${min < 1 ? 'just now' : `${min} min ago`}`;
 }
 
 export interface RecentGame {
@@ -446,4 +460,29 @@ export function formatMinutes(min: number): string {
   const h = Math.floor(min / 60);
   const m = min % 60;
   return m ? `${h} h ${m} min` : `${h} h`;
+}
+
+let lastHosts: GameHost[] | null = null;
+
+/** The gaming PCs (awake? someone using them?), re-checked every 15 seconds. Starts from the last answer, so a
+ *  dialog opened from the Games page knows straight away. */
+export function useGameHosts(): GameHost[] | null {
+  const [hosts, setHosts] = useState(lastHosts);
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      get<{ hosts: GameHost[] }>('/api/games/hosts')
+        .then((r) => {
+          lastHosts = r.hosts;
+          if (alive) setHosts(r.hosts);
+        })
+        .catch(() => undefined);
+    void load();
+    const t = setInterval(load, 15_000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, []);
+  return hosts;
 }

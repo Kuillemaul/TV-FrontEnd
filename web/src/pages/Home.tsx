@@ -81,6 +81,7 @@ export function HomePage() {
   const weather = dash.data?.weather;
   const h24 = hearth.info?.clock24h ?? false;
   const gameById = (hostId: string, gameId: string) => library.data?.games.find((g) => g.hostId === hostId && g.id === gameId);
+  const hostBusy = (hostId: string) => Boolean(library.data?.hosts.find((h) => h.id === hostId)?.busy);
 
   return (
     <div className="page page-home">
@@ -204,6 +205,7 @@ export function HomePage() {
                 shape="poster"
                 title={r.title}
                 image={r.art}
+                dimmed={hostBusy(r.hostId)}
                 badge={g?.requiresKbm ? <span className="badge"><Icon name="keyboard" size="1em" /></span> : undefined}
                 onSelect={() =>
                   g ? hearth.openGame(g) : hearth.playGame({ hostId: r.hostId, gameId: r.gameId, title: r.title, requiresKbm: false, art: r.art })
@@ -222,6 +224,7 @@ export function HomePage() {
               title={g.title}
               subtitle={g.platform}
               image={g.art}
+              dimmed={hostBusy(g.hostId)}
               badge={g.requiresKbm ? <span className="badge"><Icon name="keyboard" size="1em" /></span> : undefined}
               onSelect={() => hearth.openGame(g)}
             />

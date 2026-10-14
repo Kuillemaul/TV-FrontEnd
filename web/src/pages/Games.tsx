@@ -4,7 +4,7 @@ import { RatingBadge } from '../components/GameDetails';
 import { Icon } from '../components/Icon';
 import { Button, Chip, DemoBanner, NotSetUp, PageHeader, Tile } from '../components/Layout';
 import { PcsPanel } from '../components/PcsPanel';
-import { useApi, useServerEvents, type GameLibrary } from '../lib/api';
+import { busyText, useApi, useGameHosts, useServerEvents, type GameLibrary } from '../lib/api';
 import { useHearth } from '../lib/hearth';
 
 /** Tiles drawn at once. Big libraries page in so the TV stays responsive to the remote. */
@@ -24,6 +24,11 @@ export function GamesPage() {
   const [query, setQuery] = useState('');
   const [limit, setLimit] = useState(PAGE_SIZE);
   useEffect(() => setLimit(PAGE_SIZE), [host, platform, query]);
+  // Fresher than the library: whether someone is sitting at each PC right now.
+  const liveHosts = useGameHosts();
+  const hosts = liveHosts ?? data?.hosts ?? [];
+  const busyOf = (hostId: string) => hosts.find((h) => h.id === hostId)?.busy ?? null;
+  const busyHosts = hosts.filter((h) => h.busy);
 
   const platforms = useMemo(() => {
     const games = data?.games.filter((g) => host === 'all' || g.hostId === host) ?? [];
@@ -81,9 +86,10 @@ export function GamesPage() {
         <>
           <div className="chips" data-nav-group>
             <Chip active={host === 'all'} onClick={() => { setHost('all'); setPlatform('all'); }}>All PCs</Chip>
-            {data?.hosts.map((h) => (
-              <Chip key={h.id} active={host === h.id} dot={h.online ? 'on' : 'off'} onClick={() => { setHost(h.id); setPlatform('all'); }}>
+            {hosts.map((h) => (
+              <Chip key={h.id} active={host === h.id} dot={h.busy ? 'busy' : h.online ? 'on' : 'off'} onClick={() => { setHost(h.id); setPlatform('all'); }}>
                 {h.name}
+                {h.busy ? ' · In use' : ''}
               </Chip>
             ))}
           </div>
@@ -96,6 +102,11 @@ export function GamesPage() {
             </div>
           ) : null}
 
+          {busyHosts.map((h) => (
+            <div className="busy-note" key={h.id}>
+              <Icon name="mouse" size="1.2em" /> {busyText(h.busy!)}. Its games are greyed out; you'll be asked before streaming.
+            </div>
+          ))}
           {data && games.length === 0 ? <div className="empty">{hearth.isKid ? 'No games here yet. Ask a parent to add some!' : 'No games match.'}</div> : null}
           <div className="grid grid-posters">
             {games.slice(0, limit).map((g, i) => (
@@ -108,8 +119,10 @@ export function GamesPage() {
                 subtitle={`${g.store || g.platform} · ${g.hostName}`}
                 label={g.platform === 'PC' ? g.store || 'PC' : g.platform}
                 image={g.art}
+                dimmed={Boolean(busyOf(g.hostId))}
                 badge={
                   <>
+                    {busyOf(g.hostId) ? <span className="badge badge-busy">In use</span> : null}
                     {g.requiresKbm ? (
                       <span className="badge badge-kbm" title="Needs keyboard & mouse">
                         <Icon name="keyboard" size="1em" />

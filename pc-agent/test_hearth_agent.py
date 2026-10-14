@@ -379,5 +379,13 @@ class ConfigUpgradeTests(unittest.TestCase):
             self.assertIn("line 1", notes[0])
 
 
+class PresenceTest(unittest.TestCase):
+    def test_shape_off_windows(self):
+        p = agent.presence()
+        self.assertEqual(set(p), {"idleSeconds", "locked", "foreground"})
+        if not agent.IS_WINDOWS:
+            self.assertEqual(p, {"idleSeconds": None, "locked": None, "foreground": None})
+
+
 if __name__ == "__main__":
     unittest.main()

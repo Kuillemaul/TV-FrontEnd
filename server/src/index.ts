@@ -582,7 +582,10 @@ app.get<{ Querystring: { refresh?: string; all?: string } }>('/api/games', async
   return { demo: games.demo, hosts: await games.hosts(), games: list, recent };
 });
 
-app.post<{ Params: { hostId: string; gameId: string }; Body: { title?: string; art?: string; players?: number } }>(
+// Cheap to poll: which PCs are awake and whether someone is using them.
+app.get('/api/games/hosts', async () => ({ hosts: await games.hosts() }));
+
+app.post<{ Params: { hostId: string; gameId: string }; Body: { title?: string; art?: string; players?: number; force?: boolean } }>(
   '/api/games/:hostId/:gameId/launch',
   async (req) => {
     if (!ProfileStore.allowsGame(profiles.active, req.params.hostId, req.params.gameId)) {
@@ -593,6 +596,11 @@ app.post<{ Params: { hostId: string; gameId: string }; Body: { title?: string; a
     } catch (err) {
       bus.emit({ type: 'game-status', hostId: req.params.hostId, gameId: req.params.gameId, stage: 'error', message: (err as Error).message });
       return fail(err);
+    }
+    // Someone's at the PC (or streaming from it elsewhere): don't take over their screen unless asked to.
+    if (!req.body?.force) {
+      const busy = await games.busy(req.params.hostId).catch(() => null);
+      if (busy) return { ok: false, busy: busy.reason, idleSeconds: busy.idleSeconds };
     }
     // Launch runs in the background; progress is pushed as game-status events.
     games.launch(req.params.hostId, req.params.gameId, req.body ?? {}).catch((err) => log.warn(`game launch: ${err.message}`));

@@ -135,6 +135,7 @@ gaming:
       loadingScreen: true        # cover the stream with the game's art until it's running (hides the PC desktop)
       revealSeconds: 5           # keep the cover this long after the game starts (its window needs a moment)
       endSessionOnExit: true     # end the Apollo session when you leave, so your monitors switch back on
+      busyIdleMinutes: 5         # someone used the PC's keyboard/mouse in the last 5 min → "In use", ask before streaming (0 = off)
       # Apollo: connect the stream first (Apollo creates its virtual monitor and turns the real ones
       # off), then start the game on that virtual monitor. Leave out for plain Sunshine.
       virtualDisplay: true

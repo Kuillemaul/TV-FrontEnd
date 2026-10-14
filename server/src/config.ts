@@ -164,6 +164,8 @@ export interface GameHostConfig {
   revealSeconds: number;
   /** End the session on the PC when the stream ends (Apollo: switches your monitors back on). */
   endSessionOnExit: boolean;
+  /** Keyboard/mouse use on the PC within this many minutes marks it "in use" (0 = never). */
+  busyIdleMinutes: number;
 }
 
 export interface GamingConfig {
@@ -325,6 +327,7 @@ function normaliseHost(h: any, i: number): GameHostConfig {
     loadingScreen: h.loadingScreen ?? true,
     revealSeconds: Number(h.revealSeconds ?? 5),
     endSessionOnExit: h.endSessionOnExit ?? true,
+    busyIdleMinutes: Number(h.busyIdleMinutes ?? 5),
   };
 }
 

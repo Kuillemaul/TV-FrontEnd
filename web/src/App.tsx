@@ -17,13 +17,16 @@ import { VoiceOverlay } from './components/VoiceOverlay';
 import { KeyboardHost, setInputValue, typeIntoKeyboard } from './components/OnScreenKeyboard';
 import { QuickPanel } from './components/QuickPanel';
 import { NotificationsPanel } from './components/Notifications';
+import { Button, Modal } from './components/Layout';
 import {
+  busyText,
   formatTime,
   get,
   post,
   useServerEvents,
   type Alert,
   type Game,
+  type HostBusy,
   type Info,
   type MutationResult,
   type PageId,
@@ -82,6 +85,7 @@ export function App() {
   pipRef.current = pip;
   const [sleepEndsAt, setSleepEndsAt] = useState<number | null>(null);
   const [unread, setUnread] = useState(0);
+  const [busyFor, setBusyFor] = useState<{ game: PlayRequest; busy: HostBusy } | null>(null);
   const [kbmFor, setKbmFor] = useState<PlayRequest | null>(null);
   const [launch, setLaunch] = useState<LaunchProgress | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -219,7 +223,18 @@ export function App() {
   const startGame = useCallback(
     (g: PlayRequest) => {
       setLaunch({ ...g, stage: 'starting', message: `Connecting to the PC…` });
-      void post(`/api/games/${encodeURIComponent(g.hostId)}/${encodeURIComponent(g.gameId)}/launch`, { title: g.title, art: g.art, players: g.players });
+      void post<{ ok: boolean; busy?: string; idleSeconds?: number | null }>(`/api/games/${encodeURIComponent(g.hostId)}/${encodeURIComponent(g.gameId)}/launch`, {
+        title: g.title,
+        art: g.art,
+        players: g.players,
+        force: g.force,
+      }).then((res) => {
+        // Someone's at that PC: ask first instead of taking over their screen.
+        if (res.busy) {
+          setLaunch(null);
+          setBusyFor({ game: g, busy: { reason: res.busy, idleSeconds: res.idleSeconds ?? null } });
+        }
+      });
     },
     [],
   );
@@ -481,6 +496,31 @@ export function App() {
               startGame(g);
             }}
           />
+        ) : null}
+        {busyFor ? (
+          <Modal title="That PC is in use" onClose={() => setBusyFor(null)}>
+            <p className="modal-text">
+              <strong>{busyText(busyFor.busy)}</strong>
+              <br />
+              Streaming {busyFor.game.title} will take over that screen.
+            </p>
+            <div className="modal-actions" data-nav-group>
+              <Button autoFocus onClick={() => setBusyFor(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="ghost"
+                icon="play"
+                onClick={() => {
+                  const g = busyFor.game;
+                  setBusyFor(null);
+                  startGame({ ...g, force: true });
+                }}
+              >
+                Stream anyway
+              </Button>
+            </div>
+          </Modal>
         ) : null}
         {launch ? <GameLaunch progress={launch} onClose={() => setLaunch(null)} /> : null}
         {voiceOpen ? <VoiceOverlay onAction={runAction} onClose={closeVoice} /> : null}
