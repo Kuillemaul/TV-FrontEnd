@@ -1010,6 +1010,114 @@ def visible_window_pids(min_w: int = 640, min_h: int = 360) -> set[int]:
     return pids
 
 
+def cover_art_file(art: str | None) -> str | None:
+    """A local file for the cover's box art: as given, or a Steam/web picture downloaded once to a temp cache."""
+    if not art:
+        return None
+    if not art.startswith(("http://", "https://")):
+        return art if Path(art).is_file() else None
+    import tempfile
+
+    cache = Path(tempfile.gettempdir()) / "hearth-cover-art"
+    target = cache / (hashlib.sha1(art.encode()).hexdigest()[:16] + Path(urllib.parse.urlsplit(art).path).suffix)
+    if not target.is_file():
+        try:
+            cache.mkdir(parents=True, exist_ok=True)
+            with urllib.request.urlopen(art, timeout=4) as res:
+                target.write_bytes(res.read())
+        except Exception:  # noqa: BLE001 - no art is fine
+            return None
+    return str(target)
+
+
+def compose_cover(title: str, art: str | None, w: int, h: int):  # noqa: ANN201 - PIL.Image or None
+    """
+    The PC's loading screen drawn the same way as the TV's (web/src/components/LoadingCover.tsx, .cover-* in
+    styles.css): blurred box art behind, the poster on the left, the title and "Starting…" beside it. When
+    Moonlight's stream window briefly shows this before Hearth's cover is back on top, it looks the same.
+    Needs Pillow; returns None without it.
+    """
+    try:
+        from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
+    except ImportError:
+        return None
+    rem = w / 120  # the TV sizes everything in rem: 1/120 of the screen width
+    bg_colour = (7, 9, 14)
+    img = Image.new("RGB", (w, h), bg_colour)
+    poster = None
+    if art:
+        try:
+            poster = Image.open(art).convert("RGB")
+        except Exception:  # noqa: BLE001
+            poster = None
+    if poster is not None:
+        # Background: the art covering 110% of the screen, blurred, a little more saturated, at 55%.
+        bw, bh = int(w * 1.1), int(h * 1.1)
+        ratio = max(bw / poster.width, bh / poster.height)
+        back = poster.resize((max(1, int(poster.width * ratio)), max(1, int(poster.height * ratio))))
+        back = back.crop(((back.width - w) // 2, (back.height - h) // 2, (back.width - w) // 2 + w, (back.height - h) // 2 + h))
+        back = ImageEnhance.Color(back.filter(ImageFilter.GaussianBlur(2.5 * rem))).enhance(1.2)
+        img = Image.blend(img, back, 0.55)
+    # Shade: darker towards the edges, centred left of middle (radial-gradient at 30% 50%).
+    small = Image.new("L", (192, 108))
+    px = small.load()
+    for y in range(108):
+        for x in range(192):
+            d = min(1.0, ((((x / 191) - 0.3) / 0.7) ** 2 + (((y / 107) - 0.5) / 0.5) ** 2) ** 0.5 / 1.2)
+            px[x, y] = int(255 * 0.6 * d)
+    img = Image.composite(Image.new("RGB", (w, h), (0, 0, 0)), img, small.resize((w, h)))
+    draw = ImageDraw.Draw(img)
+    # Poster card: 22rem wide, 2:3, rounded, with a soft shadow, 8rem from the left, vertically centred.
+    pw, ph = int(22 * rem), int(33 * rem)
+    px0, py0 = int(8 * rem), (h - ph) // 2
+    shadow = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(shadow).rounded_rectangle((px0, py0 + int(2.5 * rem), px0 + pw, py0 + ph + int(2.5 * rem)), radius=int(1.2 * rem), fill=150)
+    img = Image.composite(Image.new("RGB", (w, h), (0, 0, 0)), img, shadow.filter(ImageFilter.GaussianBlur(3 * rem)))
+    draw = ImageDraw.Draw(img)
+    card = Image.new("RGB", (pw, ph), (26, 29, 36))
+    if poster is not None:
+        ratio = max(pw / poster.width, ph / poster.height)
+        fit = poster.resize((max(1, int(poster.width * ratio)), max(1, int(poster.height * ratio))))
+        card = fit.crop(((fit.width - pw) // 2, (fit.height - ph) // 2, (fit.width - pw) // 2 + pw, (fit.height - ph) // 2 + ph))
+    mask = Image.new("L", (pw, ph), 0)
+    ImageDraw.Draw(mask).rounded_rectangle((0, 0, pw - 1, ph - 1), radius=int(1.2 * rem), fill=255)
+    img.paste(card, (px0, py0), mask)
+
+    def font(names: list[str], size: float):  # noqa: ANN202
+        for name in names:
+            try:
+                return ImageFont.truetype(name, int(size))
+            except OSError:
+                continue
+        return ImageFont.load_default()
+
+    big = font(["seguibl.ttf", "segoeuib.ttf", "arialbd.ttf", "DejaVuSans-Bold.ttf"], 4 * rem)
+    small_font = font(["segoeui.ttf", "arial.ttf", "DejaVuSans.ttf"], 1.5 * rem)
+    # Title: wrapped to the space right of the poster, 4rem from it.
+    tx = px0 + pw + int(4 * rem)
+    max_w = w - tx - int(8 * rem)
+    lines: list[str] = []
+    for word in title.split():
+        if lines and draw.textlength(lines[-1] + " " + word, font=big) <= max_w:
+            lines[-1] += " " + word
+        else:
+            lines.append(word)
+    line_h = int(4 * rem * 1.05)
+    block_h = line_h * len(lines) + int(1.4 * rem) + int(1.5 * rem * 1.3)
+    ty = (h - block_h) // 2
+    for i, line in enumerate(lines[:3]):
+        draw.text((tx, ty + i * line_h), line, font=big, fill=(242, 244, 248))
+    sy = ty + line_h * min(len(lines), 3) + int(1.4 * rem)
+    # Three accent dots, then "Starting <title>…".
+    dot, gap = 0.6 * rem, 0.4 * rem
+    for i, alpha in enumerate((1.0, 0.6, 0.3)):
+        cx = tx + i * (dot + gap)
+        colour = tuple(int(bg + (fg - bg) * alpha) for bg, fg in zip(bg_colour, (123, 140, 255)))
+        draw.ellipse((cx, sy + rem * 0.45, cx + dot, sy + rem * 0.45 + dot), fill=colour)
+    draw.text((tx + 3 * dot + 2 * gap + rem, sy), f"Starting {title}…", font=small_font, fill=(160, 164, 172))
+    return img
+
+
 def show_cover(title: str, art: str | None = None) -> None:
     """
     Run as `hearth_agent.py --cover TITLE [ART]`: a full-screen "loading" window in Hearth's style.
@@ -1026,8 +1134,19 @@ def show_cover(title: str, art: str | None = None) -> None:
     root.attributes("-topmost", True)
     root.attributes("-alpha", 0.995)  # layered window, needed for click-through below
     scale = h / 1080
+    art = cover_art_file(art)
+    composed = compose_cover(title, art, w, h)
+    if composed is not None:
+        # The same picture as the TV's loading screen, so a glimpse of it on the stream doesn't look like a flash.
+        from PIL import ImageTk
+
+        full = ImageTk.PhotoImage(composed)
+        tk.Label(root, image=full, bg="#07090e", borderwidth=0).place(x=0, y=0, width=w, height=h)
+        root._full = full  # type: ignore[attr-defined]  # keep a reference
+        art = None  # drawn already
     frame = tk.Frame(root, bg="#07090e")
-    frame.place(relx=0.5, rely=0.5, anchor="center")
+    if composed is None:
+        frame.place(relx=0.5, rely=0.5, anchor="center")
     img = None
     if art and Path(art).is_file():
         try:
@@ -1047,17 +1166,18 @@ def show_cover(title: str, art: str | None = None) -> None:
     if img is not None:
         tk.Label(frame, image=img, bg="#07090e").pack(pady=(0, int(30 * scale)))
         root._art = img  # type: ignore[attr-defined]  # keep a reference
-    tk.Label(frame, text=title, fg="#f2f4f8", bg="#07090e", font=("Segoe UI Semibold", int(54 * scale))).pack()
-    status = tk.Label(frame, text="Starting", fg="#8c93a8", bg="#07090e", font=("Segoe UI", int(24 * scale)))
-    status.pack(pady=(int(14 * scale), 0))
-    dots = [0]
+    if composed is None:
+        tk.Label(frame, text=title, fg="#f2f4f8", bg="#07090e", font=("Segoe UI Semibold", int(54 * scale))).pack()
+        status = tk.Label(frame, text="Starting", fg="#8c93a8", bg="#07090e", font=("Segoe UI", int(24 * scale)))
+        status.pack(pady=(int(14 * scale), 0))
+        dots = [0]
 
-    def tick() -> None:
-        dots[0] = (dots[0] + 1) % 4
-        status.configure(text="Starting" + "." * dots[0])
-        root.after(450, tick)
+        def tick() -> None:
+            dots[0] = (dots[0] + 1) % 4
+            status.configure(text="Starting" + "." * dots[0])
+            root.after(450, tick)
 
-    tick()
+        tick()
     if IS_WINDOWS:
         import ctypes
 
@@ -1085,7 +1205,9 @@ class LoadingCover:
         self.close()
         if not self.enabled:
             return
-        art = entry.get("_artPath") or ""
+        # A local cover file, or the web picture (Steam) for the cover window to fetch.
+        web = entry.get("art") if isinstance(entry.get("art"), str) and str(entry.get("art")).startswith("http") else ""
+        art = entry.get("_artPath") or web or ""
         exe = sys.executable.replace("python.exe", "pythonw.exe")
         try:
             self.proc = subprocess.Popen([exe, str(Path(__file__).resolve()), "--cover", entry["title"], art])

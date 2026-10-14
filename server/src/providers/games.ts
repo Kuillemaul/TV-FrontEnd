@@ -97,6 +97,8 @@ interface AgentHealth {
 // Moonlight tests its decoder in its first seconds (the same FFmpeg lines as the real stream), so wait for
 // the connection's last stage instead: "Starting input stream..." then "done". The stream window opens
 // right after it.
+/** Moonlight's interface window is up (its first lines after loading the QML interface). */
+const MOONLIGHT_WINDOW = /Qt UI screen is at|SDL found matching display|Found "ModeSeven/;
 const STREAM_CONNECTED = /Starting input stream[^\n]*\n[^\n]*done/i;
 /** Then its renderer starts drawing: EGLRenderer on Intel/VAAPI (the decoder test doesn't print it). */
 const STREAM_RENDERING = /EGLRenderer|PlVkRenderer/;
@@ -538,7 +540,10 @@ export class GameService {
     // The newest window is the one on screen. Cover Moonlight's own "Connecting…" window as soon as it's up,
     // then again once the stream window opens on top of that.
     if (h.virtualDisplay) {
-      await sleep(900);
+      // Moonlight's own window appears as its interface loads ("Qt UI screen is at…", about 1 s in): cover it
+      // then, rather than after a guess that can land before the window and end up underneath it.
+      const shown = await this.launcher.waitForOutput(sessionId, MOONLIGHT_WINDOW, 4000);
+      if (!shown) await sleep(300);
       if (!ours()) return;
       cover();
     }

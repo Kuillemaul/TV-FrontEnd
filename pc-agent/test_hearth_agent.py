@@ -388,6 +388,20 @@ class PresenceTest(unittest.TestCase):
 
 
 
+class CoverTest(unittest.TestCase):
+    def test_cover_is_drawn_full_screen(self):
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow not installed")
+        with tempfile.TemporaryDirectory() as d:
+            art = Path(d) / "art.jpg"
+            Image.new("RGB", (60, 90), (200, 40, 90)).save(art)
+            img = agent.compose_cover("Dead as Disco Demo", str(art), 960, 540)
+            self.assertEqual(img.size, (960, 540))
+            self.assertIsNotNone(agent.compose_cover("No art", None, 640, 360))
+
+
 class PlayniteNullsTest(unittest.TestCase):
     def test_null_lists_and_no_favourites(self):
         with tempfile.TemporaryDirectory() as d:
