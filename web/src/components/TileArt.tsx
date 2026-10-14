@@ -1,5 +1,6 @@
 import { useId, type CSSProperties, type ReactNode } from 'react';
 import type { AppTile, TileDesign, TileStyle } from '../lib/api';
+import { BRAND_LOGOS, type BrandLogo } from './brandLogos';
 import './tileart.css';
 
 /**
@@ -39,12 +40,25 @@ export function defaultDesign(app: Pick<AppTile, 'id' | 'name' | 'color'>): Tile
   return { style: app.id.startsWith('input-') ? 'stripes' : 'aurora', colors: [mix(c, '#000000', 0.62), c] };
 }
 
+const BRAND_ALIASES: Record<string, string> = { prime: 'primevideo', hbomax: 'max' };
+/** Logos drawn in the brand's own colour (on dark tiles); the rest are white. */
+const BRAND_FILL: Record<string, string> = { netflix: '#e50914', youtube: '#ff0000', youtubetv: '#ff0000', spotify: '#1ed760' };
+
+/** The official logo for a built-in app (by id) or any app whose name matches one ("Crunchyroll", "Apple TV"…). */
+export function brandLogo(app: Pick<AppTile, 'id' | 'name'>): { key: string; logo: BrandLogo } | undefined {
+  const norm = (s: string) => s.toLowerCase().replace(/\+/g, 'plus').replace(/[^a-z0-9]/g, '');
+  for (const key of [BRAND_ALIASES[app.id] ?? app.id, norm(app.name)]) {
+    if (BRAND_LOGOS[key]) return { key, logo: BRAND_LOGOS[key] };
+  }
+  return undefined;
+}
+
 /** The tile picture for an app: custom picture, custom design, config logo (null → Tile draws it) or the default design. */
 export function AppArt({ app, live }: { app: AppTile; live?: boolean }) {
   if (app.art?.type === 'image') return <img className="tile-art-photo" src={app.art.url} alt="" />;
   if (app.art?.type === 'design') return <TileArtSvg design={app.art.design} title={app.name} live={live} />;
   if (app.logo) return null;
-  return <TileArtSvg design={defaultDesign(app)} title={app.name} live={live} />;
+  return <TileArtSvg design={defaultDesign(app)} title={app.name} live={live} brand={brandLogo(app)} />;
 }
 
 /** For <Tile art=…>: undefined when the app should keep its config logo. */
@@ -228,7 +242,7 @@ function Background({ style, c0, c1, id, seed }: { style: TileStyle; c0: string;
   }
 }
 
-export function TileArtSvg({ design, title, live }: { design: TileDesign; title: string; live?: boolean }) {
+export function TileArtSvg({ design, title, live, brand }: { design: TileDesign; title: string; live?: boolean; brand?: { key: string; logo: BrandLogo } }) {
   const id = `ta${useId().replace(/[^a-z0-9]/gi, '')}`;
   const [c0, c1] = design.colors;
   const style = design.style;
@@ -301,6 +315,9 @@ export function TileArtSvg({ design, title, live }: { design: TileDesign; title:
       <rect width={W} height={H} fill={`url(#${id}-gloss)`} />
       <rect className="ta-sheen" x="-200" width="160" height={H} fill={`url(#${id}-sheen)`} transform="skewX(-18)" />
 
+      {brand ? (
+        <BrandMark brand={brand} title={title} shadow={`url(#${id}-shadow)`} />
+      ) : (
       <text
         x={W / 2}
         y={H / 2}
@@ -321,6 +338,39 @@ export function TileArtSvg({ design, title, live }: { design: TileDesign; title:
         ) : null}
         {text}
       </text>
+      )}
     </svg>
+  );
+}
+
+/** An official logo, centred: wordmarks on their own, symbols (Netflix N, YouTube…) with the name under them. */
+function BrandMark({ brand, title, shadow }: { brand: { key: string; logo: BrandLogo }; title: string; shadow: string }) {
+  const { key, logo } = brand;
+  const fill = BRAND_FILL[key] ?? '#ffffff';
+  const scale = logo.wordmark ? 9.5 : 4.4;
+  const box = 24 * scale;
+  const y = logo.wordmark ? (H - box) / 2 : H / 2 - box / 2 - 26;
+  return (
+    <g filter={shadow}>
+      <g transform={`translate(${(W - box) / 2} ${y}) scale(${scale})`}>
+        {/* YouTube's play triangle is a hole in the logo: white behind it, as in the real logo. */}
+        {key === 'youtube' || key === 'youtubetv' ? <rect x="8" y="7.5" width="9" height="9" fill="#fff" /> : null}
+        <path d={logo.path} fill={fill} />
+      </g>
+      {logo.wordmark ? null : (
+        <text
+          x={W / 2}
+          y={y + box + 34}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fill="#ffffff"
+          fontSize={30}
+          fontWeight={700}
+          style={{ fontFamily: 'var(--font, Inter, system-ui, sans-serif)' }}
+        >
+          {title}
+        </text>
+      )}
+    </g>
   );
 }
