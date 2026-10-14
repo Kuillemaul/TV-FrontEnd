@@ -56,3 +56,19 @@ sudo journalctl _SYSTEMD_USER_UNIT=hearth.service --since "-10 min" --no-pager |
 - Search (magnifier, top right): try "abc", "news", a film you own.
 - Controller: LB / RB switch pages; the top menu no longer flashes the previous item.
 - Live TV → **Choose channels** → *Hide SD copies*, *Hide radio*.
+
+## 6. Home Assistant link (new)
+
+1. In Home Assistant: Developer tools → States, search `hearth`. You should see
+   `sensor.hearth_living_room_activity` (try opening Plex on the TV and watch it change), `_profile` and `_sleep_timer`.
+2. **Developer tools → Events**, event type `hearth_command`, event data:
+   ```yaml
+   command: notify
+   title: Hello from Home Assistant
+   ```
+   → **Fire event**. A pop-up should appear on the TV. Try `command: morning` too.
+3. Add Google Calendar to Home Assistant (Settings → Devices & services → Add integration → **Google Calendar**, or
+   **Remote Calendar** with the calendar's secret iCal address from Google Calendar settings).
+4. On the TV say "good morning" (or fire `command: morning`): calendar, weather and to-do lists should show.
+
+Automations to copy: [HOME-ASSISTANT.md](HOME-ASSISTANT.md).
