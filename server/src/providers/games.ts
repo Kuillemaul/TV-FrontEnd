@@ -94,7 +94,10 @@ interface AgentHealth {
 }
 
 /** Moonlight lines that mean the stream window is up and drawing video (moonlight-qt + FFmpeg/SDL logs). */
-const STREAM_DRAWING = /Decode context initialised|Decoded frame|EGLRenderer|Received first video packet/i;
+// Moonlight tests its decoder in its first second (same FFmpeg lines as the real stream), so wait for the
+// connection's last stage ("Starting input stream establishment…", moonlight-common-c), after which the
+// stream window opens; or failing that, a second decoder start-up (the test's, then the stream's).
+const STREAM_DRAWING = /Starting input stream establishment|Decode context initialised[\s\S]*Decode context initialised/i;
 
 /** How often to ask a PC whether its library changed (a cheap "no changes" answer when it hasn't). */
 const RECHECK_MS = 60 * 1000;
@@ -502,7 +505,8 @@ export class GameService {
   private async endSession(h: GameHostConfig): Promise<void> {
     let ended = false;
     if (h.quitOnExit || h.endSessionOnExit) {
-      const res = await this.agent(h, '/stop', { method: 'POST', body: JSON.stringify({ endSession: h.endSessionOnExit }) }).catch(() => null);
+      // Ending the Apollo session can take a few seconds on the PC (login, then close).
+      const res = await this.agent(h, '/stop', { method: 'POST', body: JSON.stringify({ endSession: h.endSessionOnExit }) }, 15_000).catch(() => null);
       ended = Boolean(res?.ok && ((await res.json().catch(() => ({}))) as { sessionEnded?: boolean }).sessionEnded);
     }
     // Moonlight's quit pops up its own "quitting" window on the TV, so it's only the fallback for
@@ -548,7 +552,7 @@ export class GameService {
         if (display === false) await sleep(400);
       }
       await sleep(display ? 3000 : 2500);
-    } else await sleep(150);
+    } else await sleep(400);
     if (!ours()) return;
     cover();
 

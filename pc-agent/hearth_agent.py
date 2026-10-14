@@ -50,8 +50,24 @@ STEAM_SKIP_NAMES = re.compile(r"^(Proton|Steam Linux Runtime|Steamworks|SteamVR|
 ROM_TAGS = re.compile(r"\s*[\(\[][^\)\]]*[\)\]]")
 
 
+LOG_FILE = Path(os.environ.get("LOCALAPPDATA") or Path.home() / ".local" / "state") / "Hearth" / "agent.log"
+
+
 def log(msg: str) -> None:
-    print(time.strftime("%H:%M:%S"), msg, flush=True)
+    line = f"{time.strftime('%Y-%m-%d %H:%M:%S')} {msg}"
+    try:
+        print(line, flush=True)
+    except (OSError, AttributeError):  # pythonw has no console
+        pass
+    # Also kept in a file, since the agent normally runs in the background with no window.
+    try:
+        LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        if LOG_FILE.exists() and LOG_FILE.stat().st_size > 2_000_000:
+            LOG_FILE.replace(LOG_FILE.with_suffix(".old.log"))
+        with LOG_FILE.open("a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except OSError:
+        pass
 
 
 # --------------------------------------------------------------------------------------
@@ -1385,18 +1401,43 @@ def apollo_close(apollo: dict[str, Any]) -> bool:
     import base64
     import ssl
 
-    url = str(apollo.get("url") or "https://localhost:47990").rstrip("/") + "/api/apps/close"
+    import http.cookiejar
+    import urllib.error
+
+    base = str(apollo.get("url") or "https://localhost:47990").rstrip("/")
     auth = base64.b64encode(f"{user}:{password}".encode()).decode()
-    req = urllib.request.Request(url, data=b"{}", headers={"Content-Type": "application/json", "Authorization": f"Basic {auth}"}, method="POST")
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
+    json_headers = {"Content-Type": "application/json"}
     try:
-        with urllib.request.urlopen(req, timeout=8, context=ctx):
+        # Sunshine and older Apollo: HTTP basic auth on every API call.
+        req = urllib.request.Request(base + "/api/apps/close", data=b"{}", headers={**json_headers, "Authorization": f"Basic {auth}"}, method="POST")
+        with urllib.request.urlopen(req, timeout=6, context=ctx):
+            log("Apollo: ended the session")
             return True
+    except urllib.error.HTTPError as err:
+        if err.code not in (401, 403):
+            log(f"Apollo close: HTTP {err.code} {err.reason}")
+            return False
+        log(f"Apollo close: basic login refused (HTTP {err.code}); trying Apollo's login page")
     except Exception as err:  # noqa: BLE001
         log(f"Apollo close: {err}")
         return False
+    try:
+        # Newer Apollo: log in once for a session cookie, then call the API with it.
+        jar = http.cookiejar.CookieJar()
+        opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=ctx), urllib.request.HTTPCookieProcessor(jar))
+        body = json.dumps({"username": user, "password": password}).encode()
+        opener.open(urllib.request.Request(base + "/api/login", data=body, headers=json_headers, method="POST"), timeout=6).read()
+        opener.open(urllib.request.Request(base + "/api/apps/close", data=b"{}", headers=json_headers, method="POST"), timeout=6).read()
+        log("Apollo: ended the session (login page)")
+        return True
+    except urllib.error.HTTPError as err:
+        log(f"Apollo close (login page): HTTP {err.code} {err.reason}. Check the Apollo username and password in agent.json")
+    except Exception as err:  # noqa: BLE001
+        log(f"Apollo close (login page): {err}")
+    return False
 
 
 def presence() -> dict[str, Any]:
