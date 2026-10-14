@@ -114,7 +114,7 @@ function ChannelPicker({ onClose }: { onClose: (changed: boolean) => void }) {
 function GuideGrid({ onChoose }: { onChoose: () => void }) {
   const hearth = useHearth();
   const now = useNow(30_000);
-  const { data } = useApi<Guide>(`/api/tv/guide?hours=${HOURS}`, 5 * 60_000);
+  const { data, error } = useApi<Guide>(`/api/tv/guide?hours=${HOURS}`, 5 * 60_000);
   const recs = useApi<{ recordings: Recording[] }>('/api/tv/recordings', 60_000);
   const [selected, setSelected] = useState<Programme | null>(null);
   const [focused, setFocused] = useState<Programme | null>(null);
@@ -135,6 +135,13 @@ function GuideGrid({ onChoose }: { onChoose: () => void }) {
     return map;
   }, [data, start, end]);
 
+  if (!data && error) {
+    return (
+      <NotSetUp icon="tv" title="Can’t reach the TV tuner">
+        The guide didn’t load: Tvheadend (or Plex Live TV) isn’t answering. Check it’s running, or change the address in Settings → Connections. Trying again every few minutes.
+      </NotSetUp>
+    );
+  }
   if (!data) return <div className="empty">Loading guide…</div>;
   if (!data.demo && data.channels.length === 0 && (hearth.profile?.hiddenChannels?.length ?? 0) > 0) {
     return (
@@ -151,8 +158,8 @@ function GuideGrid({ onChoose }: { onChoose: () => void }) {
   if (!data.demo && data.channels.length === 0) {
     return (
       <NotSetUp icon="tv" title="No channels yet">
-        Plug in the USB tuner, scan for channels in Tvheadend, then add its address under <code>livetv.tvheadend</code> in
-        config.yaml (Setup guide, section 2).
+        Plug in the TV tuner and scan for channels in Tvheadend. Not linked yet? Settings → Connections links Tvheadend (or
+        installs it on this TV).
       </NotSetUp>
     );
   }
@@ -174,7 +181,7 @@ function GuideGrid({ onChoose }: { onChoose: () => void }) {
 
   return (
     <>
-      {data.demo ? <DemoBanner>Demo guide. Connect Tvheadend and your USB tuner in config.yaml to see real channels.</DemoBanner> : null}
+      {data.demo ? <DemoBanner>Demo guide. Link Tvheadend or Plex Live TV in Settings → Connections to see your channels.</DemoBanner> : null}
       <GuideDetails programme={focused} channel={focused ? channelOf(focused) : undefined} recording={focused ? recordingOf(focused) : undefined} now={now} h24={h24} />
       <div className="guide" data-nav-exit-right="none">
         <div className="guide-row guide-times">

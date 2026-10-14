@@ -143,6 +143,7 @@ export function SettingsExtras({ part }: { part: 'family' | 'tv' | 'alerts' | 'r
 }
 
 function PhoneRemote() {
+  const hearth = useHearth();
   const { data, reload } = useApi<{ code: string; url: string | null; reachable: boolean; paired: number }>('/api/remote/pairing', 20_000);
   const [qr, setQr] = useState('');
 
@@ -165,10 +166,20 @@ function PhoneRemote() {
               <div className="pair-code">{data.code}</div>
             </>
           ) : (
-            <p className="modal-text">
-              To use your phone as a remote, set <code>server.host: 0.0.0.0</code> in config.yaml and restart Hearth. Phones must pair with a code shown
-              here before they can control anything.
-            </p>
+            <>
+              <p className="modal-text">Use your phone as a remote: Hearth needs to answer phones on your network. Phones still have to pair with a code shown here before they can control anything.</p>
+              <div className="settings-row" data-nav-group>
+                <Button
+                  icon="check"
+                  onClick={async () => {
+                    const r = await post('/api/setup/phone-remote');
+                    hearth.toast(r.ok ? 'Turning on the phone remote… Hearth restarts for a moment' : (r.error ?? 'Couldn’t turn it on'), r.ok ? 'info' : 'error');
+                  }}
+                >
+                  Turn on phone remote
+                </Button>
+              </div>
+            </>
           )}
           <p className="modal-sub">{data.paired ? `${data.paired} phone${data.paired > 1 ? 's' : ''} paired.` : 'No phones paired yet.'}</p>
           {data.paired ? (

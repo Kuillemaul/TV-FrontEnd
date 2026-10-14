@@ -438,7 +438,7 @@ export function loadConfig(path = resolveConfigPath()): HearthConfig {
     if (Array.isArray(raw.livetv.player)) cfg.livetv.player = raw.livetv.player;
     if (Array.isArray(raw.livetv.recordingPlayer)) cfg.livetv.recordingPlayer = raw.livetv.recordingPlayer;
     if (raw.livetv.plex === true) cfg.livetv.plex = true;
-    if (raw.livetv.tvheadend?.url) {
+    if (raw.livetv.tvheadend?.url && !String(raw.livetv.tvheadend.url).includes('YOUR_')) {
       cfg.livetv.tvheadend = {
         url: String(raw.livetv.tvheadend.url).replace(/\/$/, ''),
         username: raw.livetv.tvheadend.username,

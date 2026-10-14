@@ -9,6 +9,10 @@ export interface Info {
   /** The network editor's port, when it's on. */
   admin?: { port: number; url: string } | null;
   clock24h: boolean;
+  /** The first-run setup screen is showing. */
+  setupActive?: boolean;
+  /** Pages switched off in setup: livetv, games, smarthome, lab, requests. */
+  hide?: string[];
   demo: { tv: boolean; homeassistant: boolean; games: boolean };
   /** Sections configured in config.yaml (or showing demo data). */
   setup: { tv: boolean; homeassistant: boolean; games: boolean };
@@ -16,7 +20,7 @@ export interface Info {
   ignoredExamples: string[];
   session: Session | null;
   configPath: string;
-  features: { plex: boolean; tvInputs: number; wakeWordAvailable: boolean; labActions: number; requests: boolean; downloads: boolean; morning?: { start: string; end: string } | null; doorbellCamera?: string | null };
+  features: { plex: boolean; mediaServer?: 'jellyfin' | 'emby' | null; tvInputs: number; wakeWordAvailable: boolean; labActions: number; requests: boolean; downloads: boolean; morning?: { start: string; end: string } | null; doorbellCamera?: string | null };
   screensaver: { idleMinutes: number; pickerAfterMinutes: number };
 }
 
@@ -364,6 +368,8 @@ export type ServerEvent =
   | { type: 'games' }
   | { type: 'apps' }
   | { type: 'lab' }
+  | { type: 'installs' }
+  | { type: 'setup' }
   | { type: 'display' }
   | { type: 'sleep'; endsAt: number | null }
   | { type: 'pip'; entity: string | null; name?: string }

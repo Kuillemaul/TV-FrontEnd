@@ -187,3 +187,4 @@ html.is-admin body { overflow: auto; background: #0b0d13; cursor: auto; }
 .ad-card > .ad-btn.primary { margin-top: 0.8rem; }
 .ad-kv .ad-grow { min-width: 0; }
 .ad-kv .ad-note { overflow-wrap: anywhere; }
+a.ad-btn { display: inline-block; text-decoration: none; }

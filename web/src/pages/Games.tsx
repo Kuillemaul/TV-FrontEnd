@@ -75,8 +75,8 @@ export function GamesPage() {
       {data?.demo ? <DemoBanner>Demo library. Install the Hearth PC agent on your gaming and emulator PCs to see your real games.</DemoBanner> : null}
       {data && !data.demo && data.hosts.length === 0 ? (
         <NotSetUp icon="gamepad" title="No gaming PCs yet">
-          Install the Hearth agent on each PC, then add it under <code>gaming.hosts</code> in config.yaml with the token the
-          agent’s installer printed.
+          Install Apollo (or Sunshine) and the Hearth agent on each PC, then add it in Settings → Connections → Gaming PCs with
+          the token the agent’s installer printed.
         </NotSetUp>
       ) : null}
 

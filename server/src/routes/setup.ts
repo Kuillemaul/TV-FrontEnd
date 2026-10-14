@@ -397,6 +397,25 @@ export function registerSetup(app: FastifyInstance, ctx: SetupContext): { active
     }),
   );
 
+  /** Settings → Phone remote: let phones on the network reach Hearth (they still have to pair). */
+  app.post('/api/setup/phone-remote', async () => run(() => (guard(), save([[['server', 'host'], '0.0.0.0']], 'phone remote turned on')))); 
+
+  /** Settings: show or hide top-bar pages (no restart needed). */
+  app.put<{ Body: { hide: string[] } }>('/api/setup/pages', async (req) =>
+    run(() => {
+      guard();
+      const hide = (req.body.hide ?? []).filter((h) => ['livetv', 'games', 'smarthome', 'lab', 'requests'].includes(h));
+      const text = existsSync(configPath) ? readFileSync(configPath, 'utf8') : '';
+      const next = setConfigValues(text, [[['ui', 'hide'], hide]]);
+      const error = validateConfigText(next, configPath);
+      if (error) throw new Error(error);
+      writeConfig(configPath, next);
+      config.ui.hide = hide;
+      bus.emit({ type: 'setup' });
+      return { hide };
+    }),
+  );
+
   /** Install (or remove) one app from Settings → Connections. */
   app.post<{ Body: { kind: 'docker' | 'flatpak'; app: string; action?: 'install' | 'remove'; media?: string } }>('/api/setup/install', async (req) =>
     run(() => {
@@ -404,11 +423,9 @@ export function registerSetup(app: FastifyInstance, ctx: SetupContext): { active
       const media = req.body.media ?? read()?.draft.media ?? '/srv/media';
       if (!MEDIA_RE.test(media) || media.includes('..')) throw new Error('Pick a folder under /srv, /mnt, /media, /home, /data or /storage');
       const job = installer.request(req.body.kind, req.body.app, req.body.action ?? 'install', { media });
-      const s = read();
-      if (s) {
-        s.draft.jobs[req.body.app] = job;
-        write(s);
-      }
+      const s = read() ?? { active: false, draft: fromConfig() };
+      s.draft.jobs[req.body.app] = job;
+      write(s);
       return { job };
     }),
   );

@@ -234,7 +234,7 @@ function SensorPicker({ options, homeassistant, onPick, onClose }: { options: Ha
       {homeassistant ? (
         <EntityList options={options} onPick={(p) => onPick(p.id, p.name)} empty="Nothing matches. Type a full entity id (like sensor.nas_disk) to use it anyway." />
       ) : (
-        <div className="empty">Connect Home Assistant first (homeassistant: in config.yaml) to show its sensors here.</div>
+        <div className="empty">Link Home Assistant first (Settings → Connections) to show its sensors here.</div>
       )}
       <div className="modal-actions">
         <Button onClick={onClose}>Cancel</Button>

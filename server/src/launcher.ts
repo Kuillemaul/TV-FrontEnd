@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from 'node:child_process';
+import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { createWriteStream, mkdirSync, type WriteStream } from 'node:fs';
 import { join } from 'node:path';
 import type { EventBus, ForegroundSession } from './bus.js';
@@ -148,6 +148,8 @@ export class Launcher {
 
     proc.once('exit', (code) => {
       this.log.info(`${id} exited (${code})`);
+      // An app that fails within seconds usually isn't installed (or crashed): say so instead of showing nothing.
+      if (typeof code === 'number' && code !== 0 && Date.now() - running.startedAt < 8000 && !watchOutput) this.explainFailure(running, code);
       if (this.current === running) {
         this.current = null;
         this.bus.emit({ type: 'session', session: null });
@@ -155,6 +157,14 @@ export class Launcher {
       running.onExit?.(code);
       this.notify('stop', { id: running.id, title: running.title, startedAt: running.startedAt });
     });
+  }
+
+  private explainFailure(running: Running, code: number): void {
+    const generic = `${running.title} closed straight away (error ${code}).`;
+    if (!running.flatpak) return this.bus.toast(generic, 'error');
+    execFile('flatpak', ['info', running.flatpak], { timeout: 5000 }, (err) =>
+      this.bus.toast(err ? `${running.title} isn’t installed on this TV. Install it from Settings → Connections or Apps → Edit apps.` : generic, 'error'),
+    );
   }
 
   /**

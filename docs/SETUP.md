@@ -1,6 +1,10 @@
 # Setting up Hearth
 
-You can do these in any order. Each part falls back to demo data until it's configured.
+Install Debian and run the installer (part 1), then reboot: **the TV opens a setup screen** that asks what you use
+(Plex, Jellyfin, Emby, Kodi, Live TV, Home Assistant, requests, downloads, game streaming) and, for each, whether to
+**link one you already have** or **install it on this machine**. It installs, signs in and links things for you; no
+config file editing. Everything later lives in **Settings → Connections** (or `http://<tv>:8780/setup` on a phone).
+The rest of this guide is for the details behind each part, and for anyone who prefers `config.yaml`.
 
 1. [The OptiPlex (OS + Hearth)](#1-the-optiplex)
 2. [Live TV with a USB tuner](#2-live-tv-with-a-usb-tuner)
@@ -50,7 +54,8 @@ sudo ./os/install.sh
 
 The installer:
 
-- installs `cage` (kiosk compositor), Chrome (with Widevine DRM for Netflix and similar), mpv, PipeWire, Intel VAAPI, Node 22, and Moonlight and Plex HTPC from Flathub
+- installs `cage` (kiosk compositor), Chrome (with Widevine DRM for Netflix and similar), mpv, PipeWire, Intel VAAPI, Node 22 and Flatpak (the setup screen installs Plex, Jellyfin, Kodi or Moonlight as you pick them)
+- sets up `hearth-apps` (a root helper started by a path unit) so the setup screen can install Docker apps (Jellyfin, Plex Media Server, Home Assistant, Seerr, Radarr, Sonarr, Prowlarr, qBittorrent, Tvheadend) into `/opt/hearth-apps/<app>`; it only installs apps listed in `os/apps/catalog.json`
 - copies Hearth to `/opt/hearth` and builds it
 - auto-logs `tv` in on tty1 and starts `cage → Chrome kiosk → Hearth`
 - runs the server as a systemd **user** service (`systemctl --user status hearth` as `tv`)
@@ -58,6 +63,36 @@ The installer:
 - lets Settings → Sleep/Restart/Shut down work without a password (polkit rule)
 - adds the Hearth boot splash (Plymouth), hides the boot menu and kernel text, and starts Chrome and the server
   side by side so the TV is ready sooner. Hold **Shift** or tap **Esc** while it boots to get the boot menu back.
+
+### First boot: the setup screen
+
+1. **Welcome:** *Set up this TV*, or *Look around with sample data first* (fake guide, games and smart home; run setup
+   later from Settings → Connections). A QR code opens the same screens on your phone: handy for addresses and tokens.
+   The TV and phone stay in step.
+2. **Name and clock.**
+3. **Your own movies and shows:** Plex, Jellyfin, Emby, Kodi (any, or none). For Plex and Jellyfin: *I have a server*
+   or *Install on this TV*.
+4. **What else:** Live TV (Tvheadend you have, Tvheadend installed here for a USB/PCIe tuner, or your Plex DVR), smart
+   home (Home Assistant: have / install), requests (Seerr), downloads (Radarr & Sonarr, installed with Prowlarr and
+   qBittorrent), game streaming, home lab page. Pages for things you say no to are hidden from the top bar.
+5. **Streaming apps:** Netflix, YouTube, Disney+, Prime Video, Max, Apple TV+, Hulu, Crunchyroll…
+6. **Media folder** (only when installing a media app here): the TV's own drive (`/srv/media`) or a mounted USB
+   drive/NAS. Hearth makes `movies`, `tv`, `music`, `downloads` and `recordings` in it.
+7. **Link everything up:** installs run in the background while you go through each item:
+   - **Plex:** *Sign in with Plex* shows a code for plex.tv/link, then pick your server. Installing here claims the new
+     server to your account and adds Movies/TV Shows/Music libraries.
+   - **Jellyfin:** servers on your network are found automatically; sign in, or use Quick Connect. Installing here:
+     pick a username and password and Hearth creates the account and libraries.
+   - **Home Assistant:** paste a long-lived token (easiest from the phone). Installing here: pick a username and
+     password; Hearth does Home Assistant's onboarding and makes its own token.
+   - **Seerr, Radarr, Sonarr:** address + API key; installed here they link themselves (Seerr and Prowlarr still need
+     their own first-run screens, linked from the QR codes shown).
+   - **Gaming PCs:** the PC's address and the agent token (see part 4). Pair Moonlight afterwards in Settings → Gaming PCs.
+
+**Finish** writes `config/config.yaml` and restarts Hearth (a couple of seconds). Change anything later in
+**Settings → Connections**: link, install here, unlink, hide pages, or *Run setup again*. Apps installed here run as
+Docker containers (`docker ps`; their settings stay in `/opt/hearth-apps` if removed). Installer log:
+`journalctl -u hearth-apps`.
 
 **Starting and leaving a game:** while a game loads, the PC itself shows a full-screen "Starting…" cover (so the
 stream never shows the desktop) until the game's window appears; it never takes focus from the game. Tune it in
@@ -109,7 +144,7 @@ channel or smart-home control to pin it to the top of Home. Do the same on Home 
 the Plex phone app). In Plex HTPC's settings, keep **Advertise as player** on. If it isn't found, Plex HTPC still
 opens and the show is first in its own Continue Watching row.
 
-Edit `/opt/hearth/config/config.yaml`, then reboot. Logs: `journalctl --user -u hearth -f` (as `tv`).
+Prefer files? Edit `/opt/hearth/config/config.yaml` (see `config/config.example.yaml` for every option), then reboot. Logs: `journalctl --user -u hearth -f` (as `tv`).
 
 **Updating:** `cd /opt/hearth && git pull && npm ci && npm run build && systemctl --user restart hearth`.
 

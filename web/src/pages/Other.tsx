@@ -12,6 +12,7 @@ import { BluetoothSettings } from '../components/BluetoothSettings';
 import { WifiSettings } from '../components/WifiSettings';
 import { Icon } from '../components/Icon';
 import { LabEditor } from '../components/LabEditor';
+import { Connections } from '../setup/Connections';
 import { Button, DemoBanner, Modal, NotSetUp, PageHeader, Tile } from '../components/Layout';
 import { post, useApi, useServerEvents, type AppTile, type Dashboard, type HaEntity, type LabStatus } from '../lib/api';
 import { useHearth } from '../lib/hearth';
@@ -64,10 +65,10 @@ export function SmartHomePage() {
           </Button>
         ) : null}
       </PageHeader>
-      {data?.demo ? <DemoBanner>Demo devices. Add your Home Assistant URL and a long-lived token in config.yaml.</DemoBanner> : null}
+      {data?.demo ? <DemoBanner>Demo devices. Link your Home Assistant in Settings → Connections.</DemoBanner> : null}
       {data && !data.setup ? (
         <NotSetUp icon="bulb" title="Home Assistant isn’t connected yet">
-          Add your Home Assistant address and a long-lived access token under <code>homeassistant</code> in config.yaml.
+          Link it (or install it on this TV) in Settings → Connections.
         </NotSetUp>
       ) : null}
       {data?.setup && !data.connected ? <DemoBanner>Reconnecting to Home Assistant…</DemoBanner> : null}
@@ -157,6 +158,7 @@ export function LabPage() {
 
 const SETTINGS_SECTIONS = [
   { id: 'profiles', label: 'Profiles & family', icon: 'home' },
+  { id: 'connections', label: 'Connections', icon: 'sliders' },
   { id: 'look', label: 'Look & apps', icon: 'palette' },
   { id: 'tv', label: 'TV & picture', icon: 'tv' },
   { id: 'sound', label: 'Sound', icon: 'volumeUp' },
@@ -278,6 +280,7 @@ export function SettingsPage() {
             </>
           ) : null}
           {section.id === 'sound' ? <SoundSettings /> : null}
+          {section.id === 'connections' ? <Connections /> : null}
           {section.id === 'network' ? (
             <>
               <WifiSettings />

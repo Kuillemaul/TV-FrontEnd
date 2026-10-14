@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GameLaunch, type LaunchProgress } from './components/GameLaunch';
 import { Icon } from './components/Icon';
 import { Logo } from './components/Logo';
+import { Setup } from './setup/Setup';
 import { setUiSoundsEnabled } from './lib/sounds';
 import { AlertStack, CameraPip } from './components/Alerts';
 import { openSearchLater, SearchPage } from './pages/Search';
@@ -324,6 +325,10 @@ export function App() {
 
   useServerEvents((e) => {
     switch (e.type) {
+      case 'setup':
+        // "Run setup again" from the phone or Settings: show (or leave) the setup screen.
+        void get<Info>('/api/info').then(setInfo).catch(() => {});
+        return;
       case 'sleep':
         return setSleepEndsAt(e.endsAt);
       case 'action':
@@ -423,6 +428,10 @@ export function App() {
     }
   }
 
+  if (info?.setupActive) return <Setup />;
+
+  // Pages switched off in setup (Settings → Look & apps turns them back on).
+  const hidden = (info?.hide ?? []).map((h) => (h === 'livetv' ? 'tv' : h));
   return (
     <HearthContext.Provider value={hearth}>
       <div className="shell">
@@ -432,7 +441,7 @@ export function App() {
             {info?.name ?? 'Hearth'}
           </div>
           <div className="tabs">
-            {TABS.filter((t) => (!allowed || allowed.includes(t.id)) && (t.id !== 'requests' || info?.features.requests || info?.features.downloads)).map((t) => (
+            {TABS.filter((t) => (!allowed || allowed.includes(t.id)) && !hidden.includes(t.id) && (t.id !== 'requests' || info?.features.requests || info?.features.downloads)).map((t) => (
               <button key={t.id} className={`tab ${page === t.id ? 'tab-active' : ''}`} data-nav data-page={t.id} onClick={() => navigate(t.id)}>
                 <Icon name={t.icon} size="1.2em" />
                 <span>{t.label}</span>

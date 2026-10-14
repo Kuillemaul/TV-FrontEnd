@@ -1,5 +1,9 @@
-# Hearth configuration. Copy to config/config.yaml and fill in.
-# Anything you leave out falls back to demo data, so you can set things up one piece at a time.
+# Hearth configuration reference.
+#
+# You don't need to write this by hand: on first boot the TV's setup screen (or http://<tv>:8780/setup
+# on a phone) writes config/config.yaml for you, and Settings → Connections changes it later.
+# This file lists every option, for anyone who prefers editing YAML. Copy the parts you want.
+# Sections you leave out are simply off. (With no config.yaml at all, the setup screen shows.)
 
 server:
   port: 8787
@@ -35,11 +39,12 @@ apps:
     name: Prime Video
     color: "#00a8e1"
     launch: { type: web, url: https://www.primevideo.com }
-  - id: jellyfin
-    name: Jellyfin
-    color: "#7a3fd1"
-    launch: { type: command, command: [flatpak, run, com.github.iwalton3.jellyfin-media-player, --tv, --fullscreen] }
-    controllerKeys: false   # Jellyfin Media Player reads controllers itself (others get controller → arrow keys)
+  # Programs need installing first (setup does it): flatpak install flathub com.github.iwalton3.jellyfin-media-player
+  # - id: jellyfin
+  #   name: Jellyfin
+  #   color: "#7a3fd1"
+  #   launch: { type: command, command: [flatpak, run, com.github.iwalton3.jellyfin-media-player, --tv, --fullscreen] }
+  #   controllerKeys: false   # Jellyfin Media Player reads controllers itself (others get controller → arrow keys)
 
 # Browser used for type: web apps. {url} and {profile} are filled in.
 # google-chrome-stable includes Widevine, which Netflix/Disney+/Prime need.
@@ -58,7 +63,7 @@ browser:
 # ---------------------------------------------------------------------------
 livetv:
   tvheadend:
-    url: http://127.0.0.1:9981
+    url: http://YOUR_TVHEADEND:9981   # e.g. http://127.0.0.1:9981 when it runs on this machine
     # Leave blank if Tvheadend allows 127.0.0.1 without a password (recommended),
     # otherwise set "HTTP authentication" to "Both plain and digest" in Tvheadend.
     username: ""

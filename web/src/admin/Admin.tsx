@@ -112,6 +112,15 @@ function Overview({ info, profiles, notify, go }: { info: Info | null; profiles:
     <section>
       <h1>Overview</h1>
       <div className="ad-card">
+        <h2>Connections</h2>
+        <p className="ad-muted">Link Plex, Jellyfin, Home Assistant, Live TV, Seerr, Radarr/Sonarr and gaming PCs, or install them on the TV. No config file editing.</p>
+        <div className="ad-actions">
+          <a className="ad-btn primary" href="/setup">
+            Open Connections
+          </a>
+        </div>
+      </div>
+      <div className="ad-card">
         {row('TV name', info?.name ?? '…', 'config')}
         {row('Watching now', info?.session?.title ?? 'Nothing (Home)')}
         {row('Profile on screen', active?.name ?? '…', 'profiles')}

@@ -150,7 +150,7 @@ export function RequestsPage() {
 
       {!seerr ? (
         <NotSetUp icon="download" title="Seerr isn’t set up">
-          Add your Seerr address and API key under <code>requests</code> in config.yaml (Seerr → Settings → General → API Key).
+          Link Seerr (or install it on this TV) in Settings → Connections.
         </NotSetUp>
       ) : debounced ? (
         search.items?.length === 0 ? <div className="empty">Nothing found for “{debounced}”.</div> : <MediaRow title={`Results for “${debounced}”`} items={search.items} onOpen={setOpen} />
