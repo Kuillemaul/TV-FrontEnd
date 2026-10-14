@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parse } from 'yaml';
-import { editConfigList } from './configedit.js';
+import { editConfigList, setConfigValues } from './configedit.js';
 
 const TEXT = `# my TV
 ui:
@@ -38,4 +38,20 @@ test('creates missing sections, even in an empty file or under an empty key', ()
 test('refuses to change an item that is no longer there', () => {
   assert.throws(() => editConfigList(TEXT, ['lab', 'services'], { op: 'remove', old: { name: 'Gone', url: 'x' } }), /isn’t in config.yaml/);
   assert.throws(() => editConfigList('lab: [oops', ['lab', 'services'], { op: 'add', item: {} }), /error to fix first/);
+});
+
+test('sets and removes values, keeping the rest', () => {
+  let text = setConfigValues(TEXT, [
+    [['ui', 'name'], 'Den'],
+    [['plex'], { url: 'http://plex.lan:32400', token: 'abc' }],
+    [['ui', 'hide'], ['games', 'lab']],
+  ]);
+  assert.match(text, /# the name on screen/);
+  const cfg = parse(text);
+  assert.equal(cfg.ui.name, 'Den');
+  assert.deepEqual(cfg.ui.hide, ['games', 'lab']);
+  assert.equal(cfg.plex.token, 'abc');
+  text = setConfigValues(text, [[['plex'], undefined], [['nothing', 'here'], undefined]]);
+  assert.equal(parse(text).plex, undefined);
+  assert.deepEqual(parse(setConfigValues('', [[['demo'], true]])), { demo: true });
 });

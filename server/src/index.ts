@@ -28,6 +28,8 @@ import { SleepTimer, sayMinutes } from './sleep.js';
 import { score } from './intents.js';
 import { registerAdminApi, startAdminServer } from './routes/admin.js';
 import { registerLabEdit } from './routes/labedit.js';
+import { registerSetup } from './routes/setup.js';
+import { AppInstaller } from './appinstall.js';
 import { installElevation, isElevated } from './elevate.js';
 import { ScreenTime } from './screentime.js';
 import { StateStore } from './state.js';
@@ -317,12 +319,17 @@ app.get('/api/info', async () => ({
   bootId,
   admin: config.admin.enabled ? { port: config.admin.port, url: `http://${lanAddress() ?? 'this-tv'}:${config.admin.port}` } : null,
   clock24h: config.ui.clock24h,
+  /** First-run setup is showing (TV and phone). */
+  setupActive: setup.active(),
+  /** Pages switched off in setup (top bar). */
+  hide: config.ui.hide,
   demo: { tv: tv.demo, homeassistant: Boolean(demoHome), games: games.demo },
   setup: { tv: Boolean(config.livetv.tvheadend || plexLive) || tv.demo, homeassistant: Boolean(ha || demoHome), games: config.gaming.hosts.length > 0 || games.demo },
   session: launcher.session,
   configPath: resolveConfigPath(),
   features: {
     plex: Boolean(plex),
+    mediaServer: config.mediaServer?.kind ?? null,
     tvInputs: config.tv.inputs.length,
     wakeWordAvailable: Boolean(ha),
     labActions: config.lab.actions.length,
@@ -829,6 +836,8 @@ app.get('/ws/voice', { websocket: true }, (socket) => voice.handle(socket));
 
 registerAdminApi(app, { config, configPath: resolveConfigPath(), bus, log });
 registerLabEdit(app, { config, configPath: resolveConfigPath(), bus, lab, ha, demoHome, log, fail, isKid });
+const installer = new AppInstaller(config.stateDir, bus);
+const setup = registerSetup(app, { config, configPath: resolveConfigPath(), bus, installer, log, fail, isKid });
 
 const webDist = fileURLToPath(new URL('../../web/dist', import.meta.url));
 if (existsSync(webDist)) {

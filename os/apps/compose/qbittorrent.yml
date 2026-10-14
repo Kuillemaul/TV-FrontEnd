@@ -1,0 +1,17 @@
+services:
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    restart: unless-stopped
+    environment:
+      TZ: "{tz}"
+      PUID: "{puid}"
+      PGID: "{pgid}"
+      WEBUI_PORT: "8080"
+    ports:
+      - "8080:8080"
+      - "6881:6881"
+      - "6881:6881/udp"
+    volumes:
+      - "{data}/config:/config"
+      - "{media}:/media"          # downloads go to /media/downloads so Radarr/Sonarr can move them

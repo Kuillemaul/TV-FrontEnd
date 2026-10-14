@@ -49,9 +49,8 @@ if ! command -v google-chrome-stable >/dev/null; then
   apt-get update && apt-get install -y google-chrome-stable
 fi
 
-echo "==> Flatpak apps (Moonlight, Plex HTPC)"
+echo "==> Flatpak (apps like Plex, Jellyfin, Kodi and Moonlight are installed from the setup screen)"
 flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-flatpak install -y --noninteractive flathub com.moonlight_stream.Moonlight tv.plex.PlexHTPC
 
 echo "==> TV user"
 id "$TV_USER" >/dev/null 2>&1 || useradd -m -s /bin/bash "$TV_USER"
@@ -80,7 +79,7 @@ if [[ "$(realpath "$REPO")" != "/opt/hearth" ]]; then
     rm -f "$keep"
   fi
 fi
-[[ -f /opt/hearth/config/config.yaml ]] || cp /opt/hearth/config/config.example.yaml /opt/hearth/config/config.yaml
+# No config.yaml yet: the TV opens the setup screen on first boot and writes one.
 chown -R "$TV_USER:$TV_USER" /opt/hearth
 sudo -u "$TV_USER" bash -c 'cd /opt/hearth && npm ci && npm run build'
 chmod +x /opt/hearth/os/*.sh
@@ -215,12 +214,37 @@ Restart=always
 [Install]
 WantedBy=multi-user.target
 UNIT
+# Setup screen / Settings → Connections: "Install here" drops a request file and this path unit
+# runs the installer as root. It only installs apps listed in os/apps/catalog.json.
+mkdir -p /opt/hearth-apps
+sudo -u "$TV_USER" mkdir -p "$TV_HOME/.local/state/hearth/apps-requests"
+cat > /etc/systemd/system/hearth-apps.service <<'UNIT'
+[Unit]
+Description=Install apps for Hearth
+After=network-online.target
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/hearth/os/hearth-apps.py
+TimeoutStartSec=2h
+UNIT
+cat > /etc/systemd/system/hearth-apps.path <<UNIT
+[Unit]
+Description=Install apps when Hearth asks
+[Path]
+PathExistsGlob=$TV_HOME/.local/state/hearth/apps-requests/*.json
+Unit=hearth-apps.service
+[Install]
+WantedBy=multi-user.target
+UNIT
+
 systemctl daemon-reload
+systemctl enable --now hearth-apps.path
 systemctl enable --now ydotoold.service
 systemctl enable --now hearth-update-nightly.timer
 systemctl enable --now hearth-update.path
 echo
 echo "Done. Next:"
-echo "  1. Edit /opt/hearth/config/config.yaml (Home Assistant token, Tvheadend, gaming PCs)"
-echo "  2. Reboot. The TV boots straight into Hearth."
-echo "  3. Pair Moonlight from Settings → Gaming PCs. Updates install by themselves every night."
+echo "  1. Reboot. The TV boots straight into Hearth's setup screen."
+echo "  2. Pick what you use (Plex, Jellyfin, Kodi, Home Assistant, games…): link what you already"
+echo "     have or install it on this machine. A QR code lets you do the typing on your phone."
+echo "  Updates install by themselves every night."

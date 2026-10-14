@@ -1,0 +1,12 @@
+services:
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    container_name: homeassistant
+    restart: unless-stopped
+    network_mode: host          # port 8123, and device discovery on your network
+    privileged: true            # USB sticks (Zigbee/Z-Wave) and Bluetooth
+    environment:
+      TZ: "{tz}"
+    volumes:
+      - "{data}/config:/config"
+      - /run/dbus:/run/dbus:ro

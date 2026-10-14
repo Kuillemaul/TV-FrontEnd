@@ -1,0 +1,17 @@
+services:
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    container_name: jellyfin
+    restart: unless-stopped
+    network_mode: host          # port 8096, and so phones/TVs on the network can find it
+    user: "{puid}:{pgid}"
+    environment:
+      TZ: "{tz}"
+    volumes:
+      - "{data}/config:/config"
+      - "{data}/cache:/cache"
+      - "{media}:/media"
+    group_add:
+      - "{render}"              # access to the graphics chip
+    devices:
+      - /dev/dri:/dev/dri       # Intel Quick Sync for transcoding

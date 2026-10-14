@@ -1,0 +1,15 @@
+services:
+  tvheadend:
+    image: lscr.io/linuxserver/tvheadend:latest
+    container_name: tvheadend
+    restart: unless-stopped
+    network_mode: host          # ports 9981 (web) and 9982 (streams)
+    environment:
+      TZ: "{tz}"
+      PUID: "{puid}"
+      PGID: "{pgid}"
+    volumes:
+      - "{data}/config:/config"
+      - "{media}/recordings:/recordings"
+    devices:
+      - /dev/dvb:/dev/dvb       # the TV tuner

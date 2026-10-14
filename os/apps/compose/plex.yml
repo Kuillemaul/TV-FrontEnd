@@ -1,0 +1,17 @@
+services:
+  plex:
+    image: plexinc/pms-docker:latest
+    container_name: plex
+    restart: unless-stopped
+    network_mode: host          # port 32400
+    environment:
+      TZ: "{tz}"
+      PLEX_UID: "{puid}"
+      PLEX_GID: "{pgid}"
+      PLEX_CLAIM: "{claim}"     # links the server to your Plex account on first start
+    volumes:
+      - "{data}/config:/config"
+      - "{data}/transcode:/transcode"
+      - "{media}:/data"
+    devices:
+      - /dev/dri:/dev/dri

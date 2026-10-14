@@ -204,7 +204,14 @@ export interface MorningConfig {
 
 export interface HearthConfig {
   server: { port: number; host: string };
-  ui: { name: string; clock24h: boolean };
+  ui: {
+    name: string;
+    clock24h: boolean;
+    /** Top-bar pages you don't use (livetv, games, smarthome, lab, requests); set by the setup screen. */
+    hide: string[];
+  };
+  /** A Jellyfin or Emby server (instead of, or as well as, Plex). */
+  mediaServer?: { kind: 'jellyfin' | 'emby'; url: string; token: string; userId: string };
   /** Browser used for web apps; {url} and {profile} are substituted. */
   browser: string[];
   apps: AppTile[];
@@ -263,7 +270,7 @@ export const DEFAULT_APPS: AppTile[] = [
 function defaults(): HearthConfig {
   return {
     server: { port: 8787, host: '127.0.0.1' },
-    ui: { name: 'Living Room', clock24h: false },
+    ui: { name: 'Living Room', clock24h: false, hide: [] },
     browser: [
       'google-chrome-stable',
       '--kiosk',
@@ -414,6 +421,13 @@ export function loadConfig(path = resolveConfigPath()): HearthConfig {
   cfg.demo = Boolean(raw.demo ?? false);
   Object.assign(cfg.server, raw.server);
   Object.assign(cfg.ui, raw.ui);
+  cfg.ui.hide = Array.isArray(raw.ui?.hide) ? raw.ui.hide.map(String) : [];
+  for (const kind of ['jellyfin', 'emby'] as const) {
+    const m = raw[kind];
+    if (!cfg.mediaServer && m?.url && m?.token && !isPlaceholder(m.token)) {
+      cfg.mediaServer = { kind, url: String(m.url).replace(/\/$/, ''), token: String(m.token), userId: String(m.userId ?? '') };
+    }
+  }
   if (Array.isArray(raw.browser)) cfg.browser = raw.browser;
   if (Array.isArray(raw.apps)) cfg.apps = raw.apps;
   if (raw.stateDir) cfg.stateDir = raw.stateDir;

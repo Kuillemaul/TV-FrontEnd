@@ -1,0 +1,20 @@
+{
+  "_comment": "Apps Hearth can install on this machine (Settings → Connections, first-run setup). Docker apps use compose/<id>.yml; {media}, {data}, {tz}, {puid}, {pgid} and {claim} are filled in by os/hearth-apps.py.",
+  "docker": {
+    "jellyfin": { "name": "Jellyfin", "what": "Media server for your own movies, shows and music", "port": 8096, "path": "/web", "media": true },
+    "plex": { "name": "Plex Media Server", "what": "Media server for your own movies, shows and music", "port": 32400, "path": "/web", "media": true },
+    "homeassistant": { "name": "Home Assistant", "what": "Lights, cameras, doorbell, sensors", "port": 8123, "path": "/" },
+    "seerr": { "name": "Seerr", "what": "Request movies and shows from the TV", "port": 5055, "path": "/" },
+    "radarr": { "name": "Radarr", "what": "Finds and downloads movies you request", "port": 7878, "path": "/", "media": true },
+    "sonarr": { "name": "Sonarr", "what": "Finds and downloads shows you request", "port": 8989, "path": "/", "media": true },
+    "prowlarr": { "name": "Prowlarr", "what": "Search sites for Radarr and Sonarr", "port": 9696, "path": "/" },
+    "qbittorrent": { "name": "qBittorrent", "what": "Download client for Radarr and Sonarr", "port": 8080, "path": "/", "media": true },
+    "tvheadend": { "name": "Tvheadend", "what": "Live TV from a USB/PCIe tuner, with a guide and recordings", "port": 9981, "path": "/", "media": true }
+  },
+  "flatpak": {
+    "plex-htpc": { "name": "Plex HTPC", "id": "tv.plex.PlexHTPC" },
+    "jellyfin-player": { "name": "Jellyfin Media Player", "id": "com.github.iwalton3.jellyfin-media-player" },
+    "kodi": { "name": "Kodi", "id": "tv.kodi.Kodi" },
+    "moonlight": { "name": "Moonlight", "id": "com.moonlight_stream.Moonlight" }
+  }
+}

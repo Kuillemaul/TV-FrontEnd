@@ -202,7 +202,7 @@ function listImages(dir: string): Array<{ file: string; size: number }> {
 }
 
 /** Exit and let systemd start Hearth again (Restart=always), picking up the new config. */
-function scheduleRestart(log: AdminContext['log']): void {
+export function scheduleRestart(log: AdminContext['log']): void {
   log.info('restarting to apply the new settings');
   setTimeout(hardExit, 600);
 }

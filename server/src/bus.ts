@@ -22,6 +22,10 @@ export type UiEvent =
   | { type: 'apps' }
   /** Home lab services, sensors or actions were added, changed or removed. */
   | { type: 'lab' }
+  /** App installs (setup screen / Connections) made progress. */
+  | { type: 'installs' }
+  /** The first-run setup moved on (TV and phone show the same step). */
+  | { type: 'setup' }
   | { type: 'display' }
   | { type: 'sleep'; endsAt: number | null }
   | { type: 'pip'; entity: string | null; name?: string }
