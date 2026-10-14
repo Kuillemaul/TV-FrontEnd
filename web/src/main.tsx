@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { ErrorBoundary, installErrorReporting } from './components/ErrorBoundary';
 import { AlertPage, CameraPage } from './components/Alerts';
 import { PairPage } from './components/Pairing';
 import { LoadingCoverPage } from './components/LoadingCover';
@@ -15,9 +16,12 @@ const Root = path.startsWith('/admin') ? AdminPage : path.startsWith('/remote') 
 if (path.startsWith('/remote')) document.body.classList.add('is-remote');
 if (path.startsWith('/alert')) document.body.classList.add('is-alert');
 
+installErrorReporting();
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <Root />
+    <ErrorBoundary>
+      <Root />
+    </ErrorBoundary>
   </StrictMode>,
 );
 

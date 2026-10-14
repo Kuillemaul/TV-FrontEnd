@@ -2130,3 +2130,10 @@ body.mouse-active .row-body:hover .row-arrow { opacity: 1; pointer-events: auto;
 .badge-busy { background: rgba(255, 181, 71, 0.92); color: #1b1300; }
 .dot-busy { background: var(--warn); box-shadow: 0 0 0.6rem var(--warn); }
 .busy-note { display: flex; align-items: center; gap: 0.6rem; padding: 0.7rem 1rem; margin-bottom: 1rem; border-radius: 0.7rem; background: rgba(255, 181, 71, 0.12); border: 1px solid rgba(255, 181, 71, 0.35); color: #ffd99a; }
+
+/* Shown instead of a blank screen when the interface crashes. */
+.crash { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.2rem; padding: 4rem; background: var(--bg); text-align: center; }
+.crash h1 { font-size: 2.6rem; margin: 0; }
+.crash p { color: var(--text-2); font-size: 1.3rem; margin: 0; }
+.crash button { padding: 1rem 2rem; border-radius: 0.8rem; background: var(--text); color: var(--bg); font-weight: 700; font-size: 1.2rem; }
+.crash pre { max-width: 70rem; white-space: pre-wrap; color: var(--text-3); font-size: 1rem; }

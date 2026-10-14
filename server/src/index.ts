@@ -582,6 +582,13 @@ app.get<{ Querystring: { refresh?: string; all?: string } }>('/api/games', async
   return { demo: games.demo, hosts: await games.hosts(), games: list, recent };
 });
 
+// The TV interface reports its own crashes here, so they show up in journalctl.
+app.post<{ Body: { message?: string; stack?: string; path?: string } }>('/api/client-error', async (req) => {
+  const b = req.body ?? {};
+  log.warn(`UI error on ${String(b.path ?? '?').slice(0, 60)}: ${String(b.message ?? '').slice(0, 500)}\n${String(b.stack ?? '').slice(0, 2000)}`);
+  return { ok: true };
+});
+
 // Cheap to poll: which PCs are awake and whether someone is using them.
 app.get('/api/games/hosts', async () => ({ hosts: await games.hosts() }));
 
