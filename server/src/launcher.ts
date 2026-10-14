@@ -7,6 +7,14 @@ import { expand, type HearthConfig, type LaunchSpec } from './config.js';
 interface Running extends ForegroundSession {
   proc: ChildProcess;
   onExit?: (code: number | null) => void;
+  /** Set for `flatpak run <app>`: the app lives in Flatpak's sandbox and needs `flatpak kill` too. */
+  flatpak: string | null;
+}
+
+/** The app id in a `flatpak run [--options] <app.id> [args]` command, else null. */
+export function flatpakAppId(argv: string[]): string | null {
+  if (!/(^|\/)flatpak$/.test(argv[0] ?? '') || argv[1] !== 'run') return null;
+  return argv.slice(2).find((a) => !a.startsWith('-')) ?? null;
 }
 
 export type SessionListener = (event: 'start' | 'stop', session: ForegroundSession) => void;
@@ -98,7 +106,7 @@ export class Launcher {
       proc.once('error', (err) => reject(new Error(`Could not start ${title}: ${err.message}`)));
     });
 
-    const running: Running = { id, title, startedAt: Date.now(), proc, onExit };
+    const running: Running = { id, title, startedAt: Date.now(), proc, onExit, flatpak: flatpakAppId(argv) };
     this.current = running;
     this.bus.emit({ type: 'session', session: this.session });
     this.notify('start', this.session!);
@@ -120,10 +128,21 @@ export class Launcher {
     if (!running?.proc.pid) return;
     const pid = running.proc.pid;
     const exited = new Promise<void>((r) => running.proc.once('exit', () => r()));
+    // A Flatpak app (Plex HTPC, Moonlight…) runs in its own sandbox: signalling the `flatpak run`
+    // wrapper can leave the app itself on screen. Ask Flatpak to close it as well.
+    if (running.flatpak) this.flatpakKill(running.flatpak);
     killGroup(pid, 'SIGTERM');
-    const timer = setTimeout(() => killGroup(pid, 'SIGKILL'), 4000);
+    const timer = setTimeout(() => {
+      killGroup(pid, 'SIGKILL');
+      if (running.flatpak) this.flatpakKill(running.flatpak);
+    }, 4000);
     await exited;
     clearTimeout(timer);
+  }
+
+  private flatpakKill(app: string): void {
+    const p = spawn('flatpak', ['kill', app], { stdio: 'ignore' });
+    p.on('error', (err) => this.log.error(`flatpak kill ${app}: ${err.message}`));
   }
 
   /** Run a short-lived system command (volume, power…) and wait for it. */
