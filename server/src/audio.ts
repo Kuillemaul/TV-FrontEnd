@@ -222,6 +222,22 @@ export class AudioControl {
     }
   }
 
+  /**
+   * Put the remembered output back if the sound system has drifted from it (after a reboot, or
+   * when the TV is switched on later and HDMI comes back with a default profile). Leaves it alone
+   * while the remembered port has nothing plugged in. Returns true when it switched.
+   */
+  async restore(choice: { outputId: string; channels: number } | undefined): Promise<boolean> {
+    if (!choice) return false;
+    const now = await this.status();
+    if (!now.available) return false;
+    const out = now.outputs.find((o) => o.id === choice.outputId);
+    if (!out?.available) return false;
+    if (now.current?.outputId === choice.outputId && now.current.channels === choice.channels) return false;
+    await this.setOutput(choice.outputId, choice.channels);
+    return true;
+  }
+
   async setVolume(percent: number): Promise<void> {
     await pactl(['set-sink-volume', '@DEFAULT_SINK@', `${Math.max(0, Math.min(100, Math.round(percent)))}%`]);
     await pactl(['set-sink-mute', '@DEFAULT_SINK@', '0']);

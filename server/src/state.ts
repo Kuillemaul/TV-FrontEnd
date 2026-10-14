@@ -24,6 +24,8 @@ interface PersistedState {
   display?: DisplayMode;
   /** Set while re-applying `display` at start-up; still set next time = it crashed the session. */
   displayRestoring?: number;
+  /** Sound output chosen in Settings → Sound, put back at start-up and whenever it drifts. */
+  audioOutput?: { outputId: string; channels: number };
 }
 
 export interface DisplayMode {
@@ -79,6 +81,15 @@ export class StateStore {
 
   setDisplay(mode: DisplayMode | undefined): void {
     this.data.display = mode;
+    this.save();
+  }
+
+  get audioOutput(): PersistedState['audioOutput'] {
+    return this.data.audioOutput;
+  }
+
+  setAudioOutput(choice: PersistedState['audioOutput']): void {
+    this.data.audioOutput = choice;
     this.save();
   }
 

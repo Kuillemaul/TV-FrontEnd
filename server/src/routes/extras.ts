@@ -110,10 +110,21 @@ export function registerExtras(app: FastifyInstance, ctx: ExtrasContext): void {
   app.post<{ Body: { outputId: string; channels: number } }>('/api/audio/output', async (req) =>
     run(async () => {
       requireParent();
-      await audio.setOutput(String(req.body.outputId), Number(req.body.channels) || 2);
+      const choice = { outputId: String(req.body.outputId), channels: Number(req.body.channels) || 2 };
+      await audio.setOutput(choice.outputId, choice.channels);
+      state.setAudioOutput(choice);
       return audio.status();
     }),
   );
+  // The sound system can pick its own default after a reboot (e.g. 5.1 a TV can't play, so silence):
+  // keep putting back what was chosen in Settings.
+  const restoreAudio = () =>
+    audio
+      .restore(state.audioOutput)
+      .then((changed) => changed && app.log.info(`sound: restored ${state.audioOutput!.outputId} (${state.audioOutput!.channels} ch)`))
+      .catch((err) => app.log.warn(`sound restore: ${(err as Error).message}`));
+  setTimeout(() => void restoreAudio(), 5000);
+  setInterval(() => void restoreAudio(), 30_000).unref();
   app.post<{ Body: { percent: number } }>('/api/audio/volume', async (req) => run(() => audio.setVolume(Number(req.body.percent))));
   app.post<{ Body: { muted: boolean } }>('/api/audio/mute', async (req) => run(() => audio.setMute(Boolean(req.body.muted))));
   app.post<{ Body: { channel: number } }>('/api/audio/test', async (req) => run(() => audio.test(Number(req.body.channel))));
