@@ -95,6 +95,8 @@ export function Tile({ title, subtitle, image, color, shape = 'wide', badge, ico
       data-nav
       data-pin={pin ? JSON.stringify(pin) : undefined}
       data-nav-default={autoFocus || undefined}
+      // App tiles can be just a logo; give them their name.
+      aria-label={shape === 'app' ? title : undefined}
       onClick={onSelect}
       style={color ? ({ '--tile-color': color } as React.CSSProperties) : undefined}
     >

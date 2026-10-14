@@ -426,7 +426,7 @@ export function App() {
   return (
     <HearthContext.Provider value={hearth}>
       <div className="shell">
-        <nav className="topbar" data-nav-group>
+        <nav className="topbar" data-nav-group data-nav-exit-right="none" data-nav-exit-left="none" data-nav-exit-up="none">
           <div className="brand">
             <Logo className="brand-mark" />
             {info?.name ?? 'Hearth'}
@@ -471,7 +471,14 @@ export function App() {
         </nav>
 
         {/* Remount pages when the profile or its curation changes so they refetch. */}
-        <main className="main" ref={mainRef} key={profile ? `${profile.id}|${profile.apps}|${profile.games}|${profile.liveTv}` : 'none'}>
+        <main
+          className="main"
+          ref={mainRef}
+          // Focus stays in the page (rows scrolled under the top bar included); Up from its top row goes to this page's tab.
+          data-nav-exit-up=".topbar .tab-active, .topbar [data-nav]"
+          data-nav-exit-left="none"
+          data-nav-exit-right="none"
+          key={profile ? `${profile.id}|${profile.apps}|${profile.games}|${profile.liveTv}` : 'none'}>
           {page === 'home' && <HomePage />}
           {page === 'tv' && <LiveTvPage />}
           {page === 'apps' && <AppsPage />}

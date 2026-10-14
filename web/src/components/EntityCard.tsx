@@ -83,7 +83,7 @@ function describe(e: HaEntity): string {
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ');
 
-export function EntityCard({ entity, compact }: { entity: HaEntity; compact?: boolean }) {
+export function EntityCard({ entity, compact, isDefault }: { entity: HaEntity; compact?: boolean; isDefault?: boolean }) {
   const [domain] = entity.entity_id.split('.');
   const name = entity.attributes.friendly_name ?? entity.entity_id;
   const action = primaryAction(entity);
@@ -96,6 +96,7 @@ export function EntityCard({ entity, compact }: { entity: HaEntity; compact?: bo
       <button
         className="entity-main"
         data-nav
+        data-nav-default={isDefault || undefined}
         data-pin={JSON.stringify({ kind: 'entity', id: entity.entity_id, name: entity.attributes.friendly_name })}
         onClick={action ?? undefined}
         aria-disabled={!action}

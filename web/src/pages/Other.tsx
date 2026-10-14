@@ -14,6 +14,7 @@ import { Icon } from '../components/Icon';
 import { Button, DemoBanner, Modal, NotSetUp, PageHeader, Tile } from '../components/Layout';
 import { post, useApi, useServerEvents, type AppTile, type Dashboard, type HaEntity, type LabStatus } from '../lib/api';
 import { useHearth } from '../lib/hearth';
+import { focusElement } from '../nav/spatial';
 import { appArt } from '../components/TileArt';
 
 export function AppsPage() {
@@ -70,12 +71,13 @@ export function SmartHomePage() {
       ) : null}
       {data?.setup && !data.connected ? <DemoBanner>Reconnecting to Home Assistant…</DemoBanner> : null}
       <NowPlaying dash={data} />
-      {data?.sections.map((s) => (
+      {data?.sections.map((s, si) => (
         <section className="ha-section" key={s.title}>
           <h2>{s.title}</h2>
           <div className="grid grid-entities">
-            {s.entities.map((e) => (
-              <EntityCard key={e.entity_id} entity={e} />
+            {s.entities.map((e, ei) => (
+              // Start on the first device, not the music controls above.
+              <EntityCard key={e.entity_id} entity={e} isDefault={si === 0 && ei === 0} />
             ))}
           </div>
         </section>
@@ -176,7 +178,7 @@ export function SettingsPage() {
       <PageHeader title="Settings" />
       <div className="settings-layout">
         {/* Moving down the menu shows each section; Right goes into it. */}
-        <nav className="settings-menu" data-nav-group aria-label="Settings sections">
+        <nav className="settings-menu" data-nav-group data-nav-exit-right=".settings-content [data-nav]" data-nav-exit-left="none" data-nav-exit-up=".topbar .tab-active" aria-label="Settings sections">
           {SETTINGS_SECTIONS.map((x) => (
             <button
               key={x.id}
@@ -184,14 +186,21 @@ export function SettingsPage() {
               data-nav
               data-nav-default={x.id === section.id || undefined}
               onFocus={() => choose(x.id)}
-              onClick={() => choose(x.id)}
+              onClick={() => {
+                choose(x.id);
+                // OK on a section opens it: focus its first setting.
+                requestAnimationFrame(() => {
+                  const first = document.querySelector<HTMLElement>('.settings-content [data-nav]');
+                  if (first) focusElement(first);
+                });
+              }}
             >
               <Icon name={x.icon} size="1.2em" />
               <span>{x.label}</span>
             </button>
           ))}
         </nav>
-        <div className="settings-content" key={section.id}>
+        <div className="settings-content" key={section.id} data-nav-exit-left=".settings-menu-item.active" data-nav-exit-right="none" data-nav-exit-down="none" data-nav-exit-up=".topbar .tab-active">
           {section.id === 'profiles' ? (
             <>
               <section className="settings-group">
@@ -233,14 +242,17 @@ export function SettingsPage() {
               <section className="settings-group">
                 <h2>Sleep timer</h2>
                 <div className="settings-row" data-nav-group>
-                  {[30, 60, 90, 120].map((m) => (
-                    <Button key={m} icon="moon" onClick={() => void post('/api/sleep', { minutes: m }).then(() => hearth.toast(`Going to sleep in ${m < 60 ? `${m} min` : `${m / 60} h`}`))}>
-                      {m < 60 ? `${m} min` : `${m / 60} h`}
-                    </Button>
-                  ))}
-                  <Button variant="ghost" onClick={() => void post('/api/sleep', { minutes: 0 }).then(() => hearth.toast('Sleep timer off'))}>
+                  <Button icon="moon" variant="ghost" onClick={() => void post('/api/sleep', { minutes: 0 }).then(() => hearth.toast('Sleep timer off'))}>
                     Off
                   </Button>
+                  {[15, 30, 60, 90, 120].map((m) => {
+                    const label = m < 60 ? `${m} min` : `${m / 60} h`.replace('1.5 h', '1½ h');
+                    return (
+                      <Button key={m} onClick={() => void post('/api/sleep', { minutes: m }).then(() => hearth.toast(`Going to sleep in ${label}`))}>
+                        {label}
+                      </Button>
+                    );
+                  })}
                 </div>
                 <p className="modal-sub">Or say “sleep timer one hour”, or use quick settings. A minute before, you can choose to keep watching.</p>
               </section>

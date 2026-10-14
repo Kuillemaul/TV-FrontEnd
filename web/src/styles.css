@@ -407,7 +407,7 @@ h1, h2 { margin: 0; font-weight: 650; letter-spacing: -0.01em; }
 
 .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: var(--on-accent, #fff); }
 .btn-danger { background: rgba(255, 93, 108, 0.18); color: #ffb3ba; }
-.btn-ghost { background: transparent; color: var(--text-2); }
+.btn-ghost { background: transparent; color: var(--text-2); box-shadow: inset 0 0 0 1px var(--surface-2); }
 .btn:focus { background: var(--text); color: var(--bg); transform: scale(1.05); }
 .btn:disabled { opacity: 0.4; }
 

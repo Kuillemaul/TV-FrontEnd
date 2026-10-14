@@ -176,7 +176,7 @@ function GuideGrid({ onChoose }: { onChoose: () => void }) {
     <>
       {data.demo ? <DemoBanner>Demo guide. Connect Tvheadend and your USB tuner in config.yaml to see real channels.</DemoBanner> : null}
       <GuideDetails programme={focused} channel={focused ? channelOf(focused) : undefined} recording={focused ? recordingOf(focused) : undefined} now={now} h24={h24} />
-      <div className="guide">
+      <div className="guide" data-nav-exit-right="none">
         <div className="guide-row guide-times">
           <div className="guide-channel guide-corner">{formatTime(now, h24)}</div>
           <div className="guide-timeline" style={{ width: `${width}rem` }}>

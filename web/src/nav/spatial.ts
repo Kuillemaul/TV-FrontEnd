@@ -5,6 +5,9 @@
  * the geometrically closest element in that direction. The topmost `[data-nav-scope]`
  * (e.g. an open modal) traps focus. `[data-nav-group]` containers (rows) remember their
  * last focused child so moving up/down between rows returns you where you were.
+ * `data-nav-exit-<dir>` on a container decides where leaving it that way goes: a CSS selector
+ * (the first visible match gets focus; comma-separated ones are tried in order), or "none" to stay put
+ * at that edge. Focus stays inside such a container while there's anywhere to go in that direction.
  *
  * Inputs:
  *   keyboard / IR / CEC remotes  → arrows, Enter, Escape/Backspace/BrowserBack
@@ -96,7 +99,11 @@ function score(dir: Dir, a: DOMRect, b: DOMRect): number | null {
   }
   primary = Math.max(primary, 0);
   // Strongly prefer elements that line up with the current one.
-  return overlap > 0 ? primary + cross * 0.1 : primary + cross * 2 + 200;
+  if (overlap > 0) return primary + cross * 0.1;
+  // Otherwise how far it sits to the side (edge to edge, so the next tile over in a shorter row
+  // beats something lined up but far away, like the top bar).
+  const gap = dir === 'left' || dir === 'right' ? Math.max(b.top - a.bottom, a.top - b.bottom) : Math.max(b.left - a.right, a.left - b.right);
+  return primary + Math.max(gap, 0) * 1.5 + 60;
 }
 
 export function move(dir: Dir): void {
@@ -108,19 +115,32 @@ export function move(dir: Dir): void {
     return;
   }
   const a = current.getBoundingClientRect();
+  // A container with a `data-nav-exit-<dir>` rule keeps focus inside while there's somewhere to go;
+  // at its edge the rule decides: "none" stays put, a selector jumps there.
+  const box = current.closest(`[data-nav-exit-${dir}]`);
   let best: HTMLElement | null = null;
   let bestScore = Infinity;
   for (const el of all) {
-    if (el === current) continue;
+    if (el === current || (box && !box.contains(el))) continue;
     const s = score(dir, a, el.getBoundingClientRect());
     if (s !== null && s < bestScore) {
       best = el;
       bestScore = s;
     }
   }
+  let exit = false;
+  if (!best && box) {
+    const rule = box.getAttribute(`data-nav-exit-${dir}`)!;
+    // Selectors separated by commas are tried in order.
+    for (const sel of rule === 'none' ? [] : rule.split(',')) {
+      best = Array.from(document.querySelectorAll<HTMLElement>(sel)).find((el) => all.includes(el)) ?? null;
+      if (best) break;
+    }
+    exit = true;
+  }
   if (!best) return;
 
-  if (dir === 'up' || dir === 'down') {
+  if (!exit && (dir === 'up' || dir === 'down')) {
     const group = best.closest('[data-nav-group]');
     if (group && group !== current.closest('[data-nav-group]')) {
       const remembered = groupMemory.get(group);
