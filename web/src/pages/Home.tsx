@@ -1,8 +1,8 @@
-import { NowPlaying } from '../components/NowPlaying';
 import { useEffect, useMemo, useState } from 'react';
 import { EntityCard } from '../components/EntityCard';
 import { PinnedRow } from '../components/Pins';
 import { DownloadsList, openMediaLater } from './Requests';
+import { NowPlaying } from '../components/NowPlaying';
 import { Icon } from '../components/Icon';
 import { Row, Tile } from '../components/Layout';
 import { formatTime, get, post, useApi, useServerEvents, type AppTile, type Dashboard, type GameLibrary, type Guide, type OnDeckItem, type WatchlistItem } from '../lib/api';

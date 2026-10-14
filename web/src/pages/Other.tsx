@@ -1,6 +1,6 @@
-import { NowPlaying } from '../components/NowPlaying';
 import { useState } from 'react';
 import { EntityCard } from '../components/EntityCard';
+import { NowPlaying } from '../components/NowPlaying';
 import { AddProfile, Avatar, PinPad } from '../components/Profiles';
 import { Sparkline } from '../components/Sparkline';
 import { SettingsExtras } from '../components/SettingsExtras';
@@ -143,107 +143,174 @@ export function LabPage() {
   );
 }
 
+const SETTINGS_SECTIONS = [
+  { id: 'profiles', label: 'Profiles & family', icon: 'home' },
+  { id: 'look', label: 'Look & apps', icon: 'palette' },
+  { id: 'tv', label: 'TV & picture', icon: 'tv' },
+  { id: 'sound', label: 'Sound', icon: 'volumeUp' },
+  { id: 'network', label: 'Network & remote', icon: 'wifi' },
+  { id: 'games', label: 'Games & controllers', icon: 'gamepad' },
+  { id: 'alerts', label: 'Alerts & automations', icon: 'bell' },
+  { id: 'about', label: 'Help & about', icon: 'settings' },
+] as const;
+type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]['id'];
+/** The section you were last in, for coming back to Settings. */
+let lastSettingsSection: SettingsSectionId = 'profiles';
+
 export function SettingsPage() {
   const hearth = useHearth();
+  const [current, setCurrent] = useState<SettingsSectionId>(lastSettingsSection);
+  const choose = (id: SettingsSectionId) => {
+    lastSettingsSection = id;
+    setCurrent(id);
+  };
   const [confirm, setConfirm] = useState<null | { action: string; label: string }>(null);
   const [adding, setAdding] = useState(false);
   const [padTest, setPadTest] = useState(false);
   const sys = (action: string) => void post(`/api/system/${action}`);
 
+  const section = SETTINGS_SECTIONS.find((x) => x.id === current) ?? SETTINGS_SECTIONS[0];
+
   return (
     <div className="page">
       <PageHeader title="Settings" />
-      <section className="settings-group">
-        <h2>Profiles</h2>
-        <div className="profile-cards" data-nav-group>
-          {hearth.profiles?.profiles.map((p) => (
-            <button key={p.id} className="profile-card" data-nav onClick={() => hearth.editProfile(p.id)}>
-              <Avatar profile={p} />
-              <span className="profile-card-name">{p.name}</span>
-              <span className="profile-card-sub">
-                {p.kind === 'kid' ? `★ Kid · ${p.apps?.length ?? 'all'} apps · ${p.games?.length ?? 'all'} games` : `Parent${p.hasPin ? ' · PIN' : ''}`}
-              </span>
+      <div className="settings-layout">
+        {/* Moving down the menu shows each section; Right goes into it. */}
+        <nav className="settings-menu" data-nav-group aria-label="Settings sections">
+          {SETTINGS_SECTIONS.map((x) => (
+            <button
+              key={x.id}
+              className={`settings-menu-item ${x.id === section.id ? 'active' : ''}`}
+              data-nav
+              data-nav-default={x.id === section.id || undefined}
+              onFocus={() => choose(x.id)}
+              onClick={() => choose(x.id)}
+            >
+              <Icon name={x.icon} size="1.2em" />
+              <span>{x.label}</span>
             </button>
           ))}
-          <button className="profile-card profile-card-add" data-nav onClick={() => setAdding(true)}>
-            <span className="avatar avatar-md avatar-add">+</span>
-            <span className="profile-card-name">Add profile</span>
-            <span className="profile-card-sub">For the kids, or another adult</span>
-          </button>
-        </div>
-      </section>
-      <section className="settings-group">
-        <h2>Look & apps</h2>
-        <div className="settings-row" data-nav-group>
-          <Button icon="palette" onClick={hearth.openTheme}>Theme</Button>
-          <Button icon="apps" onClick={hearth.editApps}>Arrange apps</Button>
-        </div>
-      </section>
-      <SettingsExtras />
-      <DisplaySettings />
-      <SoundSettings />
-      {!hearth.isKid ? <GamingPcsSettings /> : null}
-      <WifiSettings />
-      <BluetoothSettings />
-      <section className="settings-group">
-        <h2>Controllers</h2>
-        <div className="settings-row" data-nav-group>
-          <Button icon="gamepad" onClick={() => setPadTest(true)}>Test controllers</Button>
-        </div>
-      </section>
-      <section className="settings-group">
-        <h2>Sleep timer</h2>
-        <div className="settings-row" data-nav-group>
-          {[30, 60, 90, 120].map((m) => (
-            <Button key={m} icon="moon" onClick={() => void post('/api/sleep', { minutes: m }).then(() => hearth.toast(`Going to sleep in ${m < 60 ? `${m} min` : `${m / 60} h`}`))}>
-              {m < 60 ? `${m} min` : `${m / 60} h`}
-            </Button>
-          ))}
-          <Button variant="ghost" onClick={() => void post('/api/sleep', { minutes: 0 }).then(() => hearth.toast('Sleep timer off'))}>
-            Off
-          </Button>
-        </div>
-        <p className="modal-sub">Or say “sleep timer one hour”. A minute before, you can choose to keep watching.</p>
-      </section>
-      <section className="settings-group">
-        <h2>Power</h2>
-        <div className="settings-row" data-nav-group>
-          <Button icon="moon" onClick={() => setConfirm({ action: 'suspend', label: 'Sleep' })}>Sleep</Button>
-          <Button icon="refresh" onClick={() => setConfirm({ action: 'reboot', label: 'Restart' })}>Restart</Button>
-          <Button icon="power" variant="danger" onClick={() => setConfirm({ action: 'poweroff', label: 'Shut down' })}>Shut down</Button>
-          <Button icon="refresh" variant="ghost" onClick={() => location.reload()}>Reload interface</Button>
-        </div>
-      </section>
-      <section className="settings-group">
-        <h2>Controls</h2>
-        <div className="help-grid">
-          <div><kbd>Arrows</kbd> / D-pad / stick</div><div>Move</div>
-          <div><kbd>Enter</kbd> / A</div><div>Select</div>
-          <div><kbd>Esc</kbd> / <kbd>Backspace</kbd> / B</div><div>Back</div>
-          <div><kbd>M</kbd> / Y / mic key</div><div>Voice assistant</div>
-          <div><kbd>P</kbd> / X / Menu key / right-click</div><div>Pin to Home (or move/unpin on Home)</div>
-          <div>Remote Home / hold Guide button</div><div>Close any app and return here</div>
-        </div>
-      </section>
-      <section className="settings-group">
-        <h2>About</h2>
-        <div className="about">
-          {hearth.info?.admin ? (
-            <div>
-              Edit everything from your phone or laptop: <code>{hearth.info.admin.url}</code>
-            </div>
+        </nav>
+        <div className="settings-content" key={section.id}>
+          {section.id === 'profiles' ? (
+            <>
+              <section className="settings-group">
+                <h2>Profiles</h2>
+                <div className="profile-cards" data-nav-group>
+                  {hearth.profiles?.profiles.map((p) => (
+                    <button key={p.id} className="profile-card" data-nav onClick={() => hearth.editProfile(p.id)}>
+                      <Avatar profile={p} />
+                      <span className="profile-card-name">{p.name}</span>
+                      <span className="profile-card-sub">
+                        {p.kind === 'kid' ? `★ Kid · ${p.apps?.length ?? 'all'} apps · ${p.games?.length ?? 'all'} games` : `Parent${p.hasPin ? ' · PIN' : ''}`}
+                      </span>
+                    </button>
+                  ))}
+                  <button className="profile-card profile-card-add" data-nav onClick={() => setAdding(true)}>
+                    <span className="avatar avatar-md avatar-add">+</span>
+                    <span className="profile-card-name">Add profile</span>
+                    <span className="profile-card-sub">For the kids, or another adult</span>
+                  </button>
+                </div>
+              </section>
+              <SettingsExtras part="family" />
+            </>
           ) : null}
-          <div>Config file: <code>{hearth.info?.configPath}</code></div>
-          <div>
-            {(['tv', 'homeassistant', 'games'] as const)
-              .map((k) => `${{ tv: 'Live TV', homeassistant: 'Home Assistant', games: 'Games' }[k]} ${hearth.info?.demo[k] ? 'demo' : hearth.info?.setup[k] ? 'set up' : 'not set up'}`)
-              .join(' · ')}
-          </div>
-          {hearth.info?.ignoredExamples.length ? (
-            <div>Skipped example entries still in config.yaml (safe to delete): {hearth.info.ignoredExamples.join(', ')}</div>
+          {section.id === 'look' ? (
+            <section className="settings-group">
+              <h2>Look & apps</h2>
+              <div className="settings-row" data-nav-group>
+                <Button icon="palette" onClick={hearth.openTheme}>Theme</Button>
+                <Button icon="apps" onClick={hearth.editApps}>Arrange apps</Button>
+              </div>
+            </section>
+          ) : null}
+          {section.id === 'tv' ? (
+            <>
+              <SettingsExtras part="tv" />
+              <DisplaySettings />
+              <section className="settings-group">
+                <h2>Sleep timer</h2>
+                <div className="settings-row" data-nav-group>
+                  {[30, 60, 90, 120].map((m) => (
+                    <Button key={m} icon="moon" onClick={() => void post('/api/sleep', { minutes: m }).then(() => hearth.toast(`Going to sleep in ${m < 60 ? `${m} min` : `${m / 60} h`}`))}>
+                      {m < 60 ? `${m} min` : `${m / 60} h`}
+                    </Button>
+                  ))}
+                  <Button variant="ghost" onClick={() => void post('/api/sleep', { minutes: 0 }).then(() => hearth.toast('Sleep timer off'))}>
+                    Off
+                  </Button>
+                </div>
+                <p className="modal-sub">Or say “sleep timer one hour”, or use quick settings. A minute before, you can choose to keep watching.</p>
+              </section>
+              <section className="settings-group">
+                <h2>Power</h2>
+                <div className="settings-row" data-nav-group>
+                  <Button icon="moon" onClick={() => setConfirm({ action: 'suspend', label: 'Sleep' })}>Sleep</Button>
+                  <Button icon="refresh" onClick={() => setConfirm({ action: 'reboot', label: 'Restart' })}>Restart</Button>
+                  <Button icon="power" variant="danger" onClick={() => setConfirm({ action: 'poweroff', label: 'Shut down' })}>Shut down</Button>
+                  <Button icon="refresh" variant="ghost" onClick={() => location.reload()}>Reload interface</Button>
+                </div>
+              </section>
+            </>
+          ) : null}
+          {section.id === 'sound' ? <SoundSettings /> : null}
+          {section.id === 'network' ? (
+            <>
+              <WifiSettings />
+              <BluetoothSettings />
+              <SettingsExtras part="remote" />
+            </>
+          ) : null}
+          {section.id === 'games' ? (
+            <>
+              {!hearth.isKid ? <GamingPcsSettings /> : null}
+              <section className="settings-group">
+                <h2>Controllers</h2>
+                <div className="settings-row" data-nav-group>
+                  <Button icon="gamepad" onClick={() => setPadTest(true)}>Test controllers</Button>
+                </div>
+              </section>
+            </>
+          ) : null}
+          {section.id === 'alerts' ? <SettingsExtras part="alerts" /> : null}
+          {section.id === 'about' ? (
+            <>
+              <section className="settings-group">
+                <h2>Controls</h2>
+                <div className="help-grid">
+                  <div><kbd>Arrows</kbd> / D-pad / stick</div><div>Move</div>
+                  <div><kbd>Enter</kbd> / A</div><div>Select (on a text box: on-screen keyboard)</div>
+                  <div><kbd>Esc</kbd> / <kbd>Backspace</kbd> / B</div><div>Back</div>
+                  <div><kbd>M</kbd> / Y / mic key</div><div>Voice assistant</div>
+                  <div><kbd>P</kbd> / X / Menu key / right-click</div><div>Pin to Home (or move/unpin on Home); elsewhere, quick settings</div>
+                  <div>LB / RB</div><div>Previous / next page</div>
+                  <div>Remote Home / hold Guide button</div><div>Close any app and return here</div>
+                </div>
+              </section>
+              <section className="settings-group">
+                <h2>About</h2>
+                <div className="about">
+                  {hearth.info?.admin ? (
+                    <div>
+                      Edit everything from your phone or laptop: <code>{hearth.info.admin.url}</code>
+                    </div>
+                  ) : null}
+                  <div>Config file: <code>{hearth.info?.configPath}</code></div>
+                  <div>
+                    {(['tv', 'homeassistant', 'games'] as const)
+                      .map((k) => `${{ tv: 'Live TV', homeassistant: 'Home Assistant', games: 'Games' }[k]} ${hearth.info?.demo[k] ? 'demo' : hearth.info?.setup[k] ? 'set up' : 'not set up'}`)
+                      .join(' · ')}
+                  </div>
+                  {hearth.info?.ignoredExamples.length ? (
+                    <div>Skipped example entries still in config.yaml (safe to delete): {hearth.info.ignoredExamples.join(', ')}</div>
+                  ) : null}
+                </div>
+              </section>
+            </>
           ) : null}
         </div>
-      </section>
+      </div>
 
       {padTest ? <ControllerTest onClose={() => setPadTest(false)} /> : null}
       {adding ? (

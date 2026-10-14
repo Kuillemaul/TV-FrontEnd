@@ -18,7 +18,8 @@ function Toggle({ label, detail, on, onChange }: { label: string; detail: string
 }
 
 /** Settings sections for screen time, TV power, automations, alerts and the phone remote. */
-export function SettingsExtras() {
+/** One part of Settings: family screen time, TV power, alerts & automations, or the phone remote. */
+export function SettingsExtras({ part }: { part: 'family' | 'tv' | 'alerts' | 'remote' }) {
   const hearth = useHearth();
   const { data: settings, setData: setSettings } = useApi<TvSettings>('/api/settings');
   const { data: st, reload: reloadSt } = useApi<{ profiles: Array<ScreenTimeStatus & { name: string }> }>('/api/screentime', 30_000);
@@ -33,7 +34,7 @@ export function SettingsExtras() {
 
   return (
     <>
-      {kids.length ? (
+      {part === 'family' && kids.length ? (
         <section className="settings-group">
           <h2>Screen time</h2>
           <div className="st-list">
@@ -66,6 +67,7 @@ export function SettingsExtras() {
         </section>
       ) : null}
 
+      {part === 'tv' ? (
       <section className="settings-group">
         <h2>TV</h2>
         <div className="settings-row" data-nav-group>
@@ -81,7 +83,9 @@ export function SettingsExtras() {
         </div>
         <p className="modal-sub">Uses HDMI-CEC (needs the Pulse-Eight USB adapter). Other inputs like an Xbox can be added as app tiles in config.yaml.</p>
       </section>
+      ) : null}
 
+      {part === 'alerts' ? (
       <section className="settings-group">
         <h2>Automations & alerts</h2>
         <div className="editor-grid" data-nav-group>
@@ -116,8 +120,9 @@ export function SettingsExtras() {
           </Button>
         </div>
       </section>
+      ) : null}
 
-      <PhoneRemote />
+      {part === 'remote' ? <PhoneRemote /> : null}
       {limitsFor ? <LimitsEditor profile={limitsFor} onClose={() => setLimitsFor(null)} /> : null}
     </>
   );
