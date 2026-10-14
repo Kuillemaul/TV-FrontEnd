@@ -6,7 +6,7 @@ Window.SetBackgroundBottomColor(0.027, 0.035, 0.055);
 
 w = Window.GetWidth();
 h = Window.GetHeight();
-size = w * 0.15;
+size = w * 0.26;
 logo.image = Image("logo.png").Scale(size, size);
 logo.sprite = Sprite(logo.image);
 logo.sprite.SetX(Window.GetX() + (w - size) / 2);

@@ -101,8 +101,8 @@ h1, h2 { margin: 0; font-weight: 650; letter-spacing: -0.01em; }
 
 .brand-mark {
   flex: none;
-  /* Always Hearth purple, whatever the profile's theme. */
-  filter: drop-shadow(0 0 0.7rem rgba(123, 140, 255, 0.45));
+  /* Always Hearth's own warm colours, whatever the profile's theme. */
+  filter: drop-shadow(0 0 0.7rem rgba(255, 140, 50, 0.4));
 }
 
 .tabs {
