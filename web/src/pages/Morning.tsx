@@ -110,10 +110,10 @@ export function MorningPage() {
         </div>
       </header>
 
+      {/* Not available (no Home Assistant, or turned off): the server sends only { enabled: false }. */}
       {data && !data.enabled ? (
         <div className="empty">The morning screen needs Home Assistant (homeassistant: in config.yaml).</div>
-      ) : null}
-
+      ) : (
       <div className="morning-grid">
         {w ? (
           <section className="morning-card morning-weather">
@@ -192,6 +192,7 @@ export function MorningPage() {
           </section>
         ) : null}
       </div>
+      )}
     </div>
   );
 }
