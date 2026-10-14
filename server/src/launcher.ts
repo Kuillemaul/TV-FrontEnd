@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
+import { closeSync, mkdirSync, openSync } from 'node:fs';
 import { join } from 'node:path';
 import type { EventBus, ForegroundSession } from './bus.js';
 import { expand, type HearthConfig, type LaunchSpec } from './config.js';
@@ -95,11 +95,22 @@ export class Launcher {
     const { argv, env } = this.commandFor(id, spec);
     this.log.info(`launch ${id}: ${argv.join(' ')}`);
 
+    // Game streams keep Moonlight's output (moonlight.log in the state folder) for troubleshooting.
+    let logFd: number | undefined;
+    if (id.startsWith('game:')) {
+      try {
+        mkdirSync(this.config.stateDir, { recursive: true });
+        logFd = openSync(join(this.config.stateDir, 'moonlight.log'), 'w');
+      } catch {
+        logFd = undefined;
+      }
+    }
     const proc = spawn(argv[0], argv.slice(1), {
       env: { ...process.env, ...env },
-      stdio: 'ignore',
+      stdio: logFd === undefined ? 'ignore' : ['ignore', logFd, logFd],
       detached: true, // own process group so stop() can take children with it
     });
+    if (logFd !== undefined) closeSync(logFd);
 
     await new Promise<void>((resolveSpawn, reject) => {
       proc.once('spawn', resolveSpawn);

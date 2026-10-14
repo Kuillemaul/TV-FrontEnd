@@ -67,7 +67,7 @@ const demoHome = ha || !config.demo ? undefined : new DemoHome(bus);
 const hotkeys = new HotkeyWatcher(
   config.homeKeys,
   () => {
-    void launcher.stop();
+    void games.stopCovered();
     bus.emit({ type: 'home' });
   },
   log,
@@ -334,7 +334,7 @@ app.get('/ws', { websocket: true }, (socket) => {
 });
 
 app.post('/api/session/stop', async () => {
-  await launcher.stop();
+  await games.stopCovered();
   return { ok: true };
 });
 
@@ -865,11 +865,11 @@ const hassBridge = ha
             return inject('/api/tv/watch', { channelId: hit.id });
           }
           case 'home':
-            await launcher.stop();
+            await games.stopCovered();
             bus.emit({ type: 'home' });
             return;
           case 'stop':
-            return launcher.stop();
+            return games.stopCovered();
           case 'sleep_timer':
             sleep.set(cmd.minutes);
             return;

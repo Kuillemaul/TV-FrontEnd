@@ -10,9 +10,11 @@ export function LoadingCoverPage() {
   const q = new URLSearchParams(location.search);
   const title = q.get('title') ?? 'Your game';
   const art = q.get('art');
-  const [message, setMessage] = useState(`Starting ${title}…`);
+  // closing=1: shown while a game is closed, so Moonlight and the PC's desktop never flash on the way out.
+  const closing = q.get('closing') === '1';
+  const [message, setMessage] = useState(closing ? 'Back to Hearth…' : `Starting ${title}…`);
   useServerEvents((e) => {
-    if (e.type === 'game-status' && e.gameId === q.get('game') && e.stage !== 'streaming') setMessage(e.message);
+    if (!closing && e.type === 'game-status' && e.gameId === q.get('game') && e.stage !== 'streaming') setMessage(e.message);
   });
 
   useEffect(() => {
@@ -52,7 +54,7 @@ export function LoadingCoverPage() {
           </div>
         </div>
       </div>
-      <div className="pair-hint">Press Back to show the PC now</div>
+      {closing ? null : <div className="pair-hint">Press Back to show the PC now</div>}
     </div>
   );
 }

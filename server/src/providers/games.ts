@@ -89,6 +89,8 @@ interface AgentHealth {
   streamDisplay?: boolean | null;
   /** Who's at the PC (idle time, locked, window in front). Older agents don't send it. */
   presence?: Presence | null;
+  /** The PC's own loading cover is still up: the game's window hasn't appeared yet. Older agents don't send it. */
+  covering?: boolean;
 }
 
 /** How often to ask a PC whether its library changed (a cheap "no changes" answer when it hasn't). */
@@ -111,6 +113,10 @@ export class GameService {
   private launching = false;
   /** When Hearth's last stream from each PC ended, so input from it isn't mistaken for someone at the PC. */
   private streamEnded = new Map<string, number>();
+  /** Set while a game is being closed behind Hearth's cover (the cover stays until the PC has let go). */
+  private closing: Promise<void> | null = null;
+  private ending: Promise<void> | null = null;
+  private lastArt = new Map<string, string | undefined>();
   private demoAwake = new Set(['gaming-pc']);
 
   constructor(
@@ -540,14 +546,16 @@ export class GameService {
     } catch {
       return; // launch() closes it and reports the error
     }
-    const until = Date.now() + 90_000;
-    let running: boolean | null | undefined = false;
-    while (running === false && Date.now() < until && ours()) {
-      running = (await this.health(h))?.gameRunning;
-      if (running === false) await sleep(1000);
+    // Stay up until the game's window is showing on the PC (the agent's own cover has gone), so the PC's
+    // desktop and its "Starting…" screen never show. Older agents: wait for the process, then a fixed time.
+    const until = Date.now() + 120_000;
+    let state = await this.health(h);
+    while (Date.now() < until && ours() && (state?.covering === true || (state?.covering === undefined && state?.gameRunning === false))) {
+      await sleep(700);
+      state = await this.health(h);
     }
-    // Known running: give its window a moment. Unknown (agent can't tell): a fixed wait.
-    await sleep(running ? h.revealSeconds * 1000 : 10_000);
+    const knowsWindow = state?.covering === false;
+    await sleep(knowsWindow ? 1200 : state?.gameRunning ? h.revealSeconds * 1000 : 10_000);
     if (ours()) this.launcher.closeOverlay();
   }
 
@@ -559,7 +567,7 @@ export class GameService {
       if (health?.gameRunning === false && this.launcher.session?.id === sessionId) {
         clearInterval(timer);
         this.bus.toast(`${health.playing ?? 'The game'} closed on ${h.name}`);
-        await this.launcher.stop();
+        await this.stopCovered();
       }
     }, 4000);
   }
@@ -568,6 +576,35 @@ export class GameService {
 
   private status(hostId: string, gameId: string, stage: GameStage, message: string): void {
     this.bus.emit({ type: 'game-status', hostId, gameId, stage, message });
+  }
+
+  /**
+   * Leave a game without flashing Moonlight or the PC's desktop: put Hearth's cover up first (it's the
+   * newest window, so it's on top), close the stream underneath, wait for the PC to end the session,
+   * then take the cover down onto Hearth. Anything that isn't a game just stops.
+   */
+  async stopCovered(): Promise<void> {
+    const s = this.launcher.session;
+    const m = s ? /^game:([^:]+):(.+)$/.exec(s.id) : null;
+    const h = m ? this.cfg.hosts.find((x) => x.id === m[1]) : undefined;
+    if (this.closing) return this.closing;
+    if (!s || !m || !h || !h.loadingScreen || !this.uiBase) return this.launcher.stop();
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const art = this.lastArt.get(s.id);
+    const q = new URLSearchParams({ host: m[1], game: m[2], title: s.title, closing: '1', ...(art ? { art } : {}) });
+    this.closing = (async () => {
+      this.launcher.showOverlay(`${this.uiBase}/launching?${q}`, 30);
+      await sleep(1300); // the cover window needs a moment to appear
+      await this.launcher.stop();
+      await Promise.race([this.ending ?? Promise.resolve(), sleep(8000)]);
+      await sleep(600);
+      this.launcher.closeOverlay();
+    })();
+    try {
+      await this.closing;
+    } finally {
+      this.closing = null;
+    }
   }
 
   /** Wake the host if needed, start the game there, then stream it with Moonlight. */
@@ -582,6 +619,7 @@ export class GameService {
     const game = (await this.fetchHost(h, false)).find((g) => g.id === gameId);
     const title = game?.title ?? meta.title ?? gameId;
     const art = game?.art ?? meta.art;
+    this.lastArt.set(`game:${hostId}:${gameId}`, art);
 
     try {
       if (!(await this.online(h))) {
@@ -595,8 +633,9 @@ export class GameService {
         this.streamEnded.set(hostId, Date.now());
         this.state.addPlaytime(`${hostId}:${gameId}`, (Date.now() - started) / 60_000);
         if (!failed) this.status(hostId, gameId, 'ended', `${title} closed`);
-        this.launcher.closeOverlay();
-        void this.endSession(h);
+        // Closing behind the cover: stopCovered() takes the cover down once the PC has let go.
+        if (!this.closing) this.launcher.closeOverlay();
+        this.ending = this.endSession(h).catch(() => undefined);
       };
       const startGame = async (waitForDisplay: boolean) => {
         const res = await this.agent(

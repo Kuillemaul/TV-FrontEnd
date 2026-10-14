@@ -1007,15 +1007,25 @@ def show_cover(title: str, art: str | None = None) -> None:
     scale = h / 1080
     frame = tk.Frame(root, bg="#07090e")
     frame.place(relx=0.5, rely=0.5, anchor="center")
-    if art and art.lower().endswith((".png", ".gif")) and Path(art).is_file():
+    img = None
+    if art and Path(art).is_file():
         try:
-            img = tk.PhotoImage(file=art)
-            factor = max(1, round(img.height() / (420 * scale)))
-            img = img.subsample(factor, factor)
-            tk.Label(frame, image=img, bg="#07090e").pack(pady=(0, int(30 * scale)))
-            root._art = img  # type: ignore[attr-defined]  # keep a reference
-        except tk.TclError:
-            pass
+            # Pillow (installed by setup-windows.ps1) reads the JPEG covers Playnite and LaunchBox use.
+            from PIL import Image, ImageTk
+
+            pic = Image.open(art)
+            pic.thumbnail((int(420 * scale * 0.75), int(420 * scale)))
+            img = ImageTk.PhotoImage(pic)
+        except Exception:  # noqa: BLE001 - no Pillow: Tk itself only reads PNG and GIF
+            if art.lower().endswith((".png", ".gif")):
+                try:
+                    img = tk.PhotoImage(file=art)
+                    img = img.subsample(max(1, round(img.height() / (420 * scale))))
+                except tk.TclError:
+                    img = None
+    if img is not None:
+        tk.Label(frame, image=img, bg="#07090e").pack(pady=(0, int(30 * scale)))
+        root._art = img  # type: ignore[attr-defined]  # keep a reference
     tk.Label(frame, text=title, fg="#f2f4f8", bg="#07090e", font=("Segoe UI Semibold", int(54 * scale))).pack()
     status = tk.Label(frame, text="Starting", fg="#8c93a8", bg="#07090e", font=("Segoe UI", int(24 * scale)))
     status.pack(pady=(int(14 * scale), 0))
@@ -1080,6 +1090,11 @@ class LoadingCover:
         proc, self.proc = self.proc, None
         if proc and proc.poll() is None:
             proc.terminate()
+
+    @property
+    def showing(self) -> bool:
+        """The cover is still up: the game's window hasn't appeared yet."""
+        return bool(self.proc and self.proc.poll() is None)
 
 
 class Launcher:
@@ -1532,7 +1547,7 @@ def make_handler(cfg: dict[str, Any], library: Library, launcher: Launcher):
                 running = launcher.game_running() if launcher.current else None
                 return self._json(200, {"ok": True, "host": socket.gethostname(), "uptime": uptime_seconds(), "playing": current,
                                         "gameRunning": running, "streamDisplay": stream_display_active(cfg),
-                                        "presence": presence()})
+                                        "presence": presence(), "covering": cover.showing})
             if not self._authed():
                 return
             url = urllib.parse.urlsplit(self.path)

@@ -146,6 +146,10 @@ try {
   $agentPy = Join-Path $agentDir 'hearth_agent.py'
   $agentJson = Join-Path $agentDir 'agent.json'
 
+  # ---------------------------------------------------------------- Pillow (box art on the PC's loading cover)
+  & $python -m pip install --user --quiet --disable-pip-version-check pillow 2>&1 | Out-Null
+  if ($LASTEXITCODE -ne 0) { Say "Couldn't install Pillow; the loading cover will show the title without box art." 'Yellow' }
+
   # ---------------------------------------------------------------- agent.json
   $notes = & $python $agentPy --config $agentJson --upgrade-config 2>&1 | ForEach-Object { "$_" }
   $configOk = ($LASTEXITCODE -eq 0)
