@@ -212,7 +212,8 @@ export function matchIntent(text: string, catalog: IntentCatalog): IntentMatch |
 
   // "Request Dune Part Three" (looked up in Seerr by the server)
   const req = t.match(/^(?:can you |could you )?(?:request|get me|download|add) (.+?)(?: (?:to|on|in) (?:plex|seerr|the library|my library))?(?: for me)?$/);
-  if (req && !/^(a |the )?(app|game)/.test(req[1])) {
+  // "Add milk to the shopping list" is a Home Assistant to-do, not a film request.
+  if (req && !/^(a |the )?(app|game)/.test(req[1]) && !/ (to|on|onto) (my |the |our )?[\w ]*list$/.test(req[1])) {
     return { action: { type: 'request-search', query: req[1] }, speech: `Looking for ${req[1]}` };
   }
 

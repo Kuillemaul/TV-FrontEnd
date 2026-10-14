@@ -112,3 +112,9 @@ test('good morning opens the morning screen', () => {
   assert.deepEqual(matchIntent('Good morning', catalog)?.action, { type: 'navigate', page: 'morning' });
   assert.deepEqual(matchIntent("what's on today", catalog)?.action, { type: 'navigate', page: 'morning' });
 });
+
+test('"add milk to the shopping list" goes to Home Assistant, not Seerr', () => {
+  assert.equal(matchIntent('add milk to the shopping list', catalog), null);
+  assert.equal(matchIntent('add bread to my shopping list', catalog), null);
+  assert.equal(matchIntent('add dune part two', catalog)?.action.type, 'request-search');
+});
