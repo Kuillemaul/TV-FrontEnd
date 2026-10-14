@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-export type PageId = 'home' | 'tv' | 'apps' | 'games' | 'requests' | 'smarthome' | 'lab' | 'settings' | 'search';
+export type PageId = 'home' | 'tv' | 'apps' | 'games' | 'requests' | 'smarthome' | 'lab' | 'settings' | 'search' | 'morning';
 
 export interface Info {
   name: string;
@@ -16,7 +16,7 @@ export interface Info {
   ignoredExamples: string[];
   session: Session | null;
   configPath: string;
-  features: { plex: boolean; tvInputs: number; wakeWordAvailable: boolean; labActions: number; requests: boolean; downloads: boolean };
+  features: { plex: boolean; tvInputs: number; wakeWordAvailable: boolean; labActions: number; requests: boolean; downloads: boolean; morning?: { start: string; end: string } | null };
   screensaver: { idleMinutes: number; pickerAfterMinutes: number };
 }
 
@@ -350,6 +350,7 @@ export type ServerEvent =
   | { type: 'display' }
   | { type: 'sleep'; endsAt: number | null }
   | { type: 'pip'; entity: string | null; name?: string }
+  | { type: 'action'; action: UiAction }
   | { type: 'pair'; hostId: string; stage: 'waking' | 'pairing' | 'auto-pin' | 'paired' | 'failed'; message: string };
 
 export async function get<T>(path: string): Promise<T> {

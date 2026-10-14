@@ -31,6 +31,8 @@ import { ScreenTime } from './screentime.js';
 import { StateStore } from './state.js';
 import { TileArtStore } from './tileart.js';
 import { matchScore, searchGuide } from './search.js';
+import { activityOf, HassBridge, slug } from './hassbridge.js';
+import { buildMorning } from './morning.js';
 import { hardExit } from './exit.js';
 import { VoiceService } from './voice.js';
 
@@ -308,6 +310,7 @@ app.get('/api/info', async () => ({
     wakeWordAvailable: Boolean(ha),
     labActions: config.lab.actions.length,
     requests: Boolean(config.requests.seerr),
+    morning: ha && config.morning.enabled ? { start: config.morning.start, end: config.morning.end } : null,
     downloads: Boolean(config.requests.radarr || config.requests.sonarr || config.requests.lidarr),
   },
   screensaver: config.screensaver,
@@ -392,6 +395,29 @@ app.get<{ Querystring: { hours?: string } }>('/api/tv/guide', async (req) => {
   const [chs, all] = await Promise.all([visibleChannels(), tv.guide(from, Date.now() + hours * 3600_000)]);
   const shown = new Set(chs.map((c) => c.id));
   return { demo: tv.demo, lastChannel: state.lastChannel, channels: chs, programmes: all.filter((p) => shown.has(p.channelId)) };
+});
+
+/* ---------------- morning screen ---------------- */
+
+app.get('/api/morning', async () => {
+  if (!ha || !config.morning.enabled) return { enabled: false };
+  // The news button: a configured channel/app, else an "ABC News"-style channel if there is one.
+  let news: { kind: 'channel'; id: string; name: string } | { kind: 'app'; id: string; name: string } | null = null;
+  const want = config.morning.news;
+  if (want?.app) {
+    const a = visibleApps().find((x) => x.id === want.app);
+    if (a) news = { kind: 'app', id: a.id, name: a.name };
+  } else if (profiles.active.liveTv) {
+    const chs = await visibleChannels().catch(() => [] as Channel[]);
+    const n = want?.channel !== undefined ? Number.parseFloat(want.channel) : NaN;
+    const c =
+      (Number.isFinite(n) ? chs.find((x) => x.number === n) : undefined) ??
+      (want?.channel ? chs.find((x) => matchScore(x.name, want.channel!) >= 3) : chs.find((x) => /\bnews\b/i.test(x.name) && !x.radio));
+    if (c) news = { kind: 'channel', id: c.id, name: c.name };
+  }
+  const data = await buildMorning(ha, config.morning, config.homeassistant?.weather, news);
+  if (data.errors.length) log.warn(`morning: ${data.errors.join('; ')}`);
+  return { enabled: true, name: profiles.active.name, ...data };
 });
 
 /* ---------------- search everything ---------------- */
@@ -754,6 +780,92 @@ if (existsSync(webDist)) {
   app.setNotFoundHandler((req, reply) =>
     req.url.startsWith('/api/') ? reply.code(404).send({ error: 'Not found' }) : reply.sendFile('index.html'),
   );
+}
+
+/* ---------------- Home Assistant ⇄ Hearth ---------------- */
+
+const PAGES_FROM_HA = ['home', 'tv', 'apps', 'games', 'requests', 'smarthome', 'lab', 'settings', 'search', 'morning'];
+const hassBridge = ha
+  ? new HassBridge(
+      ha,
+      config.homeassistant?.tvId ?? slug(config.ui.name),
+      config.ui.name,
+      () => {
+        const session = launcher.session;
+        const channel = session?.id === 'livetv' ? channelCache?.channels.find((c) => c.id === state.lastChannel) : undefined;
+        return {
+          activity: activityOf(session, {
+            channel: channel ? `${channel.number} ${channel.name}` : undefined,
+            appName: (id) => allApps().find((a) => a.id === id)?.name,
+          }),
+          profile: { name: profiles.active.name, kind: profiles.active.kind },
+          sleepEndsAt: sleep.ends,
+        };
+      },
+      async (cmd) => {
+        const inject = async (url: string, payload?: object) => {
+          const res = await app.inject({ method: 'POST', url, payload: payload ?? {}, remoteAddress: '127.0.0.1' });
+          const body = res.json() as { ok?: boolean; error?: string };
+          if (body.ok === false) throw new Error(body.error ?? `${url} failed`);
+        };
+        switch (cmd.command) {
+          case 'notify':
+            alerts.raise({ kind: 'info', title: cmd.title, message: cmd.message, image: cmd.image, camera: cmd.camera, seconds: cmd.seconds });
+            return;
+          case 'camera':
+            return showCamera(cmd.entity, cmd.name);
+          case 'open_app': {
+            const list = allApps();
+            const hit =
+              list.find((a) => a.id === cmd.app) ??
+              list.map((a) => ({ a, s: matchScore(a.name, cmd.app) })).filter((x) => x.s).sort((x, y) => y.s - x.s)[0]?.a;
+            if (!hit) throw new Error(`no app called ${cmd.app}`);
+            return inject(`/api/apps/${encodeURIComponent(hit.id)}/launch`);
+          }
+          case 'channel': {
+            const chs = await visibleChannels();
+            const n = Number.parseFloat(cmd.channel);
+            const hit =
+              (Number.isFinite(n) ? chs.find((c) => c.number === n) : undefined) ??
+              chs.map((c) => ({ c, s: matchScore(c.name, cmd.channel) })).filter((x) => x.s).sort((x, y) => y.s - x.s || Number(Boolean(y.c.hd)) - Number(Boolean(x.c.hd)))[0]?.c;
+            if (!hit) throw new Error(`no channel ${cmd.channel}`);
+            return inject('/api/tv/watch', { channelId: hit.id });
+          }
+          case 'home':
+            await launcher.stop();
+            bus.emit({ type: 'home' });
+            return;
+          case 'stop':
+            return launcher.stop();
+          case 'sleep_timer':
+            sleep.set(cmd.minutes);
+            return;
+          case 'tv':
+            return inject(`/api/tv-control/${cmd.on ? 'on' : 'off'}`);
+          case 'page':
+            if (!PAGES_FROM_HA.includes(cmd.page)) throw new Error(`no page ${cmd.page}`);
+            if (launcher.session) await launcher.stop();
+            bus.emit({ type: 'action', action: { type: 'navigate', page: cmd.page } });
+            return;
+          case 'search':
+            if (launcher.session) await launcher.stop();
+            bus.emit({ type: 'action', action: { type: 'search', query: cmd.query } });
+            return;
+          case 'morning':
+            if (launcher.session) await launcher.stop();
+            bus.emit({ type: 'action', action: { type: 'navigate', page: 'morning' } });
+            return;
+        }
+      },
+      log,
+    )
+  : undefined;
+if (hassBridge) {
+  launcher.onSession(() => hassBridge.publishSoon());
+  bus.observe((e) => {
+    if (e.type === 'profiles' || e.type === 'sleep' || e.type === 'session') hassBridge.publishSoon();
+  });
+  log.info(`Home Assistant: publishing sensor.hearth_${hassBridge.tvId}_* and listening for hearth_command events`);
 }
 
 ha?.start();

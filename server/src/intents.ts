@@ -4,7 +4,7 @@
  * on to Home Assistant's conversation agent ("turn off the kitchen lights").
  */
 
-export type PageId = 'home' | 'tv' | 'apps' | 'games' | 'requests' | 'smarthome' | 'lab' | 'settings' | 'search';
+export type PageId = 'home' | 'tv' | 'apps' | 'games' | 'requests' | 'smarthome' | 'lab' | 'settings' | 'search' | 'morning';
 
 export interface MediaRef {
   id: number;
@@ -197,6 +197,11 @@ export function matchIntent(text: string, catalog: IntentCatalog): IntentMatch |
     const q = cam[1] ?? cam[2];
     const hit = best(q, catalog.cameras, (c) => c.name.replace(/ camera$/i, ''), 0.5);
     if (hit) return { action: { type: 'camera', entity: hit.id, name: hit.name }, speech: `Showing ${hit.name}` };
+  }
+
+  // "Good morning", "what's on today": the morning screen
+  if (/^(good morning|whats on today|what is on today|whats happening today|my day|show my day|show (me )?today)$/.test(t)) {
+    return { action: { type: 'navigate', page: 'morning' }, speech: 'Good morning' };
   }
 
   // "Search for Dune", "find Bluey", "look for the cricket"

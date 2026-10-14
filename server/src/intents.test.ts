@@ -107,3 +107,8 @@ test('search: "search for", "find", "look up"', () => {
   assert.deepEqual(matchIntent('look up the cricket', catalog)?.action, { type: 'search', query: 'the cricket' });
   assert.deepEqual(matchIntent('open search', catalog)?.action, { type: 'navigate', page: 'search' });
 });
+
+test('good morning opens the morning screen', () => {
+  assert.deepEqual(matchIntent('Good morning', catalog)?.action, { type: 'navigate', page: 'morning' });
+  assert.deepEqual(matchIntent("what's on today", catalog)?.action, { type: 'navigate', page: 'morning' });
+});

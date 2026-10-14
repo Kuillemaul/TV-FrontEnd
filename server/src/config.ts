@@ -58,6 +58,8 @@ export interface HomeAssistantConfig {
   weather?: string;
   /** Full Lovelace dashboard to open in the kiosk browser. */
   lovelacePath?: string;
+  /** This TV's id in Home Assistant entity names (sensor.hearth_<tvId>_activity). Default: from ui.name. */
+  tvId?: string;
   /** Services that start/stop a battery camera's live stream (Eufy's are found automatically). */
   cameraStream?: { start: string; stop?: string };
   voice: {
@@ -179,12 +181,27 @@ export interface HotkeyConfig {
   holdMs: number;
 }
 
+/** The morning screen (data from Home Assistant). */
+export interface MorningConfig {
+  enabled: boolean;
+  /** "HH:MM" window in which waking the TV shows it (once a day). */
+  start: string;
+  end: string;
+  /** calendar.* entities; empty = every calendar in Home Assistant. */
+  calendars: string[];
+  /** todo.* lists; empty = every list with something left to do. */
+  todo: string[];
+  /** A news button: a Live TV channel (number or name) or an app id. */
+  news?: { channel?: string; app?: string };
+}
+
 export interface HearthConfig {
   server: { port: number; host: string };
   ui: { name: string; clock24h: boolean };
   /** Browser used for web apps; {url} and {profile} are substituted. */
   browser: string[];
   apps: AppTile[];
+  morning: MorningConfig;
   livetv: LiveTvConfig;
   homeassistant?: HomeAssistantConfig;
   lab: LabConfig;
@@ -258,6 +275,7 @@ function defaults(): HearthConfig {
     requests: {},
     admin: { enabled: true, port: 8780 },
     scenes: [],
+    morning: { enabled: true, start: '05:00', end: '10:00', calendars: [], todo: [] },
     alerts: { rules: [], labDown: true },
     tv: {
       commands: {
@@ -409,6 +427,7 @@ export function loadConfig(path = resolveConfigPath()): HearthConfig {
       favorites: Array.isArray(ha.favorites) ? ha.favorites : [],
       weather: ha.weather,
       lovelacePath: ha.lovelacePath,
+      tvId: typeof ha.tvId === 'string' && /^[a-z0-9_]+$/.test(ha.tvId) ? ha.tvId : undefined,
       cameraStream: /^\w+\.\w+$/.test(String(ha.cameraStream?.start ?? ''))
         ? { start: String(ha.cameraStream.start), stop: /^\w+\.\w+$/.test(String(ha.cameraStream.stop ?? '')) ? String(ha.cameraStream.stop) : undefined }
         : undefined,
@@ -432,6 +451,19 @@ export function loadConfig(path = resolveConfigPath()): HearthConfig {
     if (['all', 'requested', 'off'].includes(raw.requests.notify)) cfg.requests.notify = raw.requests.notify;
   }
   if (Array.isArray(raw.scenes)) cfg.scenes = raw.scenes;
+  if (raw.morning === false) cfg.morning.enabled = false;
+  else if (raw.morning && typeof raw.morning === 'object') {
+    const m = raw.morning;
+    const hhmm = (v: unknown, d: string) => (typeof v === 'string' && /^\d{1,2}:\d{2}$/.test(v) ? v.padStart(5, '0') : d);
+    cfg.morning = {
+      enabled: m.enabled !== false,
+      start: hhmm(m.start, cfg.morning.start),
+      end: hhmm(m.end, cfg.morning.end),
+      calendars: Array.isArray(m.calendars) ? m.calendars.map(String) : [],
+      todo: Array.isArray(m.todo) ? m.todo.map(String) : [],
+      news: m.news && typeof m.news === 'object' ? { channel: m.news.channel !== undefined ? String(m.news.channel) : undefined, app: m.news.app ? String(m.news.app) : undefined } : undefined,
+    };
+  }
   if (raw.alerts) {
     cfg.alerts = {
       doorbell: raw.alerts.doorbell?.entity ? { seconds: 30, ...raw.alerts.doorbell } : undefined,

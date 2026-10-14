@@ -23,6 +23,8 @@ export type UiEvent =
   | { type: 'display' }
   | { type: 'sleep'; endsAt: number | null }
   | { type: 'pip'; entity: string | null; name?: string }
+  /** Run a UI action (from Home Assistant: go to a page, search…). */
+  | { type: 'action'; action: unknown }
   | { type: 'pair'; hostId: string; stage: 'waking' | 'pairing' | 'auto-pin' | 'paired' | 'failed'; message: string };
 
 export type GameStage = 'waking' | 'launching' | 'streaming' | 'ended' | 'error';
@@ -41,7 +43,15 @@ export class EventBus {
     socket.on('close', () => this.clients.delete(socket));
   }
 
+  private observers = new Set<(event: UiEvent) => void>();
+
+  /** Server-side listeners (the Home Assistant bridge publishes on profile/sleep changes). */
+  observe(fn: (event: UiEvent) => void): void {
+    this.observers.add(fn);
+  }
+
   emit(event: UiEvent): void {
+    for (const fn of this.observers) fn(event);
     const data = JSON.stringify(event);
     for (const c of this.clients) {
       if (c.readyState === c.OPEN) c.send(data);

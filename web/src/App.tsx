@@ -3,6 +3,7 @@ import { GameLaunch, type LaunchProgress } from './components/GameLaunch';
 import { Icon } from './components/Icon';
 import { AlertStack, CameraPip } from './components/Alerts';
 import { openSearchLater, SearchPage } from './pages/Search';
+import { markMorningShown, morningDue, MorningPage } from './pages/Morning';
 import { openMediaLater } from './pages/Requests';
 import { AppOrderEditor } from './components/AppOrderEditor';
 import { GameDetailsModal } from './components/GameDetails';
@@ -52,7 +53,7 @@ const TABS: Array<{ id: PageId; label: string; icon: string }> = [
 ];
 
 /** Pages a kid profile can reach. */
-const kidPages = (p: Profile): PageId[] => ['home', ...(p.liveTv ? (['tv'] as PageId[]) : []), 'apps', 'games'];
+const kidPages = (p: Profile): PageId[] => ['home', ...(p.liveTv ? (['tv'] as PageId[]) : []), 'apps', 'games', 'search', 'morning'];
 
 type Overlay = null | { type: 'pin'; pin: Pin; label?: string } | { type: 'menu' } | { type: 'theme' } | { type: 'apps' } | { type: 'editProfile'; id: string } | { type: 'game'; game: Game };
 
@@ -127,6 +128,13 @@ export function App() {
     return () => clearInterval(t);
   }, [loadScreenTime, loadSettings]);
 
+  const navigate = useCallback((next: PageId) => {
+    setPage((current) => {
+      if (current !== next) history.current = [...history.current, current].slice(-20);
+      return next;
+    });
+  }, []);
+
   // Screensaver after a few idle minutes (never over a playing app); after a long idle,
   // waking up asks "Who's watching?" again.
   useEffect(() => {
@@ -144,8 +152,24 @@ export function App() {
     setSaver(false);
     const pickerAfter = (info?.screensaver.pickerAfterMinutes ?? 30) * 60_000;
     if (pickerAfter > 0 && idleFor > pickerAfter && (profiles?.profiles.length ?? 0) > 1) setPickerOpen(true);
+    // First wake of the morning after a long idle (e.g. overnight): the morning screen.
+    if (idleFor > 2 * 3600_000 && morningDue(info?.features.morning)) {
+      markMorningShown();
+      navigate('morning');
+    }
     requestAnimationFrame(ensureFocus);
-  }, [info, profiles]);
+  }, [info, profiles, navigate]);
+
+  // Hearth starting up in the morning (the TV box was off overnight) also opens it, once a day.
+  const morningChecked = useRef(false);
+  useEffect(() => {
+    if (morningChecked.current || !info) return;
+    morningChecked.current = true;
+    if (morningDue(info.features.morning)) {
+      markMorningShown();
+      navigate('morning');
+    }
+  }, [info, navigate]);
 
   useWakeWord(Boolean(tvSettings?.wakeWord && info?.features.wakeWordAvailable), voiceOpen, () => {
     markInput();
@@ -169,12 +193,6 @@ export function App() {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4500);
   }, []);
 
-  const navigate = useCallback((next: PageId) => {
-    setPage((current) => {
-      if (current !== next) history.current = [...history.current, current].slice(-20);
-      return next;
-    });
-  }, []);
 
   // Focus the new page's default tile once its content has rendered.
   useEffect(() => {
@@ -281,6 +299,8 @@ export function App() {
     switch (e.type) {
       case 'sleep':
         return setSleepEndsAt(e.endsAt);
+      case 'action':
+        return runAction(e.action);
       case 'pip':
         return setPip(e.entity ? { entity: e.entity, name: e.name } : null);
       case 'toast':
@@ -431,6 +451,7 @@ export function App() {
           {page === 'lab' && <LabPage />}
           {page === 'settings' && <SettingsPage />}
           {page === 'search' && <SearchPage />}
+          {page === 'morning' && <MorningPage />}
         </main>
 
         <div className="toasts">

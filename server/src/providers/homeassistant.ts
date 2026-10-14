@@ -30,6 +30,9 @@ export class HomeAssistant {
   private states = new Map<string, HaEntity>();
   private watched = new Set<string>();
   private stateListeners = new Set<(entity: HaEntity, old: HaEntity | null) => void>();
+  private readyListeners = new Set<() => void>();
+  /** Custom event subscriptions (e.g. hearth_command), renewed on every reconnect. */
+  private eventListeners = new Map<string, Set<(data: any) => void>>();
   private retry = 1000;
   connected = false;
 
@@ -93,6 +96,15 @@ export class HomeAssistant {
       this.states.set(next.entity_id, next);
       if (this.watched.has(next.entity_id)) this.bus.emit({ type: 'ha-state', entity: next });
     });
+
+    for (const [eventType, fns] of this.eventListeners) {
+      const sub = this.send({ type: 'subscribe_events', event_type: eventType });
+      this.handlers.set(sub, (msg) => {
+        if (msg.type !== 'event') return;
+        for (const fn of fns) fn(msg.event?.data ?? {});
+      });
+    }
+    for (const fn of this.readyListeners) fn();
   }
 
   private onClose(): void {
@@ -122,6 +134,60 @@ export class HomeAssistant {
         else reject(new Error(res.error?.message ?? 'Home Assistant command failed'));
       });
     });
+  }
+
+  /** Called each time the connection is (re)established. */
+  whenReady(fn: () => void): void {
+    this.readyListeners.add(fn);
+  }
+
+  /** Subscribe to a Home Assistant event type (fired by automations with `event:`). Call before start(). */
+  onEvent(eventType: string, fn: (data: any) => void): void {
+    if (!this.eventListeners.has(eventType)) this.eventListeners.set(eventType, new Set());
+    this.eventListeners.get(eventType)!.add(fn);
+  }
+
+  /** Create/update an entity's state over REST (shows up in HA; re-sent after HA restarts). */
+  async setState(entityId: string, state: string, attributes: Record<string, unknown>): Promise<void> {
+    const res = await this.fetch(`/api/states/${entityId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ state, attributes }),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) throw new Error(`set ${entityId}: HTTP ${res.status}`);
+  }
+
+  /** Entity ids in a domain ("calendar", "todo"). */
+  entityIds(domain: string): string[] {
+    return [...this.states.keys()].filter((id) => id.startsWith(`${domain}.`));
+  }
+
+  /** Calendar events between two times (Home Assistant's calendar API). */
+  async calendarEvents(entityId: string, start: Date, end: Date): Promise<any[]> {
+    const q = `start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}`;
+    const res = await this.fetch(`/api/calendars/${entityId}?${q}`, { signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) throw new Error(`calendar ${entityId}: HTTP ${res.status}`);
+    return (await res.json()) as any[];
+  }
+
+  /** Daily/hourly forecast (weather.get_forecasts). */
+  async forecast(entityId: string, type: 'daily' | 'hourly'): Promise<any[]> {
+    const res = await this.command({
+      type: 'call_service',
+      domain: 'weather',
+      service: 'get_forecasts',
+      service_data: { type },
+      target: { entity_id: entityId },
+      return_response: true,
+    });
+    return res?.response?.[entityId]?.forecast ?? [];
+  }
+
+  /** Items on a to-do list (todo.*). */
+  async todoItems(entityId: string): Promise<Array<{ summary: string; status: string; due?: string }>> {
+    const res = await this.command({ type: 'todo/item/list', entity_id: entityId });
+    return res?.items ?? [];
   }
 
   /** Every state change in Home Assistant (alerts, doorbell). */

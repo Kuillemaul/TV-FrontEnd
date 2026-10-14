@@ -477,6 +477,12 @@ The magnifier in the top bar (or "search for Gruen" by voice) searches your Plex
 guide, Seerr (things you could request), games and apps at once. Select a programme that's on now to watch it, or a
 later one to record it.
 
+### Home Assistant automations and the morning screen
+Hearth reports what the TV is doing to Home Assistant (`sensor.hearth_<tv>_activity`, `_profile`, `_sleep_timer`) and
+takes commands from automations (`event: hearth_command`): pop-ups, cameras, apps, channels, TV power, the sleep
+timer. The morning screen shows your Home Assistant calendars (Google Calendar included), weather and to-do lists.
+See [HOME-ASSISTANT.md](HOME-ASSISTANT.md) for the entities, commands and ready-made automations.
+
 ### Battery cameras (Eufy)
 Eufy doorbells and eufyCams only stream when asked. With the Eufy Security integration in Home Assistant, Hearth starts
 the live stream whenever a camera is on screen (doorbell alert, picture-in-picture, the camera tile) and stops it 20
