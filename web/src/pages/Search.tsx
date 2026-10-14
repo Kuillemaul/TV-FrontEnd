@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
-import { Button, Modal, PageHeader, Row, Tile } from '../components/Layout';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Button, Chip, Modal, PageHeader, Row, Tile } from '../components/Layout';
 import { OnScreenKeyboard } from '../components/OnScreenKeyboard';
 import { appArt } from '../components/TileArt';
-import { formatTime, get, post, type AppTile, type Game, type MediaResult, type Programme } from '../lib/api';
+import { formatTime, get, post, useApi, type AppTile, type Game, type GameLibrary, type Guide, type MediaResult, type OnDeckItem, type Programme } from '../lib/api';
 import { useHearth } from '../lib/hearth';
 import { openMediaLater } from './Requests';
 
@@ -38,6 +38,24 @@ export function openSearchLater(query: string): void {
   window.dispatchEvent(new Event('hearth-search'));
 }
 
+/** Searches you picked a result from, newest first, per profile (this TV only). */
+const recentKey = (profileId: string | undefined) => `hearth.recentSearches.${profileId ?? 'default'}`;
+function loadRecent(profileId: string | undefined): string[] {
+  try {
+    const list = JSON.parse(localStorage.getItem(recentKey(profileId)) ?? '[]');
+    return Array.isArray(list) ? list.filter((x): x is string => typeof x === 'string').slice(0, 8) : [];
+  } catch {
+    return [];
+  }
+}
+function saveRecent(profileId: string | undefined, list: string[]): void {
+  try {
+    localStorage.setItem(recentKey(profileId), JSON.stringify(list));
+  } catch {
+    /* storage unavailable: recent searches just aren't remembered */
+  }
+}
+
 const dayLabel = (ms: number) => {
   const d = new Date(ms);
   const today = new Date();
@@ -61,6 +79,28 @@ export function SearchPage() {
   const [airing, setAiring] = useState<TvHit | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const latest = useRef('');
+  const profileId = hearth.profile?.id;
+  const [recent, setRecent] = useState(() => loadRecent(profileId));
+  /** Remember the search when you pick something from its results. */
+  const remember = () => {
+    const q = query.trim();
+    if (q.length < 2) return;
+    const next = [q, ...recent.filter((r) => r.toLowerCase() !== q.toLowerCase())].slice(0, 8);
+    setRecent(next);
+    saveRecent(profileId, next);
+  };
+
+  // Ideas before you type: what's on now, new in Plex and games you played lately (all things that will match).
+  const guide = useApi<Guide>(hearth.info?.setup.tv ? '/api/tv/guide?hours=1' : null);
+  const fresh = useApi<{ items: OnDeckItem[] }>('/api/plex/recent');
+  const library = useApi<GameLibrary>('/api/games');
+  const ideas = useMemo(() => {
+    const now = Date.now();
+    const onNow = (guide.data?.programmes ?? []).filter((p) => p.start <= now && p.end > now).map((p) => p.title);
+    const titles = [...onNow.slice(0, 4), ...(fresh.data?.items ?? []).slice(0, 3).map((i) => i.title), ...(library.data?.recent ?? []).slice(0, 2).map((g) => g.title)];
+    const seen = new Set(recent.map((r) => r.toLowerCase()));
+    return titles.filter((t) => t && !/paid programming|no listing/i.test(t) && !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase())).slice(0, 8);
+  }, [guide.data, fresh.data, library.data, recent]);
 
   useEffect(() => {
     const onSearch = () => {
@@ -94,10 +134,15 @@ export function SearchPage() {
   }, [query]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openLibrary = async (item: LibraryHit) => {
+    remember();
     const res = await post(`/api/plex/open/${item.id}`);
     if (!res.ok) hearth.toast(res.error ?? 'Couldn’t open that in Plex', 'error');
   };
-  const choose = (p: TvHit) => (p.live ? hearth.watchChannel(p.channelId) : setAiring(p));
+  const choose = (p: TvHit) => {
+    remember();
+    if (p.live) hearth.watchChannel(p.channelId);
+    else setAiring(p);
+  };
   const record = async (p: TvHit, series: boolean) => {
     const res = await post('/api/tv/record', { programmeId: p.id, series });
     if (!res.ok) hearth.toast(res.error ?? 'Couldn’t set up the recording', 'error');
@@ -127,10 +172,39 @@ export function SearchPage() {
         </div>
         <div className="search-aside">
           {!query.trim() ? (
-            <p>
-              Searches Plex, the TV guide, requests, games and apps. Type here, with a keyboard or the phone remote, or say
-              “search for…”.
-            </p>
+            <>
+              {recent.length ? (
+                <div className="search-suggest">
+                  <h3>Recent searches</h3>
+                  <div className="chips" data-nav-group>
+                    {recent.map((r) => (
+                      <Chip key={r} active={false} onClick={() => setQuery(r)}>
+                        {r}
+                      </Chip>
+                    ))}
+                    <Chip active={false} onClick={() => { setRecent([]); saveRecent(profileId, []); }}>
+                      Clear
+                    </Chip>
+                  </div>
+                </div>
+              ) : null}
+              {ideas.length ? (
+                <div className="search-suggest">
+                  <h3>Try</h3>
+                  <div className="chips" data-nav-group>
+                    {ideas.map((t) => (
+                      <Chip key={t} active={false} onClick={() => setQuery(t)}>
+                        {t}
+                      </Chip>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              <p>
+                Searches Plex, the TV guide, requests, games and apps. Type here, with a keyboard or the phone remote, or say
+                “search for…”.
+              </p>
+            </>
           ) : query.trim().length < 2 ? (
             <p>Keep typing…</p>
           ) : r && !loading && total === 0 ? (
@@ -176,6 +250,7 @@ export function SearchPage() {
               image={m.poster}
               badge={m.status !== 'none' ? <span className="badge">{m.status === 'requested' || m.status === 'processing' ? 'Requested' : 'Partly there'}</span> : undefined}
               onSelect={() => {
+                remember();
                 hearth.navigate('requests');
                 openMediaLater(m);
               }}
@@ -186,14 +261,14 @@ export function SearchPage() {
       {r?.games.length ? (
         <Row title="Games">
           {r.games.map((g) => (
-            <Tile key={`${g.hostId}:${g.id}`} shape="poster" title={g.title} subtitle={g.hostName} image={g.art} onSelect={() => hearth.openGame(g)} />
+            <Tile key={`${g.hostId}:${g.id}`} shape="poster" title={g.title} subtitle={g.hostName} image={g.art} onSelect={() => { remember(); hearth.openGame(g); }} />
           ))}
         </Row>
       ) : null}
       {r?.apps.length ? (
         <Row title="Apps">
           {r.apps.map((a) => (
-            <Tile key={a.id} shape="app" title={a.name} color={a.color} image={a.logo} art={appArt(a)} onSelect={() => hearth.launchApp(a.id)} />
+            <Tile key={a.id} shape="app" title={a.name} color={a.color} image={a.logo} art={appArt(a)} onSelect={() => { remember(); hearth.launchApp(a.id); }} />
           ))}
         </Row>
       ) : null}

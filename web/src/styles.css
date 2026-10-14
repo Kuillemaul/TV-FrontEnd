@@ -1960,8 +1960,11 @@ body.mouse-active .row-body:hover .row-arrow { opacity: 1; pointer-events: auto;
 
 /* Search */
 .search-top { display: grid; grid-template-columns: minmax(0, 52rem) minmax(0, 1fr); gap: 3rem; align-items: start; margin-bottom: 2.4rem; }
-.search-aside { color: var(--text-3); font-size: 1.2rem; line-height: 1.5; padding-top: 1.1rem; max-width: 34rem; }
+.search-aside { color: var(--text-3); font-size: 1.2rem; line-height: 1.5; padding-top: 1.1rem; max-width: 40rem; }
 .search-aside p { margin: 0; }
+.search-suggest { margin-bottom: 1.6rem; }
+.search-suggest h3 { margin: 0 0 0.7rem; font-size: 1rem; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 650; }
+.search-suggest .chips { margin: 0; }
 .search-box { position: relative; max-width: 52rem; margin-bottom: 1.2rem; }
 .search-box input { width: 100%; font: inherit; font-size: 1.6rem; padding: 1rem 1.4rem; border-radius: var(--radius); border: 2px solid var(--border); background: var(--surface); color: var(--text); }
 .search-box input:focus { outline: none; border-color: var(--text); background: var(--surface-2); }
