@@ -46,7 +46,7 @@ function chime(kind: Alert['kind']): void {
   }
 }
 
-/** Run a pop-up's button ("Watch"): the server finds it in Plex and plays it. */
+/** Run a pop-up's button ("Watch"): the server finds it on your media server and plays it. */
 async function runAction(alert: Alert): Promise<string | null> {
   const res = await post('/api/alerts/action', { alertId: alert.id });
   return res.ok ? null : (res.error ?? 'That didn’t work');

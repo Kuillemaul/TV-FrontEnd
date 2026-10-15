@@ -20,7 +20,7 @@ export interface Info {
   ignoredExamples: string[];
   session: Session | null;
   configPath: string;
-  features: { plex: boolean; mediaServer?: 'jellyfin' | 'emby' | null; tvInputs: number; wakeWordAvailable: boolean; labActions: number; requests: boolean; downloads: boolean; morning?: { start: string; end: string } | null; doorbellCamera?: string | null };
+  features: { plex: boolean; mediaServer?: 'jellyfin' | 'emby' | null; library?: { kind: 'plex' | 'jellyfin' | 'emby'; appId: string; name: string } | null; tvInputs: number; wakeWordAvailable: boolean; labActions: number; requests: boolean; downloads: boolean; morning?: { start: string; end: string } | null; doorbellCamera?: string | null };
   screensaver: { idleMinutes: number; pickerAfterMinutes: number };
 }
 

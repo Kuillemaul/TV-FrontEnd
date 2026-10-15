@@ -539,12 +539,16 @@ the live stream whenever a camera is on screen (doorbell alert, picture-in-pictu
 seconds after, to save the battery. Other camera systems that need a "start stream" service can use
 `homeassistant.cameraStream: { start: domain.service, stop: domain.service }`.
 
-### Plex: continue watching
-Add your server under `plex:` (URL + token) to get a **Continue watching** row on Home. Selecting an item opens it
-in Plex Web, full screen, ready to resume.
+### Your media server: Plex, Jellyfin or Emby
+Link one in setup or Settings → Connections and Home gets **Continue watching** (where you left off, then the next
+episode of shows you're watching) and **Recently added**; Search covers your library, and "ready to watch" pop-ups
+wait until the server has the file, then **Watch** plays it. Selecting something starts the server's app on the TV
+(Plex HTPC or Jellyfin Media Player) and has it play from where you left off. For Jellyfin, open the Jellyfin app on
+the TV once and sign in (same server) so Hearth can tell it what to play. Emby opens in its web app. With both Plex
+and Jellyfin linked, Plex feeds Home.
 
-With Plex set up, Home also has **Recently added** and **Your watchlist** rows (the watchlist is your plex.tv one).
-A watchlist item that's in your library plays straight away; one that isn't opens in Requests so you can ask for it.
+Plex also gets **Your watchlist** (your plex.tv one): an item in your library plays straight away; one that isn't
+opens in Requests so you can ask for it.
 
 ### Trailers in Requests
 Open any film or show in Requests and choose **Trailer** to watch it before you request. Back returns to the request.

@@ -65,7 +65,7 @@ const dayLabel = (ms: number) => {
   return d.toLocaleDateString([], { weekday: 'long' });
 };
 
-/** Search everything: your Plex library, what's on TV in the next two days, Seerr, games and apps. */
+/** Search everything: your media server (Plex, Jellyfin, Emby), what's on TV in the next two days, Seerr, games and apps. */
 export function SearchPage() {
   const hearth = useHearth();
   const h24 = hearth.info?.clock24h ?? false;
@@ -90,9 +90,9 @@ export function SearchPage() {
     saveRecent(profileId, next);
   };
 
-  // Ideas before you type: what's on now, new in Plex and games you played lately (all things that will match).
+  // Ideas before you type: what's on now, new in your media server and games you played lately (all things that will match).
   const guide = useApi<Guide>(hearth.info?.setup.tv ? '/api/tv/guide?hours=1' : null);
-  const fresh = useApi<{ items: OnDeckItem[] }>('/api/plex/recent');
+  const fresh = useApi<{ items: OnDeckItem[] }>('/api/library/recent');
   const library = useApi<GameLibrary>('/api/games');
   const ideas = useMemo(() => {
     const now = Date.now();
@@ -135,8 +135,8 @@ export function SearchPage() {
 
   const openLibrary = async (item: LibraryHit) => {
     remember();
-    const res = await post(`/api/plex/open/${item.id}`);
-    if (!res.ok) hearth.toast(res.error ?? 'Couldn’t open that in Plex', 'error');
+    const res = await post(`/api/library/open/${encodeURIComponent(item.id)}`);
+    if (!res.ok) hearth.toast(res.error ?? `Couldn’t open that in ${hearth.info?.features.library?.name ?? 'your media server'}`, 'error');
   };
   const choose = (p: TvHit) => {
     remember();
@@ -201,7 +201,7 @@ export function SearchPage() {
                 </div>
               ) : null}
               <p>
-                Searches Plex, the TV guide, requests, games and apps. Type here, with a keyboard or the phone remote, or say
+                Searches {hearth.info?.features.library?.name ?? 'your media server'}, the TV guide, requests, games and apps. Type here, with a keyboard or the phone remote, or say
                 “search for…”.
               </p>
             </>

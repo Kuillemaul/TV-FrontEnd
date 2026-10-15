@@ -223,7 +223,18 @@ export function MediaServerPanel({ view, reload, kind, mode }: { view: SetupView
     return () => clearInterval(t);
   }, [quick]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (linked) return <Linked what={name} url={linked.url} />;
+  if (linked) {
+    return (
+      <>
+        <Linked what={name} url={linked.url} />
+        <p className="setup-text">
+          {kind === 'jellyfin'
+            ? 'One more thing, later: open the Jellyfin app on the TV once and sign in (same server). Then Continue watching on Home plays straight in it.'
+            : 'Open the Emby tile once and sign in; Continue watching on Home then opens things in it.'}
+        </p>
+      </>
+    );
+  }
 
   if (mode === 'install') {
     if (job?.state !== 'done') return <JobLine job={job} name="Jellyfin" />;

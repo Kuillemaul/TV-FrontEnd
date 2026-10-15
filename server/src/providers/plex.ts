@@ -1,3 +1,5 @@
+import { thumbUrl, type MediaLibrary } from './library.js';
+
 export interface OnDeckItem {
   id: string;
   title: string;
@@ -11,7 +13,10 @@ export interface OnDeckItem {
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 /** Plex "On Deck" (continue watching) from your Plex Media Server. */
-export class PlexClient {
+export class PlexClient implements MediaLibrary {
+  readonly kind = 'plex' as const;
+  readonly appId = 'plex';
+  readonly name = 'Plex';
   private machineId?: string;
   private commandId = 0;
 
@@ -35,7 +40,7 @@ export class PlexClient {
         id: String(m.ratingKey),
         title: episode ? m.grandparentTitle : m.title,
         subtitle: episode ? `S${m.parentIndex} · E${m.index} · ${m.title}` : String(m.year ?? ''),
-        thumb: thumb ? `/api/plex/thumb?path=${encodeURIComponent(m.art ?? thumb)}` : undefined,
+        thumb: thumb ? thumbUrl(m.art ?? thumb) : undefined,
         progress: m.viewOffset && m.duration ? m.viewOffset / m.duration : 0,
       };
     });
@@ -58,7 +63,7 @@ export class PlexClient {
       const key = item ? `${item.title}|${item.subtitle}` : '';
       if (!item || seen.has(key)) continue;
       seen.add(key);
-      out.push({ ...item, thumb: item.thumb ? `/api/plex/thumb?path=${encodeURIComponent(item.thumb)}` : undefined });
+      out.push({ ...item, thumb: item.thumb ? thumbUrl(item.thumb) : undefined });
       if (out.length >= 16) break;
     }
     return out;
@@ -134,7 +139,7 @@ export class PlexClient {
           title: m.type === 'episode' ? `${m.grandparentTitle ?? ''}: ${m.title}` : m.title,
           year: m.year,
           subtitle: m.type === 'episode' ? `S${m.parentIndex} · E${m.index}` : m.type === 'show' && m.childCount ? `${m.childCount} season${m.childCount === 1 ? '' : 's'}` : undefined,
-          thumb: thumb ? `/api/plex/thumb?path=${encodeURIComponent(thumb)}` : undefined,
+          thumb: thumb ? thumbUrl(thumb) : undefined,
         });
       }
     }

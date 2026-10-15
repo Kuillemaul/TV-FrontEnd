@@ -20,6 +20,8 @@ import { PermissionError, ProfileStore, type Profile } from './profiles.js';
 import { AlertService, type Alert } from './alerts.js';
 import { SceneAutomation } from './automations.js';
 import { PlexClient } from './providers/plex.js';
+import { JellyfinClient } from './providers/jellyfin.js';
+import type { MediaLibrary } from './providers/library.js';
 import { PlexLiveTvProvider } from './providers/plexlive.js';
 import { cookieToken, isLoopback, lanAddress, RemotePairing } from './remote.js';
 import { registerExtras } from './routes/extras.js';
@@ -105,6 +107,8 @@ async function visibleChannels(): Promise<Channel[]> {
 const tileArt = new TileArtStore(join(config.stateDir, 'tiles'));
 const screenTime = new ScreenTime(config.stateDir);
 const plex = config.plex ? new PlexClient(config.plex) : undefined;
+/** The media server Home, Search and "ready to watch" use: Plex if linked, else Jellyfin/Emby. */
+const library: MediaLibrary | undefined = plex ?? (config.mediaServer ? new JellyfinClient(config.mediaServer) : undefined);
 const pairing = new RemotePairing(state);
 
 /** Call a Home Assistant service ("scene.turn_on") — or the demo home when HA isn't set up. */
@@ -330,6 +334,8 @@ app.get('/api/info', async () => ({
   features: {
     plex: Boolean(plex),
     mediaServer: config.mediaServer?.kind ?? null,
+    /** Your media server for Home rows and search: which kind, and the app tile that plays from it. */
+    library: library ? { kind: library.kind, appId: library.appId, name: library.name } : null,
     tvInputs: config.tv.inputs.length,
     wakeWordAvailable: Boolean(ha),
     labActions: config.lab.actions.length,
@@ -454,9 +460,9 @@ app.get<{ Querystring: { q?: string } }>('/api/search', async (req) => {
   const within = <T>(p: Promise<T>, fallback: T, ms = 6000) =>
     Promise.race([p.catch(() => fallback), new Promise<T>((r) => setTimeout(() => r(fallback), ms))]);
   const kid = isKid();
-  const plexAllowed = visibleApps().some((a) => a.id === 'plex');
-  const [library, tvHits, requestHits, gameList] = await Promise.all([
-    plex && plexAllowed ? within(plex.search(q), []) : Promise.resolve([]),
+  const libraryAllowed = Boolean(library) && visibleApps().some((a) => a.id === library!.appId);
+  const [libraryHits, tvHits, requestHits, gameList] = await Promise.all([
+    library && libraryAllowed ? within(library.search(q), []) : Promise.resolve([]),
     profiles.active.liveTv
       ? within(
           (async () => {
@@ -484,7 +490,7 @@ app.get<{ Querystring: { q?: string } }>('/api/search', async (req) => {
     .map(publicApp);
   return {
     q,
-    library,
+    library: libraryHits,
     tv: tvHits.map((h) => ({ ...h.programme, channelName: h.channel.name, channelNumber: h.channel.number, hd: h.channel.hd, live: h.live })),
     requests: requestHits.filter((r) => r.status !== 'available').slice(0, 12),
     games,
@@ -823,7 +829,7 @@ app.post<{ Body: { name: string; url?: string; flatpak?: string; color?: string 
 app.delete<{ Params: { id: string } }>('/api/custom-apps/:id', async (req) => mutate(() => profiles.removeCustomApp(req.params.id)));
 
 registerExtras(app, {
-  config, bus, state, launcher, games, profiles, screenTime, alerts, plex, pairing, ha, demoHome, lab, requests, sleep, showCamera,
+  config, bus, state, launcher, games, profiles, screenTime, alerts, plex, library, pairing, ha, demoHome, lab, requests, sleep, showCamera,
   callService, fail, isKid,
 });
 

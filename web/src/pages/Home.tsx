@@ -35,11 +35,18 @@ export function HomePage() {
   useServerEvents((e) => e.type === 'games' && void library.reload());
   useServerEvents((e) => e.type === 'apps' && void apps.reload());
   const dash = useApi<Dashboard>('/api/ha/dashboard');
-  // Continue watching only for profiles that can see Plex.
-  const hasPlex = apps.data?.some((a) => a.id === 'plex') ?? false;
-  const deck = useApi<{ demo: boolean; items: OnDeckItem[] }>(hasPlex ? '/api/plex/ondeck' : null, 5 * 60_000);
-  const recent = useApi<{ items: OnDeckItem[] }>(hasPlex ? '/api/plex/recent' : null, 10 * 60_000);
+  // Continue watching only for profiles that can see the media server's app (Plex, Jellyfin or Emby).
+  const libraryApp = hearth.info?.features.library?.appId ?? 'plex';
+  const hasLibrary = apps.data?.some((a) => a.id === libraryApp) ?? false;
+  const hasPlex = hasLibrary && libraryApp === 'plex' && Boolean(hearth.info?.features.plex);
+  const deck = useApi<{ demo: boolean; items: OnDeckItem[] }>(hasLibrary ? '/api/library/ondeck' : null, 5 * 60_000);
+  const recent = useApi<{ items: OnDeckItem[] }>(hasLibrary ? '/api/library/recent' : null, 10 * 60_000);
   const watchlist = useApi<{ items: WatchlistItem[] }>(hasPlex ? '/api/plex/watchlist' : null, 15 * 60_000);
+
+  const openItem = async (id: string) => {
+    const res = await post(`/api/library/open/${encodeURIComponent(id)}`);
+    if (!res.ok) hearth.toast(res.error ?? 'Couldn’t open that', 'error');
+  };
 
   /** Watchlist: play it if it's in Plex, otherwise offer to request it (Seerr). */
   const openWatchlist = async (w: WatchlistItem) => {
@@ -127,7 +134,7 @@ export function HomePage() {
         ))}
       </Row>
 
-      {hasPlex && deck.data?.items.length ? (
+      {hasLibrary && deck.data?.items.length ? (
         <Row title="Continue watching">
           {deck.data.items.map((item) => (
             <Tile
@@ -137,7 +144,7 @@ export function HomePage() {
               image={item.thumb}
               icon="play"
               progress={item.progress}
-              onSelect={() => void post(`/api/plex/open/${encodeURIComponent(item.id)}`)}
+              onSelect={() => void openItem(item.id)}
             />
           ))}
         </Row>
@@ -163,7 +170,7 @@ export function HomePage() {
 
       {hearth.info?.features.downloads && !hearth.isKid ? <DownloadsList compact /> : null}
 
-      {hasPlex && recent.data?.items.length ? (
+      {hasLibrary && recent.data?.items.length ? (
         <Row title="Recently added">
           {recent.data.items.map((item) => (
             <Tile
@@ -173,7 +180,7 @@ export function HomePage() {
               image={item.thumb}
               icon="play"
               badge={<span className="badge req-available">New</span>}
-              onSelect={() => void post(`/api/plex/open/${encodeURIComponent(item.id)}`)}
+              onSelect={() => void openItem(item.id)}
             />
           ))}
         </Row>

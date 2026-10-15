@@ -45,7 +45,7 @@ test('recently added, watchlist, find and playable', async () => {
       ['20', 'Severance', 'Season 2'],
       ['41', 'Bluey', 'S3 · E5 · Cricket'],
     ]);
-    assert.match(recent[0].thumb ?? '', /^\/api\/plex\/thumb\?path=/);
+    assert.match(recent[0].thumb ?? '', /^\/api\/library\/thumb\?path=/);
     const wl = await plex.watchlist();
     assert.deepEqual(wl, [
       { title: 'Dune: Part Three', year: 2026, mediaType: 'movie', thumb: 'https://metadata-static.plex.tv/x.jpg' },

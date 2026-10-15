@@ -18,6 +18,7 @@ import type { DemoHome } from '../providers/demohome.js';
 import type { GameService, PowerAction } from '../providers/games.js';
 import type { HomeAssistant } from '../providers/homeassistant.js';
 import { DEMO_ON_DECK, type PlexClient } from '../providers/plex.js';
+import type { MediaLibrary } from '../providers/library.js';
 import type { LabMonitor } from '../providers/lab.js';
 import { isLoopback, lanAddress, REMOTE_KEYS, type RemoteCommand, type RemotePairing } from '../remote.js';
 import type { ScreenTime } from '../screentime.js';
@@ -33,6 +34,8 @@ export interface ExtrasContext {
   screenTime: ScreenTime;
   alerts: AlertService;
   plex?: PlexClient;
+  /** Your media server for Home rows and playing: Plex, or Jellyfin/Emby. */
+  library?: MediaLibrary;
   pairing: RemotePairing;
   ha?: HomeAssistant;
   demoHome?: DemoHome;
@@ -53,7 +56,7 @@ const PHOTO_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp']);
  * game browsing/details/power, the screensaver and the phone remote.
  */
 export function registerExtras(app: FastifyInstance, ctx: ExtrasContext): void {
-  const { config, bus, state, launcher, games, profiles, screenTime, alerts, plex, pairing, ha, fail, isKid } = ctx;
+  const { config, bus, state, launcher, games, profiles, screenTime, alerts, plex, library, pairing, ha, fail, isKid } = ctx;
 
   const requireParent = () => {
     if (isKid()) throw new PermissionError('Ask a parent to do that');
@@ -376,45 +379,47 @@ export function registerExtras(app: FastifyInstance, ctx: ExtrasContext): void {
     }),
   );
 
-  /* ---------------- Plex: continue watching ---------------- */
+  /* ---------------- your media server (Plex / Jellyfin / Emby): Home rows ---------------- */
 
-  app.get('/api/plex/ondeck', async () => {
-    if (!plex) return { demo: config.demo, items: config.demo ? DEMO_ON_DECK : [] };
+  app.get('/api/library/ondeck', async () => {
+    if (!library) return { demo: config.demo, items: config.demo ? DEMO_ON_DECK : [] };
     try {
-      return { demo: false, items: await plex.onDeck() };
+      return { demo: false, items: await library.onDeck() };
     } catch (err) {
       return { demo: false, items: [], error: (err as Error).message };
     }
   });
 
-  app.get<{ Querystring: { path: string } }>('/api/plex/thumb', async (req, reply) => {
-    if (!plex) return reply.code(404).send();
-    return relay(reply, await plex.thumb(req.query.path), 'public, max-age=86400');
+  app.get<{ Querystring: { path: string } }>('/api/library/thumb', async (req, reply) => {
+    if (!library) return reply.code(404).send();
+    return relay(reply, await library.thumb(req.query.path), 'public, max-age=86400');
   });
 
-  /** Open a Plex item on the TV: Plex HTPC gets told to play it; Plex Web is deep-linked. */
-  const openPlexItem = async (id: string) => {
-    if (!plex) throw new Error('Demo mode: add your Plex server under "plex" in config.yaml');
-    const plexTile = ProfileStore.orderApps(profiles.active, config.apps).find((a) => a.id === 'plex');
-    if (isKid() && !plexTile) throw new PermissionError('Plex isn’t on this profile');
-    // Plex HTPC (or any app tile) can't be deep-linked: open it, then ask it to play the item.
-    if (plexTile && plexTile.launch.type === 'command') {
-      await launcher.launch('app:plex', plexTile.name, plexTile.launch);
+  /** Open an item on the TV: the server's app is started and told to play it; a web app is deep-linked. */
+  const openLibraryItem = async (id: string) => {
+    if (!library) throw new Error('Link your media server in Settings → Connections');
+    const tile = ProfileStore.orderApps(profiles.active, config.apps).find((a) => a.id === library.appId);
+    if (isKid() && !tile) throw new PermissionError(`${library.name} isn’t on this profile`);
+    // An app tile (Plex HTPC, Jellyfin Media Player) can't be deep-linked: open it, then ask it to play the item.
+    if (tile && tile.launch.type === 'command') {
+      await launcher.launch(`app:${tile.id}`, tile.name, tile.launch);
       const here = new Set(['127.0.0.1', '::1', 'localhost', lanAddress()]);
-      plex
+      library
         .playOnPlayer(id, (address) => here.has(address))
-        .catch((err) => app.log.warn(`plex: ${(err as Error).message}. Pick it from Continue Watching in Plex instead.`));
+        .catch((err) => app.log.warn(`${library.kind}: ${(err as Error).message}. Pick it from Continue Watching in the app instead.`));
       return;
     }
-    await launcher.launch('app:plex', 'Plex', { type: 'web', url: await plex.itemUrl(id) });
+    await launcher.launch(`app:${library.appId}`, library.name, { type: 'web', url: await library.itemUrl(id) });
   };
-  app.post<{ Params: { id: string } }>('/api/plex/open/:id', async (req) =>
-    run(async () => openPlexItem(plex ? await plex.playable(req.params.id).catch(() => req.params.id) : req.params.id)),
+  app.post<{ Params: { id: string } }>('/api/library/open/:id', async (req) =>
+    run(async () => openLibraryItem(library ? await library.playable(req.params.id).catch(() => req.params.id) : req.params.id)),
   );
-  app.get('/api/plex/recent', async () => {
-    if (!plex) return { items: config.demo ? DEMO_ON_DECK : [] };
-    return { items: await plex.recentlyAdded().catch(() => []) };
+  app.get('/api/library/recent', async () => {
+    if (!library) return { items: config.demo ? DEMO_ON_DECK : [] };
+    return { items: await library.recentlyAdded().catch(() => []) };
   });
+
+  // Plex only: your plex.tv watchlist.
   app.get('/api/plex/watchlist', async () => {
     if (!plex) return { items: [] };
     return { items: await plex.watchlist().catch(() => []) };
@@ -422,11 +427,11 @@ export function registerExtras(app: FastifyInstance, ctx: ExtrasContext): void {
   // Watchlist item: play it if it's in your libraries; otherwise say so (the TV offers a request).
   app.post<{ Body: { title: string; year?: number; mediaType: 'movie' | 'tv' } }>('/api/plex/watchlist/play', async (req) =>
     run(async () => {
-      if (!plex) throw new Error('Add your Plex server under "plex" in config.yaml');
+      if (!plex || !library) throw new Error('Link Plex in Settings → Connections');
       const { title, year, mediaType } = req.body;
       const id = await plex.find({ title: String(title), year: year ? Number(year) : undefined, mediaType: mediaType === 'tv' ? 'tv' : 'movie' });
       if (!id) return { inLibrary: false };
-      await openPlexItem(await plex.playable(id).catch(() => id));
+      await openLibraryItem(await plex.playable(id).catch(() => id));
       return { inLibrary: true };
     }),
   );
@@ -450,15 +455,15 @@ export function registerExtras(app: FastifyInstance, ctx: ExtrasContext): void {
         showCamera(action.entity);
         return;
       }
-      if (!plex) throw new Error('Add your Plex server under "plex" in config.yaml to play from here');
+      if (!library) throw new Error('Link your media server in Settings → Connections to play from here');
       launcher.closeOverlay();
-      const id = await plex.find(action);
-      if (!id) throw new Error(`Plex hasn’t added ${action.title} yet. Try again in a minute.`);
-      await openPlexItem(id);
+      const id = await library.find(action);
+      if (!id) throw new Error(`${library.name} hasn’t added ${action.title} yet. Try again in a minute.`);
+      await openLibraryItem(id);
     }),
   );
   const announce = (item: ReadyItem) => {
-      const watchable = item.kind !== 'music' && Boolean(plex);
+      const watchable = item.kind !== 'music' && Boolean(library);
       alerts.raise({
         kind: 'info',
         title: item.kind === 'music' ? `New music: ${item.title}` : `${item.title} is ready to watch`,
@@ -470,8 +475,8 @@ export function registerExtras(app: FastifyInstance, ctx: ExtrasContext): void {
           : undefined,
       });
   };
-  // Radarr/Sonarr say "imported" before Plex has scanned the file. With Plex set up, only say "ready to
-  // watch" once Plex can find it (checked every minute, for up to 3 hours).
+  // Radarr/Sonarr say "imported" before the media server has scanned the file. With one linked, only say
+  // "ready to watch" once it can find it (checked every minute, for up to 3 hours).
   const waiting: Array<{ item: ReadyItem; since: number }> = [];
   const PLEX_WAIT_MS = 3 * 3600_000;
   let checking = false;
@@ -488,25 +493,25 @@ export function registerExtras(app: FastifyInstance, ctx: ExtrasContext): void {
     for (const w of [...waiting]) {
       const drop = () => waiting.splice(waiting.indexOf(w), 1);
       try {
-        const found = await plex!.find({ title: w.item.title, year: w.item.year, mediaType: w.item.kind as 'movie' | 'tv', season: w.item.season, episode: w.item.episode });
+        const found = await library!.find({ title: w.item.title, year: w.item.year, mediaType: w.item.kind as 'movie' | 'tv', season: w.item.season, episode: w.item.episode });
         if (found) {
           drop();
           announce(w.item);
         } else if (Date.now() - w.since > PLEX_WAIT_MS) {
           drop();
-          app.log.warn(`ready to watch: Plex never showed ${w.item.title}; no pop-up`);
+          app.log.warn(`ready to watch: ${library!.name} never showed ${w.item.title}; no pop-up`);
         }
       } catch (err) {
-        app.log.warn(`ready to watch: Plex check failed: ${(err as Error).message}`);
+        app.log.warn(`ready to watch: ${library!.name} check failed: ${(err as Error).message}`);
       }
     }
   };
-  if (plex) setInterval(() => void checkPlex(), 60_000).unref();
+  if (library) setInterval(() => void checkPlex(), 60_000).unref();
   const watcher = new ArrWatcher(
     config.requests,
     config.requests.notify ?? 'all',
     (item) => {
-      if (!plex || item.kind === 'music') return announce(item);
+      if (!library || item.kind === 'music') return announce(item);
       waiting.push({ item, since: Date.now() });
       void checkPlex();
     },
