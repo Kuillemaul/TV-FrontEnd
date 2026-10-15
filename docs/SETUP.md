@@ -548,6 +548,20 @@ the live stream whenever a camera is on screen (doorbell alert, picture-in-pictu
 seconds after, to save the battery. Other camera systems that need a "start stream" service can use
 `homeassistant.cameraStream: { start: domain.service, stop: domain.service }`.
 
+### Photos: Immich
+Pick **Photos** in setup (or Settings → Connections → Immich): link the Immich you have (address + an admin API key
+from Account settings → API keys) or **Install here**. Installed here, Hearth creates the admin account and an API
+key for you; photos are kept in `<media folder>/photos`. Get the Immich phone app, sign in, turn on backup.
+
+Immich won't get in the way of the TV: its server is capped at 3 of the CPU's 6 cores at low priority, and Hearth
+**pauses its heavy jobs** (thumbnails, video conversion, face recognition, smart search) while anything plays on the
+TV, resuming two minutes after you're back on Home.
+
+**Face recognition on a gaming PC:** a GPU does this far faster than the TV PC. On that PC install Docker Desktop,
+then run `pc-agent\immich-ml.ps1`; in Settings → Connections → Immich choose *Face recognition and smart search run
+on* → that PC. Immich then uses the PC (and the TV's own copy when the PC is off), and Hearth also pauses the jobs
+while someone is using that PC, so they never compete with a game. `immich-ml.ps1 -Remove` takes it off again.
+
 ### Your media server: Plex, Jellyfin or Emby
 Link one in setup or Settings → Connections and Home gets **Continue watching** (where you left off, then the next
 episode of shows you're watching) and **Recently added**; Search covers your library, and "ready to watch" pop-ups

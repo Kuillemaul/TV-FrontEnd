@@ -28,6 +28,7 @@ import { DEFAULT_APPS, loadConfig, type AppTile, type HearthConfig } from '../co
 import { PermissionError } from '../profiles.js';
 import { lanAddress } from '../remote.js';
 import { allowedHost, scan, subnetHosts, type Found } from '../discover.js';
+import { ImmichClient, pingMachineLearning, setUpImmich } from '../providers/immich.js';
 import { scheduleRestart, validateConfigText, writeConfig } from './admin.js';
 
 /**
@@ -38,7 +39,7 @@ import { scheduleRestart, validateConfigText, writeConfig } from './admin.js';
  */
 
 export type Choice = 'no' | 'link' | 'install';
-export const SERVICES = ['plex', 'jellyfin', 'emby', 'kodi', 'homeassistant', 'tvheadend', 'plexdvr', 'seerr', 'downloads', 'games', 'lab'] as const;
+export const SERVICES = ['plex', 'jellyfin', 'emby', 'kodi', 'homeassistant', 'tvheadend', 'plexdvr', 'seerr', 'downloads', 'photos', 'games', 'lab'] as const;
 export type ServiceId = (typeof SERVICES)[number];
 const STEPS = ['welcome', 'name', 'watch', 'extras', 'apps', 'folder', 'connect', 'done'] as const;
 type Step = (typeof STEPS)[number];
@@ -54,6 +55,7 @@ const ALLOWED: Record<ServiceId, Choice[]> = {
   plexdvr: ['no', 'link'],
   seerr: ['no', 'link', 'install'],
   downloads: ['no', 'link', 'install'],
+  photos: ['no', 'link', 'install'],
   games: ['no', 'link'],
   lab: ['no', 'link'],
 };
@@ -64,6 +66,7 @@ const DOCKER: Partial<Record<ServiceId, string[]>> = {
   tvheadend: ['tvheadend'],
   seerr: ['seerr'],
   downloads: ['radarr', 'sonarr', 'prowlarr', 'qbittorrent'],
+  photos: ['immich'],
 };
 /** Programs (Flatpak) each choice needs on the TV, linked or installed. */
 const FLATPAK: Partial<Record<ServiceId, string>> = { plex: 'plex-htpc', jellyfin: 'jellyfin-player', kodi: 'kodi', games: 'moonlight' };
@@ -194,6 +197,7 @@ export function registerSetup(app: FastifyInstance, ctx: SetupContext): { active
       radarr: c?.requests.radarr ? { url: c.requests.radarr.url } : null,
       sonarr: c?.requests.sonarr ? { url: c.requests.sonarr.url } : null,
       games: c?.gaming.hosts.length ? { count: c.gaming.hosts.length, names: c.gaming.hosts.map((h) => h.name) } : null,
+      immich: c?.immich ? { url: c.immich.url, mlHost: c.immich.mlHost ?? null } : null,
     };
   };
 
@@ -237,6 +241,7 @@ export function registerSetup(app: FastifyInstance, ctx: SetupContext): { active
     d.services.seerr = l.seerr ? 'link' : 'no';
     d.services.downloads = l.radarr || l.sonarr ? 'link' : 'no';
     d.services.games = l.games ? 'link' : 'no';
+    d.services.photos = l.immich ? 'link' : 'no';
     d.services.lab = !c.ui.hide.includes('lab') && (c.lab.services.length || c.lab.sensors.length) ? 'link' : 'no';
     d.apps = WEB_APPS.filter((w) => has(w.id)).map((w) => w.id);
     return d;
@@ -280,6 +285,8 @@ export function registerSetup(app: FastifyInstance, ctx: SetupContext): { active
       linked: linked(),
       plexSignedIn: Boolean(s?.plexToken),
       mounts: mounts(),
+      /** Gaming PCs that could run Immich's face recognition. */
+      gamingPcs: (current()?.gaming.hosts ?? []).map((h) => ({ id: h.id, name: h.name, host: h.moonlightHost })),
       phoneUrl: config.admin.enabled ? `http://${lanAddress() ?? 'this-tv'}:${config.admin.port}/setup` : null,
     };
   };
@@ -624,10 +631,69 @@ export function registerSetup(app: FastifyInstance, ctx: SetupContext): { active
         seerr: ['requests', 'seerr'],
         radarr: ['requests', 'radarr'],
         sonarr: ['requests', 'sonarr'],
+        immich: ['immich'],
       };
       const path = paths[req.params.service];
       if (!path) throw new Error('Unknown service');
       return save([[path, undefined]], `unlinked ${req.params.service}`);
+    }),
+  );
+
+  /* ---------------- Immich (photos) ---------------- */
+
+  const IMMICH_LOCAL_ML = 'http://immich-machine-learning:3003';
+
+  app.post<{ Body: { url: string; apiKey: string } }>('/api/connect/immich', async (req) =>
+    run(async () => {
+      guard();
+      const url = checkUrl(req.body.url);
+      const apiKey = String(req.body.apiKey ?? '').trim();
+      const { name } = await new ImmichClient({ url, apiKey }).test();
+      return { name, ...save([[['immich', 'url'], url], [['immich', 'apiKey'], apiKey]], 'linked Immich') };
+    }),
+  );
+
+  /** Immich installed here: create the admin account and an API key, then link. */
+  app.post<{ Body: { name: string; email: string; password: string } }>('/api/connect/immich/create', async (req) =>
+    run(async () => {
+      guard();
+      const email = String(req.body.email ?? '').trim();
+      if (!/^\S+@\S+$/.test(email)) throw new Error('Immich signs in with an email address');
+      if (String(req.body.password ?? '').length < 8) throw new Error('Use a password of at least 8 characters');
+      const url = `http://127.0.0.1:${installer.catalog.docker.immich.port}`;
+      const apiKey = await setUpImmich(url, email, String(req.body.password), String(req.body.name || email.split('@')[0]));
+      return save([[['immich', 'url'], url], [['immich', 'apiKey'], apiKey]], 'linked Immich (installed here)');
+    }),
+  );
+
+  /** Is Immich's machine-learning worker running on this gaming PC (pc-agent/immich-ml.ps1)? */
+  app.post<{ Body: { hostId: string } }>('/api/connect/immich/ml/check', async (req) =>
+    run(async () => {
+      const host = current()?.gaming.hosts.find((h) => h.id === req.body.hostId);
+      if (!host) throw new Error('Unknown PC');
+      const url = `http://${host.moonlightHost}:3003`;
+      return { url, running: await pingMachineLearning(url) };
+    }),
+  );
+
+  /** Where face recognition and smart search run: a gaming PC (this TV as the fallback), or this TV. */
+  app.post<{ Body: { hostId?: string | null } }>('/api/connect/immich/ml', async (req) =>
+    run(async () => {
+      guard();
+      const c = current();
+      if (!c?.immich) throw new Error('Link Immich first');
+      const client = new ImmichClient(c.immich);
+      const installedHere = Boolean(installer.installed('immich')?.installed) || c.immich.url.includes('127.0.0.1');
+      if (!req.body.hostId) {
+        if (installedHere) await client.setMachineLearning([IMMICH_LOCAL_ML]);
+        return save([[['immich', 'mlHost'], undefined], [['immich', 'mlUrl'], undefined]], 'Immich machine learning on this TV');
+      }
+      const host = c.gaming.hosts.find((h) => h.id === req.body.hostId);
+      if (!host) throw new Error('Unknown PC');
+      const url = `http://${host.moonlightHost}:3003`;
+      if (!(await pingMachineLearning(url))) throw new Error(`Immich’s machine learning isn’t answering on ${host.name}. Run pc-agent\\immich-ml.ps1 there first.`);
+      await client.setMachineLearning(installedHere ? [url, IMMICH_LOCAL_ML] : [url]);
+      return save([[['immich', 'mlHost'], host.id], [['immich', 'mlUrl'], url]], `Immich machine learning on ${host.name}`);
     }),
   );
 

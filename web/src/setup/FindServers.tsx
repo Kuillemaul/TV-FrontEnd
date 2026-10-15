@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Button, Modal } from '../components/Layout';
 import { post, useApi, useServerEvents } from '../lib/api';
-import { FoundUrls, HomeAssistantPanel, MediaServerPanel, PlexPanel, SeerrPanel, TvheadendPanel, DownloadsPanel } from './ConnectPanels';
+import { FoundUrls, HomeAssistantPanel, ImmichPanel, MediaServerPanel, PlexPanel, SeerrPanel, TvheadendPanel, DownloadsPanel } from './ConnectPanels';
 import { api, type SetupView } from './types';
 import './setup.css';
 
@@ -11,7 +11,7 @@ export interface FoundService {
   url: string;
   kind: string;
   name: string;
-  link?: 'plex' | 'jellyfin' | 'emby' | 'homeassistant' | 'tvheadend' | 'seerr' | 'radarr' | 'sonarr' | 'lidarr';
+  link?: 'plex' | 'jellyfin' | 'emby' | 'homeassistant' | 'tvheadend' | 'seerr' | 'radarr' | 'sonarr' | 'lidarr' | 'immich';
   /** Already linked or on the Lab page. */
   added: boolean;
 }
@@ -45,7 +45,7 @@ export function foundUrls(d: Discovery | null): Partial<Record<string, string>> 
 }
 
 /** Which setup choice a found app belongs to (so linking it in setup doesn't hide its page). */
-const SERVICE_FOR: Record<string, string> = { radarr: 'downloads', sonarr: 'downloads', lidarr: 'downloads' };
+const SERVICE_FOR: Record<string, string> = { radarr: 'downloads', sonarr: 'downloads', lidarr: 'downloads', immich: 'photos' };
 
 /**
  * "Find my servers": type an address (or scan the whole network) and see what's running there.
@@ -170,6 +170,8 @@ function LinkPanel({ found, view, reload }: { found: FoundService; view: SetupVi
       return <TvheadendPanel view={view} reload={reload} mode="link" />;
     case 'seerr':
       return <SeerrPanel view={view} reload={reload} mode="link" />;
+    case 'immich':
+      return <ImmichPanel view={view} reload={reload} mode="link" />;
     default:
       return <DownloadsPanel view={view} reload={reload} mode="link" />;
   }

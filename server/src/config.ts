@@ -210,6 +210,8 @@ export interface HearthConfig {
     /** Top-bar pages you don't use (livetv, games, smarthome, lab, requests); set by the setup screen. */
     hide: string[];
   };
+  /** Immich (photos): its jobs pause while the TV is busy; machine learning can run on a gaming PC. */
+  immich?: { url: string; apiKey: string; mlHost?: string; mlUrl?: string };
   /** A Jellyfin or Emby server (instead of, or as well as, Plex). */
   mediaServer?: { kind: 'jellyfin' | 'emby'; url: string; token: string; userId: string };
   /** Browser used for web apps; {url} and {profile} are substituted. */
@@ -422,6 +424,14 @@ export function loadConfig(path = resolveConfigPath()): HearthConfig {
   Object.assign(cfg.server, raw.server);
   Object.assign(cfg.ui, raw.ui);
   cfg.ui.hide = Array.isArray(raw.ui?.hide) ? raw.ui.hide.map(String) : [];
+  if (raw.immich?.url && raw.immich?.apiKey && !isPlaceholder(raw.immich.apiKey)) {
+    cfg.immich = {
+      url: String(raw.immich.url).replace(/\/$/, ''),
+      apiKey: String(raw.immich.apiKey),
+      mlHost: raw.immich.mlHost ? String(raw.immich.mlHost) : undefined,
+      mlUrl: raw.immich.mlUrl ? String(raw.immich.mlUrl).replace(/\/$/, '') : undefined,
+    };
+  }
   for (const kind of ['jellyfin', 'emby'] as const) {
     const m = raw[kind];
     if (!cfg.mediaServer && m?.url && m?.token && !isPlaceholder(m.token)) {

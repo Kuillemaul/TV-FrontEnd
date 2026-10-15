@@ -1,7 +1,7 @@
 import { post } from '../lib/api';
 
 export type Choice = 'no' | 'link' | 'install';
-export type ServiceId = 'plex' | 'jellyfin' | 'emby' | 'kodi' | 'homeassistant' | 'tvheadend' | 'plexdvr' | 'seerr' | 'downloads' | 'games' | 'lab';
+export type ServiceId = 'plex' | 'jellyfin' | 'emby' | 'kodi' | 'homeassistant' | 'tvheadend' | 'plexdvr' | 'seerr' | 'downloads' | 'photos' | 'games' | 'lab';
 export type Step = 'welcome' | 'name' | 'watch' | 'extras' | 'apps' | 'folder' | 'connect' | 'done';
 
 export interface Draft {
@@ -46,9 +46,11 @@ export interface SetupView {
   installs: { jobs: Record<string, InstallJob>; apps: Record<string, { installed: boolean; port?: number }> };
   linked: Record<'plex' | 'jellyfin' | 'emby' | 'homeassistant' | 'tvheadend' | 'plexdvr' | 'seerr' | 'radarr' | 'sonarr', { url?: string } | null> & {
     games: { count: number; names: string[] } | null;
+    immich: { url: string; mlHost: string | null } | null;
   };
   plexSignedIn: boolean;
   mounts: Array<{ path: string; freeGb: number; sizeGb: number }>;
+  gamingPcs: Array<{ id: string; name: string; host: string }>;
   phoneUrl: string | null;
 }
 

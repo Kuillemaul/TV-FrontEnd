@@ -2,7 +2,7 @@ import { useContext, useState, type ReactNode } from 'react';
 import { Button, Modal } from '../components/Layout';
 import { useApi, useServerEvents } from '../lib/api';
 import { HearthContext } from '../lib/hearth';
-import { DownloadsPanel, GamesPanel, HomeAssistantPanel, MediaServerPanel, PlexDvrPanel, PlexPanel, SeerrPanel, TvheadendPanel } from './ConnectPanels';
+import { DownloadsPanel, GamesPanel, HomeAssistantPanel, ImmichPanel, MediaServerPanel, PlexDvrPanel, PlexPanel, SeerrPanel, TvheadendPanel } from './ConnectPanels';
 import { api, jobFor, type SetupView } from './types';
 import { FindServers, foundUrls, useDiscovery } from './FindServers';
 import { FoundUrls } from './ConnectPanels';
@@ -52,6 +52,7 @@ export function Connections({ onPhone = false, notify }: { onPhone?: boolean; no
     { id: 'plexdvr', name: 'Live TV from Plex', what: 'Plex’s Live TV & DVR instead of Tvheadend', linked: l.plexdvr, link: (v, r) => <PlexDvrPanel view={v} reload={r} />, unlink: ['plexdvr'] },
     { id: 'seerr', name: 'Seerr', what: 'Requests', linked: l.seerr, link: (v, r) => <SeerrPanel view={v} reload={r} mode="link" />, install: { apps: ['seerr'], panel: (v, r) => <SeerrPanel view={v} reload={r} mode="install" /> }, unlink: ['seerr'] },
     { id: 'downloads', name: 'Radarr & Sonarr', what: 'Downloads, “ready to watch”', linked: l.radarr ?? l.sonarr, link: (v, r) => <DownloadsPanel view={v} reload={r} mode="link" />, install: { apps: ['radarr', 'sonarr', 'prowlarr', 'qbittorrent'], panel: (v, r) => <DownloadsPanel view={v} reload={r} mode="install" /> }, unlink: ['radarr', 'sonarr'] },
+    { id: 'photos', name: 'Immich', what: 'Photos; face recognition on a gaming PC', linked: l.immich, link: (v, r) => <ImmichPanel view={v} reload={r} mode="link" />, install: { apps: ['immich'], panel: (v, r) => <ImmichPanel view={v} reload={r} mode="install" /> }, unlink: ['immich'] },
     { id: 'games', name: 'Gaming PCs', what: 'Game streaming with Moonlight', linked: l.games ? { url: l.games.names.join(', ') } : null, link: (v, r) => <GamesPanel view={v} reload={r} /> },
   ];
 

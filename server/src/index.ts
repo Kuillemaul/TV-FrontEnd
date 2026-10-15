@@ -32,6 +32,8 @@ import { registerAdminApi, startAdminServer } from './routes/admin.js';
 import { registerLabEdit } from './routes/labedit.js';
 import { registerSetup } from './routes/setup.js';
 import { AppInstaller } from './appinstall.js';
+import { ImmichClient } from './providers/immich.js';
+import { ImmichGovernor } from './immichpause.js';
 import { installElevation, isElevated } from './elevate.js';
 import { ScreenTime } from './screentime.js';
 import { StateStore } from './state.js';
@@ -843,6 +845,22 @@ app.get('/ws/voice', { websocket: true }, (socket) => voice.handle(socket));
 registerAdminApi(app, { config, configPath: resolveConfigPath(), bus, log });
 registerLabEdit(app, { config, configPath: resolveConfigPath(), bus, lab, ha, demoHome, log, fail, isKid });
 const installer = new AppInstaller(config.stateDir, bus);
+
+// Immich: keep its heavy jobs paused while something plays (or someone uses its machine-learning PC).
+const immich = config.immich ? new ImmichClient(config.immich) : undefined;
+const immichGovernor = immich
+  ? new ImmichGovernor(immich, {
+      log,
+      pcBusy: config.immich?.mlHost && config.gaming.hosts.some((h) => h.id === config.immich!.mlHost)
+        ? async () => (await games.busy(config.immich!.mlHost!).catch(() => null))?.reason ?? null
+        : undefined,
+    })
+  : undefined;
+if (immichGovernor) {
+  launcher.onSession((event, s) => immichGovernor.session(event === 'start', s.title));
+  immichGovernor.start();
+}
+app.get('/api/immich/status', async () => ({ linked: Boolean(immich), paused: immichGovernor?.isPaused ?? false, reason: immichGovernor?.reason ?? '' }));
 const setup = registerSetup(app, { config, configPath: resolveConfigPath(), bus, installer, log, fail, isKid });
 
 const webDist = fileURLToPath(new URL('../../web/dist', import.meta.url));

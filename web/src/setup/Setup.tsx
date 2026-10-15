@@ -11,7 +11,7 @@ import { api, type Choice, type Draft, type ServiceId, type SetupView, type Step
 import './setup.css';
 
 const ORDER: Step[] = ['welcome', 'name', 'watch', 'extras', 'apps', 'folder', 'connect'];
-const MEDIA_INSTALLS: ServiceId[] = ['plex', 'jellyfin', 'tvheadend', 'downloads'];
+const MEDIA_INSTALLS: ServiceId[] = ['plex', 'jellyfin', 'tvheadend', 'downloads', 'photos'];
 const needsFolder = (d: Draft) => MEDIA_INSTALLS.some((s) => d.services[s] === 'install');
 
 /**
@@ -33,7 +33,7 @@ export function Setup({ onPhone = false }: { onPhone?: boolean }) {
     if (!view?.active || !discovery.data || discovery.data.running) return;
     const changes: Partial<Draft['services']> = {};
     for (const f of discovery.data.results) {
-      const svc = (f.link ? ({ radarr: 'downloads', sonarr: 'downloads', lidarr: 'downloads' } as Record<string, ServiceId>)[f.link] ?? f.link : 'lab') as ServiceId;
+      const svc = (f.link ? ({ radarr: 'downloads', sonarr: 'downloads', lidarr: 'downloads', immich: 'photos' } as Record<string, ServiceId>)[f.link] ?? f.link : 'lab') as ServiceId;
       if (applied.current.has(svc) || view.draft.services[svc] !== 'no') continue;
       applied.current.add(svc);
       changes[svc] = 'link';
@@ -183,6 +183,7 @@ export function Setup({ onPhone = false }: { onPhone?: boolean }) {
             <ChoiceRow view={view} id="homeassistant" title="Smart home" what="Lights, cameras, doorbell pop-ups and sensors, through Home Assistant." labels={{ link: 'I have Home Assistant', install: 'Install Home Assistant here' }} onPick={svc} />
             <ChoiceRow view={view} id="seerr" title="Requests" what="Ask for movies and shows from the TV, through Seerr (Overseerr / Jellyseerr)." labels={{ link: 'I have Seerr', install: 'Install Seerr here' }} onPick={svc} />
             <ChoiceRow view={view} id="downloads" title="Downloads" what="See what’s downloading, and get told when it’s ready: Radarr and Sonarr." labels={{ link: 'I have Radarr / Sonarr', install: 'Install them here' }} onPick={svc} />
+            <ChoiceRow view={view} id="photos" title="Photos" what="Back up your phones’ photos with Immich (face recognition can run on a gaming PC)." labels={{ link: 'I have Immich', install: 'Install Immich here' }} onPick={svc} />
             <ChoiceRow view={view} id="games" title="Game streaming" what="Play games from your gaming PCs with Moonlight." labels={{ link: 'Yes, from my PCs' }} onPick={svc} />
             <ChoiceRow view={view} id="lab" title="Home lab page" what="Server status, Home Assistant stats and one-button jobs." labels={{ link: 'Show it' }} onPick={svc} />
           </>

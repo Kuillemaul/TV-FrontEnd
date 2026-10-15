@@ -17,6 +17,7 @@ import json
 import os
 import pwd
 import re
+import secrets
 import shutil
 import socket
 import subprocess
@@ -34,7 +35,7 @@ STATUS = os.path.join(STATE_DIR, "apps.json")
 CATALOG = json.load(open(os.path.join(REPO, "os/apps/catalog.json")))
 # Media folders may only live in the usual places for data (not system folders).
 MEDIA_RE = re.compile(r"^/(srv|mnt|media|home|data|storage)(/[\w .@+-]+)*/?$")
-MEDIA_SUBDIRS = ["movies", "tv", "music", "downloads", "recordings"]
+MEDIA_SUBDIRS = ["movies", "tv", "music", "downloads", "recordings", "photos"]
 
 
 def log(msg):
@@ -134,6 +135,17 @@ def prepare_media(path):
         os.chown(path, TV.pw_uid, TV.pw_gid)
 
 
+def app_secret(data):
+    """A random password for an app's own database, made once and kept (so reinstalling still works)."""
+    path = os.path.join(data, ".secret")
+    if not os.path.exists(path):
+        os.makedirs(data, exist_ok=True)
+        with open(path, "w") as f:
+            f.write(secrets.token_hex(16))
+        os.chmod(path, 0o600)
+    return open(path).read().strip()
+
+
 def render(app, req):
     template = open(os.path.join(REPO, "os/apps/compose", f"{app}.yml")).read()
     data = os.path.join(APPS_DIR, app)
@@ -146,6 +158,7 @@ def render(app, req):
         "pgid": str(TV.pw_gid),
         "render": str(gid("render", gid("video", 44))),
         "claim": req.get("claim") or "",
+        "secret": app_secret(data),
     }
     return re.sub(r"\{(\w+)\}", lambda m: values.get(m.group(1), m.group(0)), template), data, values["media"]
 
@@ -192,7 +205,7 @@ def docker_install(job_id, req):
     os.makedirs(data, exist_ok=True)
     if meta.get("media"):
         prepare_media(media)
-    for sub in ("config", "cache", "transcode"):
+    for sub in ("config", "cache", "transcode", "model-cache"):
         d = os.path.join(data, sub)
         if not os.path.exists(d):
             os.makedirs(d)
@@ -210,7 +223,7 @@ def docker_install(job_id, req):
     keys = {}
     for _ in range(15):
         keys = read_keys(app)
-        if keys or app in ("jellyfin", "homeassistant", "tvheadend"):
+        if keys or app in ("jellyfin", "homeassistant", "tvheadend", "immich"):
             break
         time.sleep(2)
     status = load_status()

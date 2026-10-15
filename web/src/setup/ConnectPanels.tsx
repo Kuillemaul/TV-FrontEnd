@@ -489,6 +489,97 @@ export function DownloadsPanel({ view, reload, mode }: { view: SetupView; reload
   );
 }
 
+/* ---------------------------------------------------------------- photos (Immich) */
+
+export function ImmichPanel({ view, reload, mode }: { view: SetupView; reload: () => void; mode: 'link' | 'install' }) {
+  const [url, setUrl] = useState(useFound('immich') ?? 'http://');
+  const [key, setKey] = useState('');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [pass, setPass] = useState('');
+  const { busy, error, note, go } = useAction(reload);
+  const job = jobFor(view, 'immich');
+
+  if (view.linked.immich) {
+    return (
+      <>
+        <Linked what="Immich" url={view.linked.immich.url} />
+        <ImmichMl view={view} reload={reload} />
+        <OnPhone url={view.linked.immich.url.includes('127.0.0.1') ? hereUrl(view, 'immich') : view.linked.immich.url}>
+          Get the Immich app on your phones, sign in with this address, and turn on backup.
+        </OnPhone>
+      </>
+    );
+  }
+  if (mode === 'install') {
+    if (job?.state !== 'done') return <JobLine job={job} name="Immich" />;
+    return (
+      <>
+        <p className="setup-text">Immich is running. Create its admin account (you’ll sign in to the Immich phone app with it). Photos are kept in {view.draft.media}/photos.</p>
+        <div className="form">
+          <Field label="Your name" value={name} onChange={setName} placeholder="Sam" />
+          <Field label="Email" value={email} onChange={setEmail} placeholder="sam@example.com" />
+          <Field label="Password" value={pass} onChange={setPass} secret hint="At least 8 characters" />
+        </div>
+        <Status error={error} note={note} />
+        <Button variant="primary" disabled={busy || !email || pass.length < 8} onClick={() => void go(() => api.call('/api/connect/immich/create', { name, email, password: pass }))}>
+          {busy ? 'Setting up…' : 'Create account and link'}
+        </Button>
+      </>
+    );
+  }
+  return (
+    <>
+      <div className="form">
+        <Field label="Address" value={url} onChange={setUrl} placeholder="http://192.168.1.10:2283" />
+        <Field label="API key (from an admin account)" value={key} onChange={setKey} hint="Immich → Account settings → API keys → New API key" />
+      </div>
+      <Status error={error} note={note} />
+      <Button variant="primary" disabled={busy || !key} onClick={() => void go(() => api.call('/api/connect/immich', { url, apiKey: key }))}>
+        Link
+      </Button>
+    </>
+  );
+}
+
+/** Where face recognition and smart search run: a gaming PC's graphics card, or this TV. */
+function ImmichMl({ view, reload }: { view: SetupView; reload: () => void }) {
+  const current = view.linked.immich?.mlHost ?? null;
+  const [missing, setMissing] = useState<string | null>(null);
+  const { busy, error, note, go } = useAction(reload);
+  const pick = async (hostId: string | null) => {
+    setMissing(null);
+    if (hostId) {
+      const r = await api.call<{ running: boolean }>('/api/connect/immich/ml/check', { hostId });
+      if (r.ok && !r.running) return setMissing(hostId);
+    }
+    await go(() => api.call('/api/connect/immich/ml', { hostId }), () => (hostId ? 'Face recognition will run on that PC (this TV takes over when it’s off).' : 'Face recognition runs on this TV.'));
+  };
+  return (
+    <div className="setup-subform">
+      <h3 className="setup-sub">Face recognition and smart search run on</h3>
+      <div className="setup-row" data-nav-group>
+        <button className={`chip ${!current ? 'chip-active' : ''}`} data-nav disabled={busy} onClick={() => void pick(null)}>
+          This TV (slower)
+        </button>
+        {view.gamingPcs.map((pc) => (
+          <button key={pc.id} className={`chip ${current === pc.id ? 'chip-active' : ''}`} data-nav disabled={busy} onClick={() => void pick(pc.id)}>
+            {pc.name}
+          </button>
+        ))}
+      </div>
+      {missing ? (
+        <p className="setup-text">
+          Not running on {view.gamingPcs.find((p) => p.id === missing)?.name} yet. On that PC, install Docker Desktop, then run
+          <b> pc-agent\immich-ml.ps1</b> and choose it again.
+        </p>
+      ) : null}
+      <p className="setup-hint">Either way, Immich’s heavy work pauses while something plays on the TV or someone uses that PC.</p>
+      <Status error={error} note={note} />
+    </div>
+  );
+}
+
 /* ---------------------------------------------------------------- games */
 
 export function GamesPanel({ view, reload }: { view: SetupView; reload: () => void }) {
@@ -566,6 +657,10 @@ export function connectItems(view: SetupView, reload: () => void): ConnectItem[]
   if (s.downloads !== 'no') {
     const done = s.downloads === 'install' ? ['radarr', 'sonarr', 'prowlarr', 'qbittorrent'].every((a) => jobFor(view, a)?.state === 'done') : Boolean(view.linked.radarr || view.linked.sonarr);
     items.push({ id: 'downloads', title: s.downloads === 'install' ? 'Radarr, Sonarr & co (install here)' : 'Radarr & Sonarr', done, state: done ? (s.downloads === 'install' ? 'Finish on phone' : 'Linked') : s.downloads === 'install' ? 'Installing…' : 'Add keys', panel: <DownloadsPanel view={view} reload={reload} mode={how('downloads')} /> });
+  }
+  if (s.photos !== 'no') {
+    const linked = Boolean(view.linked.immich);
+    items.push({ id: 'photos', title: s.photos === 'install' ? 'Immich (install here)' : 'Immich', done: linked, state: linked ? 'Linked' : s.photos === 'install' ? (jobFor(view, 'immich')?.state === 'done' ? 'Create account' : jobState('immich')) : 'Add key', panel: <ImmichPanel view={view} reload={reload} mode={how('photos')} /> });
   }
   if (s.games !== 'no') items.push({ id: 'games', title: 'Gaming PCs', done: Boolean(view.linked.games), state: view.linked.games ? `${view.linked.games.count} added` : 'Add a PC (or later)', panel: <GamesPanel view={view} reload={reload} /> });
   return items;

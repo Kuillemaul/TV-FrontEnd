@@ -1,0 +1,62 @@
+# Immich (photos), from Immich's own docker-compose.yml. The server is capped at 3 of the CPU's
+# cores at low priority so the TV and game streams always come first, and Hearth pauses its heavy
+# jobs while something is playing. Face recognition / smart search can run on a gaming PC instead
+# (pc-agent/immich-ml.ps1); the local machine-learning container is then only the fallback.
+name: immich
+services:
+  immich-server:
+    image: ghcr.io/immich-app/immich-server:release
+    container_name: immich_server
+    restart: unless-stopped
+    cpus: 3
+    cpu_shares: 256
+    environment:
+      TZ: "{tz}"
+      DB_PASSWORD: "{secret}"
+      DB_USERNAME: postgres
+      DB_DATABASE_NAME: immich
+      DB_HOSTNAME: database
+      REDIS_HOSTNAME: redis
+      IMMICH_MACHINE_LEARNING_URL: http://immich-machine-learning:3003
+    volumes:
+      - "{media}/photos:/data"
+      - /etc/localtime:/etc/localtime:ro
+    group_add:
+      - "{render}"
+    devices:
+      - /dev/dri:/dev/dri       # Intel Quick Sync for video thumbnails
+    ports:
+      - "2283:2283"
+    depends_on:
+      - redis
+      - database
+
+  immich-machine-learning:
+    image: ghcr.io/immich-app/immich-machine-learning:release
+    container_name: immich_machine_learning
+    restart: unless-stopped
+    cpus: 2
+    cpu_shares: 128
+    environment:
+      MACHINE_LEARNING_MODEL_TTL: "300"   # unload models when idle (frees ~1 GB of memory)
+    volumes:
+      - "{data}/model-cache:/cache"
+
+  redis:
+    image: docker.io/valkey/valkey:8-bookworm
+    container_name: immich_redis
+    restart: unless-stopped
+
+  database:
+    image: ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0
+    container_name: immich_postgres
+    restart: unless-stopped
+    cpu_shares: 256
+    shm_size: 128mb
+    environment:
+      POSTGRES_PASSWORD: "{secret}"
+      POSTGRES_USER: postgres
+      POSTGRES_DB: immich
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    volumes:
+      - "{data}/postgres:/var/lib/postgresql/data"

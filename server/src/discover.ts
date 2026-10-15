@@ -9,7 +9,7 @@ import { connect, isIP } from 'node:net';
  */
 
 /** Services Hearth can link to (setup / Connections), by their connection key. */
-export type LinkKind = 'plex' | 'jellyfin' | 'emby' | 'homeassistant' | 'tvheadend' | 'seerr' | 'radarr' | 'sonarr' | 'lidarr';
+export type LinkKind = 'plex' | 'jellyfin' | 'emby' | 'homeassistant' | 'tvheadend' | 'seerr' | 'radarr' | 'sonarr' | 'lidarr' | 'immich';
 
 export interface Found {
   host: string;
@@ -59,7 +59,7 @@ const BY_TITLE: Array<[RegExp, string, string, LinkKind?]> = [
   [/Deluge/i, 'deluge', 'Deluge'],
   [/SABnzbd/i, 'sabnzbd', 'SABnzbd'],
   [/NZBGet/i, 'nzbget', 'NZBGet'],
-  [/Immich/i, 'immich', 'Immich'],
+  [/Immich/i, 'immich', 'Immich', 'immich'],
   [/Nextcloud/i, 'nextcloud', 'Nextcloud'],
   [/Node-RED/i, 'nodered', 'Node-RED'],
   [/Frigate/i, 'frigate', 'Frigate'],
