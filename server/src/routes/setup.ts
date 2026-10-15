@@ -114,6 +114,8 @@ export interface SetupDraft {
   media: string;
   /** Install jobs started from setup, by app. */
   jobs: Record<string, string>;
+  /** Immich's folders: phone backups, and an existing photo folder it reads (an external library). */
+  immich?: { photos?: string; external?: string };
 }
 interface SetupFile {
   active: boolean;
@@ -212,6 +214,7 @@ export function registerSetup(app: FastifyInstance, ctx: SetupContext): { active
       if (choice !== 'no' && FLATPAK[svc]) wanted.push(['flatpak', FLATPAK[svc]!]);
     }
     for (const [kind, name] of wanted) {
+      if (name === 'immich') continue; // waits for its folders to be chosen (ImmichPanel)
       const job = s.draft.jobs[name] ? status.jobs[s.draft.jobs[name]] : undefined;
       if (status.apps[name]?.installed || (job && job.state !== 'failed')) continue;
       try {
@@ -285,6 +288,7 @@ export function registerSetup(app: FastifyInstance, ctx: SetupContext): { active
       linked: linked(),
       plexSignedIn: Boolean(s?.plexToken),
       mounts: mounts(),
+      shares: installer.status().shares ?? {},
       /** Gaming PCs that could run Immich's face recognition. */
       gamingPcs: (current()?.gaming.hosts ?? []).map((h) => ({ id: h.id, name: h.name, host: h.moonlightHost })),
       phoneUrl: config.admin.enabled ? `http://${lanAddress() ?? 'this-tv'}:${config.admin.port}/setup` : null,
@@ -424,19 +428,37 @@ export function registerSetup(app: FastifyInstance, ctx: SetupContext): { active
     }),
   );
 
-  /** Install (or remove) one app from Settings → Connections. */
-  app.post<{ Body: { kind: 'docker' | 'flatpak'; app: string; action?: 'install' | 'remove'; media?: string } }>('/api/setup/install', async (req) =>
+  /** Install (or remove) one app from setup or Settings → Connections. */
+  app.post<{ Body: { kind: 'docker' | 'flatpak'; app: string; action?: 'install' | 'remove'; media?: string; photos?: string; external?: string } }>('/api/setup/install', async (req) =>
     run(() => {
       guard();
       const media = req.body.media ?? read()?.draft.media ?? '/srv/media';
-      if (!MEDIA_RE.test(media) || media.includes('..')) throw new Error('Pick a folder under /srv, /mnt, /media, /home, /data or /storage');
-      const job = installer.request(req.body.kind, req.body.app, req.body.action ?? 'install', { media });
+      const folders = [media, req.body.photos, req.body.external].filter((f): f is string => Boolean(f));
+      if (folders.some((f) => !MEDIA_RE.test(f) || f.includes('..'))) throw new Error('Pick folders under /srv, /mnt, /media, /home, /data or /storage');
       const s = read() ?? { active: false, draft: fromConfig() };
-      s.draft.jobs[req.body.app] = job;
+      if (req.body.app === 'immich') s.draft.immich = { photos: req.body.photos, external: req.body.external };
+      s.draft.jobs[req.body.app] = installer.request(req.body.kind, req.body.app, req.body.action ?? 'install', { media, photos: req.body.photos, external: req.body.external });
       write(s);
-      return { job };
+      return { job: s.draft.jobs[req.body.app] };
     }),
   );
+
+  /* ---------------- network shares (e.g. the media server's) ---------------- */
+
+  app.post<{ Body: { type: 'cifs' | 'nfs'; source: string; username?: string; password?: string; name?: string } }>('/api/setup/share', async (req) =>
+    run(() => {
+      guard();
+      const type = req.body.type === 'nfs' ? 'nfs' : 'cifs';
+      let source = String(req.body.source ?? '').trim().replace(/\\/g, '/');
+      if (type === 'cifs' && !source.startsWith('//')) source = `//${source.replace(/^\/+/, '')}`;
+      const last = source.split(/[/:]/).filter(Boolean).pop() ?? 'share';
+      const name = (req.body.name || last).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30) || 'share';
+      const job = installer.share('mount', { name, type, source, username: req.body.username, password: req.body.password });
+      return { job, path: `/mnt/${name}` };
+    }),
+  );
+
+  app.delete<{ Params: { name: string } }>('/api/setup/share/:name', async (req) => run(() => (guard(), { job: installer.share('unmount', { name: req.params.name }) })));
 
   /* ---------------- linking: Plex ---------------- */
 
@@ -662,7 +684,10 @@ export function registerSetup(app: FastifyInstance, ctx: SetupContext): { active
       if (String(req.body.password ?? '').length < 8) throw new Error('Use a password of at least 8 characters');
       const url = `http://127.0.0.1:${installer.catalog.docker.immich.port}`;
       const apiKey = await setUpImmich(url, email, String(req.body.password), String(req.body.name || email.split('@')[0]));
-      return save([[['immich', 'url'], url], [['immich', 'apiKey'], apiKey]], 'linked Immich (installed here)');
+      const out = save([[['immich', 'url'], url], [['immich', 'apiKey'], apiKey]], 'linked Immich (installed here)');
+      // Your existing photos, read only: Immich indexes them where they are.
+      if (read()?.draft.immich?.external) await new ImmichClient({ url, apiKey }).addExternalLibrary().catch((err) => log.warn(`immich library: ${(err as Error).message}`));
+      return out;
     }),
   );
 
@@ -775,6 +800,20 @@ export function registerSetup(app: FastifyInstance, ctx: SetupContext): { active
       try {
         if ((job.app === 'radarr' || job.app === 'sonarr' || job.app === 'seerr') && job.apiKey) {
           save([[['requests', job.app], { url: local(job.port), apiKey: job.apiKey }]], `linked ${job.app} (installed here)`);
+        } else if (job.app === 'immich') {
+          const c = current();
+          if (c?.immich && read()?.draft.immich?.external) {
+            // Immich restarts with the new folder; give it a couple of minutes to come back.
+            for (let i = 0; ; i++) {
+              try {
+                await new ImmichClient(c.immich).addExternalLibrary();
+                break;
+              } catch (err) {
+                if (i >= 12) throw err;
+                await new Promise((r) => setTimeout(r, 10_000));
+              }
+            }
+          }
         } else if (job.app === 'tvheadend') {
           save([[['livetv', 'tvheadend', 'url'], local(job.port)]], 'linked Tvheadend (installed here)');
         } else if (job.app === 'plex') {

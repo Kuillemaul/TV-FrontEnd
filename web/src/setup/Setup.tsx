@@ -6,7 +6,7 @@ import { focusFirst, onNavCommand } from '../nav/spatial';
 import { connectItems, Qr } from './ConnectPanels';
 import { Connections } from './Connections';
 import { FindServers, foundUrls, useDiscovery } from './FindServers';
-import { FoundUrls } from './ConnectPanels';
+import { FolderPicker, FoundUrls } from './ConnectPanels';
 import { api, type Choice, type Draft, type ServiceId, type SetupView, type Step } from './types';
 import './setup.css';
 
@@ -313,39 +313,13 @@ function LiveTvRow({ view, onPick }: { view: SetupView; onPick: (tvheadend: Choi
 }
 
 function FolderStep({ view, onPick }: { view: SetupView; onPick: (path: string) => void }) {
-  const current = view.draft.media;
-  const [custom, setCustom] = useState('');
-  const options = [
-    { path: '/srv/media', label: 'On this TV’s own drive', detail: view.mounts.find((m) => m.path === '/srv') },
-    ...view.mounts.filter((m) => m.path !== '/srv').map((m) => ({ path: m.path, label: m.path, detail: m })),
-  ];
   return (
     <>
       <h1>Where do your movies and shows go?</h1>
       <p className="setup-text">
-        The apps you’re installing keep their files here, in folders called movies, tv, music, downloads and recordings. Have them on a USB drive or NAS? Plug it in or mount it first and it shows up below.
+        The apps you’re installing keep their files here, in folders called movies, tv, music, downloads and recordings. On a media server or NAS? Add its share and pick it.
       </p>
-      <div className="setup-choices" data-nav-group>
-        {options.map((o) => (
-          <button key={o.path} className={`setup-choice ${current === o.path ? 'on' : ''}`} data-nav onClick={() => onPick(o.path)}>
-            <b>{o.label}</b>
-            <span>
-              {o.path}
-              {o.detail ? ` · ${o.detail.freeGb} GB free of ${o.detail.sizeGb} GB` : ''}
-            </span>
-          </button>
-        ))}
-      </div>
-      <div className="setup-row">
-        <label className="field">
-          <span>Another folder</span>
-          <input data-nav value={custom} onChange={(e) => setCustom(e.target.value)} placeholder="/mnt/storage/media" />
-        </label>
-        <Button disabled={!custom} onClick={() => onPick(custom)}>
-          Use it
-        </Button>
-      </div>
-      {!options.some((o) => o.path === current) ? <div className="setup-ok">Using {current}</div> : null}
+      <FolderPicker view={view} reload={() => undefined} value={view.draft.media} onChange={(p) => onPick(p.replace(/\/+$/, ''))} sub="" />
     </>
   );
 }

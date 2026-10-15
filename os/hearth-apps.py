@@ -159,6 +159,9 @@ def render(app, req):
         "render": str(gid("render", gid("video", 44))),
         "claim": req.get("claim") or "",
         "secret": app_secret(data),
+        # Immich: where phone backups go, and an existing photo folder it reads (never changes).
+        "photos": (req.get("photos") or f"{media.rstrip('/')}/photos").rstrip("/"),
+        "external": (req.get("external") or os.path.join(data, "no-external")).rstrip("/"),
     }
     return re.sub(r"\{(\w+)\}", lambda m: values.get(m.group(1), m.group(0)), template), data, values["media"]
 
@@ -201,10 +204,17 @@ def docker_install(job_id, req):
     app = req["app"]
     meta = CATALOG["docker"][app]
     ensure_docker(job_id, req)
+    if load_status().get("shares"):
+        ensure_docker_waits_for_shares()
     text, data, media = render(app, req)
     os.makedirs(data, exist_ok=True)
     if meta.get("media"):
         prepare_media(media)
+    if app == "immich":
+        for key in ("photos", "external"):
+            folder = re.search(rf"^\s*- \"([^\"]+):/{'data' if key == 'photos' else 'external'}", text, re.M)
+            if folder:
+                os.makedirs(folder.group(1), exist_ok=True)
     for sub in ("config", "cache", "transcode", "model-cache"):
         d = os.path.join(data, sub)
         if not os.path.exists(d):
@@ -277,6 +287,109 @@ def flatpak(job_id, req):
         progress(job_id, req, "done", f"{meta['name']} removed")
 
 
+# ---------------------------------------------------------------- network shares
+
+FSTAB = "/etc/fstab"
+SHARE_DIR = "/etc/hearth/shares"
+NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,29}$")
+CIFS_RE = re.compile(r"^//[\w.-]+/[\w .$&()'-]+(/[\w .$&()'-]+)*$")
+NFS_RE = re.compile(r"^[\w.-]+:/[\w ./-]*$")
+
+
+def fstab_lines():
+    return open(FSTAB).read().splitlines() if os.path.exists(FSTAB) else []
+
+
+def write_fstab(lines):
+    tmp = FSTAB + ".hearth"
+    with open(tmp, "w") as f:
+        f.write("\n".join(lines).rstrip("\n") + "\n")
+    os.replace(tmp, FSTAB)
+
+
+def mount_share(job_id, req):
+    """Attach a network share (SMB/NFS) at /mnt/<name>, mounted at every boot before Docker starts."""
+    name = str(req.get("name", ""))
+    if not NAME_RE.match(name):
+        raise ValueError("Give the share a short name (letters, numbers, dashes)")
+    target = f"/mnt/{name}"
+    kind = req.get("type", "cifs")
+    source = str(req.get("source", "")).strip()
+    opts = "_netdev,nofail,x-systemd.mount-timeout=30"
+    if kind == "cifs":
+        if not CIFS_RE.match(source):
+            raise ValueError("Share should look like //192.168.1.5/media")
+        if not shutil.which("mount.cifs"):
+            progress(job_id, req, "running", "Installing SMB support…")
+            run(["apt-get", "install", "-y", "--no-install-recommends", "cifs-utils"], env={**os.environ, "DEBIAN_FRONTEND": "noninteractive"})
+        os.makedirs(SHARE_DIR, mode=0o700, exist_ok=True)
+        cred = os.path.join(SHARE_DIR, f"{name}.cred")
+        with open(os.open(cred, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w") as f:
+            f.write(f"username={req.get('username') or 'guest'}\npassword={req.get('password') or ''}\n")
+        opts += f",credentials={cred},uid={TV.pw_uid},gid={TV.pw_gid},file_mode=0664,dir_mode=0775,iocharset=utf8"
+        fs = "cifs"
+    elif kind == "nfs":
+        if not NFS_RE.match(source):
+            raise ValueError("NFS export should look like 192.168.1.5:/volume1/media")
+        if not shutil.which("mount.nfs"):
+            progress(job_id, req, "running", "Installing NFS support…")
+            run(["apt-get", "install", "-y", "--no-install-recommends", "nfs-common"], env={**os.environ, "DEBIAN_FRONTEND": "noninteractive"})
+        fs = "nfs"
+    else:
+        raise ValueError("Unknown share type")
+
+    # An empty, unwritable folder underneath: if the share is ever missing, apps get an error
+    # instead of quietly filling the TV's own drive.
+    subprocess.run(["umount", target], capture_output=True)
+    os.makedirs(target, exist_ok=True)
+    subprocess.run(["chattr", "+i", target], capture_output=True)
+    line = f"{source.replace(' ', chr(92) + '040')} {target} {fs} {opts} 0 0"
+    lines = [l for l in fstab_lines() if not (l.split() + ["", ""])[1] == target]
+    write_fstab(lines + [f"{line}  # added by Hearth"])
+    run(["systemctl", "daemon-reload"])
+    progress(job_id, req, "running", f"Mounting {source}…")
+    try:
+        run(["mount", target], timeout=60)
+    except subprocess.CalledProcessError as err:
+        msg = tail(err)
+        if "13" in msg or "denied" in msg.lower():
+            raise RuntimeError("The server said no: check the username and password")
+        raise RuntimeError(f"Couldn't connect to {source}: {msg}")
+    ensure_docker_waits_for_shares()
+    status = load_status()
+    status.setdefault("shares", {})[name] = {"source": source, "path": target, "type": fs}
+    save_status(status)
+    progress(job_id, req, "done", f"{source} is at {target}", path=target)
+
+
+def unmount_share(job_id, req):
+    name = str(req.get("name", ""))
+    if not NAME_RE.match(name):
+        raise ValueError("Unknown share")
+    target = f"/mnt/{name}"
+    subprocess.run(["umount", target], capture_output=True)
+    write_fstab([l for l in fstab_lines() if not (l.split() + ["", ""])[1] == target])
+    run(["systemctl", "daemon-reload"])
+    cred = os.path.join(SHARE_DIR, f"{name}.cred")
+    if os.path.exists(cred):
+        os.remove(cred)
+    status = load_status()
+    status.get("shares", {}).pop(name, None)
+    save_status(status)
+    progress(job_id, req, "done", f"{target} disconnected")
+
+
+def ensure_docker_waits_for_shares():
+    """Start Docker's apps only after network shares are mounted (so Immich finds its photos)."""
+    dropin = "/etc/systemd/system/docker.service.d/hearth-shares.conf"
+    if os.path.exists(dropin) or not os.path.exists("/lib/systemd/system/docker.service"):
+        return
+    os.makedirs(os.path.dirname(dropin), exist_ok=True)
+    with open(dropin, "w") as f:
+        f.write("[Unit]\nAfter=remote-fs.target\nWants=remote-fs.target\n")
+    run(["systemctl", "daemon-reload"])
+
+
 # ---------------------------------------------------------------- requests
 
 
@@ -291,8 +404,18 @@ def handle(path):
     if not re.fullmatch(r"[\w-]{1,40}", job_id):
         return
     try:
+        if kind == "share":
+            req["app"] = f"share:{req.get('name', '')}"
+            if any("\n" in str(req.get(k, "")) or "\r" in str(req.get(k, "")) for k in ("username", "password", "source")):
+                raise ValueError("Usernames and passwords can't contain line breaks")
+            progress(job_id, req, "running", "Connecting…")
+            (mount_share if action == "mount" else unmount_share)(job_id, req)
+            return
         if kind not in ("docker", "flatpak") or app not in CATALOG[kind]:
             raise ValueError(f"{app} isn't an app Hearth can install")
+        for key in ("photos", "external"):
+            if req.get(key) and (not MEDIA_RE.match(req[key]) or os.path.normpath(req[key]) != req[key].rstrip("/")):
+                raise ValueError("Pick folders under /srv, /mnt, /media, /home, /data or /storage")
         if req.get("media") and (not MEDIA_RE.match(req["media"]) or os.path.normpath(req["media"]) != req["media"].rstrip("/")):
             raise ValueError("Pick a media folder under /srv, /mnt, /media, /home, /data or /storage")
         if req.get("claim") and not re.fullmatch(r"claim-[\w-]+", req["claim"]):

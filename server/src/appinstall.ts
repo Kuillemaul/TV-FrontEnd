@@ -42,6 +42,8 @@ export interface InstalledApp {
 export interface InstallStatus {
   jobs: Record<string, InstallJob>;
   apps: Record<string, InstalledApp>;
+  /** Network shares mounted on this machine (/mnt/<name>). */
+  shares?: Record<string, { source: string; path: string; type: 'cifs' | 'nfs' }>;
 }
 
 const CATALOG_PATH = fileURLToPath(new URL('../../os/apps/catalog.json', import.meta.url));
@@ -93,7 +95,28 @@ export class AppInstaller {
     return this.status().apps[app];
   }
 
-  request(kind: InstallKind, app: string, action: 'install' | 'remove' | 'keys', options: { media?: string; claim?: string } = {}): string {
+  /** Mount (or disconnect) a network share at /mnt/<name> through the root helper. */
+  share(action: 'mount' | 'unmount', options: { name: string; type?: 'cifs' | 'nfs'; source?: string; username?: string; password?: string }): string {
+    if (!this.available) throw new Error('Adding shares isn’t set up on this machine (run sudo ./os/install.sh again)');
+    const job = randomUUID().slice(0, 12);
+    if (this.fake) {
+      const app = `share:${options.name}`;
+      this.fakeStatus.jobs[job] = { app, action, state: 'running', message: 'Connecting…', at: Date.now() };
+      setTimeout(() => {
+        const shares = { ...(this.fakeStatus.shares ?? {}) };
+        if (action === 'mount') shares[options.name] = { source: options.source ?? '', path: `/mnt/${options.name}`, type: options.type ?? 'cifs' };
+        else delete shares[options.name];
+        this.fakeStatus = { ...this.fakeStatus, shares, jobs: { ...this.fakeStatus.jobs, [job]: { app, action, state: 'done', message: action === 'mount' ? `${options.source} is at /mnt/${options.name}` : 'Disconnected', at: Date.now() } } };
+      }, 1500);
+    } else {
+      mkdirSync(this.requests, { recursive: true });
+      writeFileSync(join(this.requests, `${job}.json`), JSON.stringify({ kind: 'share', action, ...options }), { mode: 0o600 });
+    }
+    this.watch();
+    return job;
+  }
+
+  request(kind: InstallKind, app: string, action: 'install' | 'remove' | 'keys', options: { media?: string; claim?: string; photos?: string; external?: string } = {}): string {
     if (!this.catalog[kind]?.[app]) throw new Error(`${app} isn’t something Hearth can install`);
     if (!this.available) throw new Error('Installing isn’t set up on this machine (run sudo ./os/install.sh again)');
     const job = randomUUID().slice(0, 12);

@@ -2,6 +2,7 @@
 # cores at low priority so the TV and game streams always come first, and Hearth pauses its heavy
 # jobs while something is playing. Face recognition / smart search can run on a gaming PC instead
 # (pc-agent/immich-ml.ps1); the local machine-learning container is then only the fallback.
+# The database stays on this machine's own drive (databases don't belong on network shares).
 name: immich
 services:
   immich-server:
@@ -19,7 +20,8 @@ services:
       REDIS_HOSTNAME: redis
       IMMICH_MACHINE_LEARNING_URL: http://immich-machine-learning:3003
     volumes:
-      - "{media}/photos:/data"
+      - "{photos}:/data"                  # phone backups, thumbnails (can be a network share)
+      - "{external}:/external:ro"         # your existing photos, read only (an Immich external library)
       - /etc/localtime:/etc/localtime:ro
     group_add:
       - "{render}"

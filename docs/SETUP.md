@@ -550,8 +550,18 @@ seconds after, to save the battery. Other camera systems that need a "start stre
 
 ### Photos: Immich
 Pick **Photos** in setup (or Settings → Connections → Immich): link the Immich you have (address + an admin API key
-from Account settings → API keys) or **Install here**. Installed here, Hearth creates the admin account and an API
-key for you; photos are kept in `<media folder>/photos`. Get the Immich phone app, sign in, turn on backup.
+from Account settings → API keys) or **Install here**. Installing asks two things:
+
+- **New photos from your phones go to:** this TV's drive, or a folder on your media server. Choose *+ A network
+  share*, enter the share (`//192.168.1.5/media`, or `\\server\media`) with its username and password (or an NFS
+  export), and Hearth mounts it at `/mnt/<name>`, at every boot, before Docker starts its apps. If the share is ever
+  missing, apps get an error instead of quietly filling the TV's drive.
+- **Photos you already have (optional):** e.g. the `Photos` folder on the same share. Immich adds it as a read-only
+  *external library*: it indexes the photos where they are and never moves or changes them.
+
+Immich's database and cache always stay on the TV's own drive (databases don't belong on network shares). Hearth then
+creates the admin account and an API key for you. Get the Immich phone app, sign in, turn on backup. (For an NFS share
+that Immich writes to, make the export writable for the TV.)
 
 Immich won't get in the way of the TV: its server is capped at 3 of the CPU's 6 cores at low priority, and Hearth
 **pauses its heavy jobs** (thumbnails, video conversion, face recognition, smart search) while anything plays on the

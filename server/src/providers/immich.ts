@@ -53,6 +53,23 @@ export class ImmichClient {
     await this.api('/system-config', { method: 'PUT', body: JSON.stringify(config) });
   }
 
+  /**
+   * Your existing photos (mounted read-only at /external in the container) as an Immich external
+   * library: Immich indexes them in place and never changes or moves them. Then scan it.
+   */
+  async addExternalLibrary(path = '/external', name = 'Photos on the media server'): Promise<void> {
+    const me = await this.api('/users/me');
+    const libraries: any[] = (await this.api('/libraries').catch(() => [])) ?? [];
+    let lib = libraries.find((l) => (l.importPaths ?? []).includes(path));
+    if (!lib) {
+      lib = await this.api('/libraries', {
+        method: 'POST',
+        body: JSON.stringify({ ownerId: me.id, name, importPaths: [path], exclusionPatterns: ['**/@eaDir/**', '**/#recycle/**', '**/.*/**', '**/Thumbs.db'] }),
+      });
+    }
+    await this.api(`/libraries/${lib.id}/scan`, { method: 'POST', body: '{}' });
+  }
+
   /** Pause or resume the heavy queues. Queues an older/newer Immich doesn't have are skipped. */
   async setPaused(paused: boolean): Promise<void> {
     for (const name of HEAVY_QUEUES) {

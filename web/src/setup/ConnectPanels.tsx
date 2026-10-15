@@ -489,6 +489,107 @@ export function DownloadsPanel({ view, reload, mode }: { view: SetupView; reload
   );
 }
 
+/* ---------------------------------------------------------------- folders and network shares */
+
+/** Attach a network share (e.g. the media server's) to this TV at /mnt/<name>. */
+export function ShareForm({ view, reload, onAdded }: { view: SetupView; reload: () => void; onAdded: (path: string) => void }) {
+  const [type, setType] = useState<'cifs' | 'nfs'>('cifs');
+  const [source, setSource] = useState('');
+  const [user, setUser] = useState('');
+  const [pass, setPass] = useState('');
+  const [job, setJob] = useState<{ id: string; path: string } | null>(null);
+  const { busy, error, note, go } = useAction(reload);
+  const state = job ? view.installs.jobs[job.id] : undefined;
+  useEffect(() => {
+    if (job && state?.state === 'done') onAdded(job.path);
+  }, [state?.state]); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <div className="setup-subform share-form">
+      <div className="setup-row" data-nav-group>
+        <button className={`chip ${type === 'cifs' ? 'chip-active' : ''}`} data-nav onClick={() => setType('cifs')}>
+          Windows / SMB share
+        </button>
+        <button className={`chip ${type === 'nfs' ? 'chip-active' : ''}`} data-nav onClick={() => setType('nfs')}>
+          NFS
+        </button>
+      </div>
+      <div className="form">
+        <Field
+          label={type === 'cifs' ? 'Share' : 'Export'}
+          value={source}
+          onChange={setSource}
+          placeholder={type === 'cifs' ? '//192.168.1.5/media' : '192.168.1.5:/volume1/media'}
+          hint={type === 'cifs' ? 'The server’s address and the share’s name (\\\\server\\media works too)' : 'Make the export writable for this TV if apps should save to it'}
+        />
+        {type === 'cifs' ? (
+          <>
+            <Field label="Username" value={user} onChange={setUser} />
+            <Field label="Password" value={pass} onChange={setPass} secret />
+          </>
+        ) : null}
+      </div>
+      {state ? <JobLine job={state} name="the share" /> : null}
+      <Status error={error} note={note} />
+      <Button
+        variant="primary"
+        disabled={busy || !source || state?.state === 'running'}
+        onClick={() => void go(() => api.call<{ job: string; path: string }>('/api/setup/share', { type, source, username: user, password: pass }), (r: { job: string; path: string }) => void setJob({ id: r.job, path: r.path }))}
+      >
+        Connect
+      </Button>
+    </div>
+  );
+}
+
+/**
+ * Pick a folder: this TV's drive, a network share (or add one), or another mounted drive, plus a
+ * folder inside it. `value` is the full path.
+ */
+export function FolderPicker({ view, reload, value, onChange, sub, allowNone }: { view: SetupView; reload: () => void; value: string; onChange: (path: string) => void; sub: string; allowNone?: boolean }) {
+  const bases = [
+    { path: '/srv/media', label: 'This TV’s own drive', detail: view.mounts.find((m) => m.path === '/srv') },
+    ...Object.values(view.shares).map((sh) => ({ path: sh.path, label: sh.source, detail: view.mounts.find((m) => m.path === sh.path) })),
+    ...view.mounts.filter((m) => m.path !== '/srv' && !Object.values(view.shares).some((sh) => sh.path === m.path)).map((m) => ({ path: m.path, label: m.path, detail: m })),
+  ];
+  const base = bases.find((b) => value === b.path || value.startsWith(`${b.path}/`))?.path ?? (value ? '' : 'none');
+  const folder = base && base !== 'none' ? value.slice(base.length + 1) : '';
+  const [adding, setAdding] = useState(false);
+  return (
+    <>
+      <div className="setup-choices" data-nav-group>
+        {allowNone ? (
+          <button className={`setup-choice ${!value ? 'on' : ''}`} data-nav onClick={() => onChange('')}>
+            <b>None</b>
+            <span>Skip this</span>
+          </button>
+        ) : null}
+        {bases.map((b) => (
+          <button key={b.path} className={`setup-choice ${base === b.path ? 'on' : ''}`} data-nav onClick={() => onChange(`${b.path}/${folder || sub}`)}>
+            <b>{b.label}</b>
+            <span>
+              {b.path}
+              {b.detail ? ` · ${b.detail.freeGb} GB free` : ''}
+            </span>
+          </button>
+        ))}
+        <button className={`setup-choice ${adding ? 'on' : ''}`} data-nav onClick={() => setAdding(!adding)}>
+          <b>+ A network share</b>
+          <span>Your media server or NAS (SMB or NFS)</span>
+        </button>
+      </div>
+      {adding ? <ShareForm view={view} reload={reload} onAdded={(path) => (setAdding(false), onChange(`${path}/${sub}`))} /> : null}
+      {value && base !== 'none' ? (
+        <div className="setup-row">
+          <label className="field">
+            <span>Folder</span>
+            <input data-nav value={value} onChange={(e) => onChange(e.target.value)} spellCheck={false} />
+          </label>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 /* ---------------------------------------------------------------- photos (Immich) */
 
 export function ImmichPanel({ view, reload, mode }: { view: SetupView; reload: () => void; mode: 'link' | 'install' }) {
@@ -512,10 +613,14 @@ export function ImmichPanel({ view, reload, mode }: { view: SetupView; reload: (
     );
   }
   if (mode === 'install') {
-    if (job?.state !== 'done') return <JobLine job={job} name="Immich" />;
+    if (!job || job.state === 'failed') return <ImmichFolders view={view} reload={reload} failed={job?.state === 'failed' ? job.message : undefined} />;
+    if (job.state !== 'done') return <JobLine job={job} name="Immich" />;
     return (
       <>
-        <p className="setup-text">Immich is running. Create its admin account (you’ll sign in to the Immich phone app with it). Photos are kept in {view.draft.media}/photos.</p>
+        <p className="setup-text">
+          Immich is running. Create its admin account (you’ll sign in to the Immich phone app with it). Phone backups go to {view.draft.immich?.photos ?? `${view.draft.media}/photos`}
+          {view.draft.immich?.external ? `; your photos in ${view.draft.immich.external} are added as they are` : ''}.
+        </p>
         <div className="form">
           <Field label="Your name" value={name} onChange={setName} placeholder="Sam" />
           <Field label="Email" value={email} onChange={setEmail} placeholder="sam@example.com" />
@@ -537,6 +642,27 @@ export function ImmichPanel({ view, reload, mode }: { view: SetupView; reload: (
       <Status error={error} note={note} />
       <Button variant="primary" disabled={busy || !key} onClick={() => void go(() => api.call('/api/connect/immich', { url, apiKey: key }))}>
         Link
+      </Button>
+    </>
+  );
+}
+
+/** Before installing Immich: where phone backups go, and your existing photos (read only). */
+function ImmichFolders({ view, reload, failed }: { view: SetupView; reload: () => void; failed?: string }) {
+  const [photos, setPhotos] = useState(view.draft.immich?.photos ?? `${view.draft.media}/photos`);
+  const [external, setExternal] = useState(view.draft.immich?.external ?? '');
+  const { busy, error, note, go } = useAction(reload);
+  return (
+    <>
+      {failed ? <div className="form-error">Couldn’t install Immich: {failed}</div> : null}
+      <h3 className="setup-sub">New photos from your phones go to</h3>
+      <FolderPicker view={view} reload={reload} value={photos} onChange={setPhotos} sub="Immich" />
+      <h3 className="setup-sub">Photos you already have (optional)</h3>
+      <p className="setup-hint">Immich reads them where they are and never moves or changes them. Its database and cache stay on this TV.</p>
+      <FolderPicker view={view} reload={reload} value={external} onChange={setExternal} sub="Photos" allowNone />
+      <Status error={error} note={note} />
+      <Button variant="primary" disabled={busy || !photos} onClick={() => void go(() => api.call('/api/setup/install', { kind: 'docker', app: 'immich', photos, external: external || undefined }))}>
+        Install Immich
       </Button>
     </>
   );

@@ -12,6 +12,7 @@ export interface Draft {
   apps: string[];
   media: string;
   jobs: Record<string, string>;
+  immich?: { photos?: string; external?: string };
 }
 
 export interface InstallJob {
@@ -51,6 +52,7 @@ export interface SetupView {
   plexSignedIn: boolean;
   mounts: Array<{ path: string; freeGb: number; sizeGb: number }>;
   gamingPcs: Array<{ id: string; name: string; host: string }>;
+  shares: Record<string, { source: string; path: string; type: 'cifs' | 'nfs' }>;
   phoneUrl: string | null;
 }
 
