@@ -370,6 +370,7 @@ export type ServerEvent =
   | { type: 'lab' }
   | { type: 'installs' }
   | { type: 'setup' }
+  | { type: 'discover' }
   | { type: 'display' }
   | { type: 'sleep'; endsAt: number | null }
   | { type: 'pip'; entity: string | null; name?: string }

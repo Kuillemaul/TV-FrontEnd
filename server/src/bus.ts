@@ -26,6 +26,8 @@ export type UiEvent =
   | { type: 'installs' }
   /** The first-run setup moved on (TV and phone show the same step). */
   | { type: 'setup' }
+  /** A network scan (finding servers) made progress. */
+  | { type: 'discover' }
   | { type: 'display' }
   | { type: 'sleep'; endsAt: number | null }
   | { type: 'pip'; entity: string | null; name?: string }

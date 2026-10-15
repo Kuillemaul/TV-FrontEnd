@@ -4,6 +4,8 @@ import { useApi, useServerEvents } from '../lib/api';
 import { HearthContext } from '../lib/hearth';
 import { DownloadsPanel, GamesPanel, HomeAssistantPanel, MediaServerPanel, PlexDvrPanel, PlexPanel, SeerrPanel, TvheadendPanel } from './ConnectPanels';
 import { api, jobFor, type SetupView } from './types';
+import { FindServers, foundUrls, useDiscovery } from './FindServers';
+import { FoundUrls } from './ConnectPanels';
 import './setup.css';
 
 interface Row {
@@ -37,6 +39,7 @@ export function Connections({ onPhone = false, notify }: { onPhone?: boolean; no
   const hearth = useHearthSafe();
   const say = (msg: string, bad = false) => (notify ? notify(msg, bad) : hearth?.toast(msg, bad ? 'error' : 'info'));
   const hidden = new Set(useApiHide());
+  const discovery = useDiscovery();
 
   if (!view) return null;
   const l = view.linked;
@@ -72,6 +75,11 @@ export function Connections({ onPhone = false, notify }: { onPhone?: boolean; no
   return (
     <div className={`connections ${onPhone ? 'setup-phone' : ''}`}>
       <section className="settings-group">
+        <h2>Find my servers</h2>
+        <FindServers view={view} reload={() => void reload()} />
+      </section>
+      <FoundUrls.Provider value={foundUrls(discovery.data)}>
+      <section className="settings-group">
         <h2>Connections</h2>
         <p className="modal-sub">Link what you already have, or install it on this TV. Hearth restarts for a moment to use a new connection.</p>
         <div className="conn-list">
@@ -98,6 +106,7 @@ export function Connections({ onPhone = false, notify }: { onPhone?: boolean; no
         </div>
       </section>
 
+      </FoundUrls.Provider>
       <section className="settings-group">
         <h2>Pages</h2>
         <p className="modal-sub">Hide pages you don’t use from the top bar.</p>
@@ -137,6 +146,7 @@ export function Connections({ onPhone = false, notify }: { onPhone?: boolean; no
 
       {open ? (
         <Modal title={open.mode === 'install' ? `${open.row.name} on this TV` : open.row.name} onClose={() => setOpen(null)} wide>
+          <FoundUrls.Provider value={foundUrls(discovery.data)}>
           <div className="setup-item-body conn-panel">
             {open.mode === 'install' ? (
               open.row.install!.panel(view, () => void reload())
@@ -144,6 +154,7 @@ export function Connections({ onPhone = false, notify }: { onPhone?: boolean; no
               open.row.link!(view, () => void reload())
             )}
           </div>
+          </FoundUrls.Provider>
           <div className="modal-actions">
             <Button onClick={() => setOpen(null)}>Close</Button>
           </div>

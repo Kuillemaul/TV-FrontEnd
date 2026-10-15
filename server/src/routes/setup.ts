@@ -27,6 +27,7 @@ import {
 import { DEFAULT_APPS, loadConfig, type AppTile, type HearthConfig } from '../config.js';
 import { PermissionError } from '../profiles.js';
 import { lanAddress } from '../remote.js';
+import { allowedHost, scan, subnetHosts, type Found } from '../discover.js';
 import { scheduleRestart, validateConfigText, writeConfig } from './admin.js';
 
 /**
@@ -627,6 +628,73 @@ export function registerSetup(app: FastifyInstance, ctx: SetupContext): { active
       const path = paths[req.params.service];
       if (!path) throw new Error('Unknown service');
       return save([[path, undefined]], `unlinked ${req.params.service}`);
+    }),
+  );
+
+  /* ---------------- finding servers on the network ---------------- */
+
+  const discovery: { running: boolean; progress: number; hosts: string[]; results: Found[]; error?: string; at?: number } = { running: false, progress: 0, hosts: [], results: [] };
+  const discoverView = () => {
+    const c = current();
+    const known = new Set<string>(
+      [
+        ...Object.values(linked()).map((l) => (l && 'url' in l ? (l as { url?: string }).url : undefined)),
+        ...(c?.lab.services ?? config.lab.services).map((s) => s.url),
+      ]
+        .filter((u): u is string => Boolean(u))
+        .map((u) => u.replace(/\/+$/, '')),
+    );
+    return { ...discovery, results: discovery.results.map((f) => ({ ...f, added: known.has(f.url) })) };
+  };
+
+  app.get('/api/discover', async () => discoverView());
+
+  /** Scan addresses (e.g. "192.168.1.10, nas.lan") or the whole home network for servers and apps. */
+  app.post<{ Body: { hosts?: string; network?: boolean } }>('/api/discover', async (req) =>
+    run(() => {
+      guard();
+      if (discovery.running) throw new Error('Already looking. Give it a moment.');
+      let hosts: string[];
+      if (req.body.network) {
+        const ip = lanAddress();
+        if (!ip) throw new Error('This TV isn’t on a network');
+        hosts = subnetHosts(ip);
+      } else {
+        hosts = String(req.body.hosts ?? '')
+          .split(/[\s,;]+/)
+          .map((h) => h.trim().replace(/^https?:\/\//, '').replace(/[/:].*$/, ''))
+          .filter(Boolean);
+        if (!hosts.length) throw new Error('Type a server’s address, like 192.168.1.10');
+        const bad = hosts.find((h) => !allowedHost(h));
+        if (bad) throw new Error(`${bad} isn’t on your home network`);
+        hosts = [...new Set(hosts)].slice(0, 16);
+      }
+      Object.assign(discovery, { running: true, progress: 0, hosts: req.body.network ? ['your network'] : hosts, results: [], error: undefined, at: Date.now() });
+      bus.emit({ type: 'discover' });
+      void scan(hosts, {
+        quick: Boolean(req.body.network),
+        onFound: (f) => {
+          discovery.results.push(f);
+          bus.emit({ type: 'discover' });
+        },
+        onProgress: (p) => {
+          discovery.progress = p;
+          bus.emit({ type: 'discover' });
+        },
+      })
+        .then((all) => {
+          discovery.results = all;
+        })
+        .catch((err) => {
+          discovery.error = (err as Error).message;
+        })
+        .finally(() => {
+          discovery.running = false;
+          discovery.progress = 1;
+          log.info(`discover: ${discovery.results.length} found on ${discovery.hosts.join(', ')}`);
+          bus.emit({ type: 'discover' });
+        });
+      return discoverView();
     }),
   );
 

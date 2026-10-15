@@ -5,6 +5,8 @@ import { useApi, useServerEvents } from '../lib/api';
 import { focusFirst, onNavCommand } from '../nav/spatial';
 import { connectItems, Qr } from './ConnectPanels';
 import { Connections } from './Connections';
+import { FindServers, foundUrls, useDiscovery } from './FindServers';
+import { FoundUrls } from './ConnectPanels';
 import { api, type Choice, type Draft, type ServiceId, type SetupView, type Step } from './types';
 import './setup.css';
 
@@ -22,6 +24,22 @@ export function Setup({ onPhone = false }: { onPhone?: boolean }) {
   const [error, setError] = useState('');
   const ref = useRef<HTMLDivElement>(null);
   useServerEvents((e) => (e.type === 'setup' || e.type === 'installs') && void reload());
+
+  const discovery = useDiscovery();
+  // Servers found by "Find my servers": tick "I have one" for each (once), and show the Lab page if
+  // other apps turned up.
+  const applied = useRef(new Set<string>());
+  useEffect(() => {
+    if (!view?.active || !discovery.data || discovery.data.running) return;
+    const changes: Partial<Draft['services']> = {};
+    for (const f of discovery.data.results) {
+      const svc = (f.link ? ({ radarr: 'downloads', sonarr: 'downloads', lidarr: 'downloads' } as Record<string, ServiceId>)[f.link] ?? f.link : 'lab') as ServiceId;
+      if (applied.current.has(svc) || view.draft.services[svc] !== 'no') continue;
+      applied.current.add(svc);
+      changes[svc] = 'link';
+    }
+    if (Object.keys(changes).length) void patch({ services: { ...view.draft.services, ...changes } });
+  }, [discovery.data?.running, discovery.data?.results.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const step = view?.draft.step ?? 'welcome';
   const loaded = Boolean(view);
@@ -146,6 +164,10 @@ export function Setup({ onPhone = false }: { onPhone?: boolean }) {
           <>
             <h1>Your own movies and shows</h1>
             <p className="setup-text">Pick any you use. None of these? Skip ahead: streaming apps come next.</p>
+            <details className="setup-find" open={Boolean(discovery.data?.results.length)}>
+              <summary data-nav tabIndex={0}>Already have servers? Find what’s on them</summary>
+              <FindServers view={view} reload={() => void reload()} intro={<p className="setup-text">Type your servers’ addresses (or scan the network). Anything Hearth can link is ticked below, and its address filled in later.</p>} />
+            </details>
             <ChoiceRow view={view} id="plex" title="Plex" what="Your Plex server: Continue watching, Recently added and search on the Home screen." labels={{ link: 'I have a Plex server', install: 'Install Plex on this TV' }} onPick={svc} />
             <ChoiceRow view={view} id="jellyfin" title="Jellyfin" what="Free, open-source media server." labels={{ link: 'I have a Jellyfin server', install: 'Install Jellyfin on this TV' }} onPick={svc} />
             <ChoiceRow view={view} id="emby" title="Emby" what="Emby server, opened in its web app." labels={{ link: 'I have an Emby server' }} onPick={svc} />
@@ -329,6 +351,7 @@ function FolderStep({ view, onPick }: { view: SetupView; onPick: (path: string) 
 
 function ConnectStep({ view, reload }: { view: SetupView; reload: () => void }) {
   const items = connectItems(view, reload);
+  const discovery = useDiscovery();
   const [open, setOpen] = useState<string | null>(null);
   const shown = open ?? items.find((i) => !i.done)?.id ?? null;
   if (!items.length) {
@@ -343,6 +366,7 @@ function ConnectStep({ view, reload }: { view: SetupView; reload: () => void }) 
     <>
       <h1>Link everything up</h1>
       <p className="setup-text">Installs run in the background while you go. Anything you skip can be done later in Settings → Connections.</p>
+      <FoundUrls.Provider value={foundUrls(discovery.data)}>
       <div className="setup-items">
         {items.map((i) => (
           <section key={i.id} className={`setup-item ${i.done ? 'done' : ''} ${shown === i.id ? 'open' : ''}`}>
@@ -355,6 +379,9 @@ function ConnectStep({ view, reload }: { view: SetupView; reload: () => void }) 
           </section>
         ))}
       </div>
+      </FoundUrls.Provider>
+      <h3 className="setup-sub">More on your servers</h3>
+      <FindServers view={view} reload={reload} intro={<p className="setup-text">Find other apps on your servers to link, or to watch on the Lab page.</p>} />
     </>
   );
 }

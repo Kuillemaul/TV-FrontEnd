@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { useApi } from '../lib/api';
+import { post, useApi } from '../lib/api';
+import { useDiscovery, type FoundService } from '../setup/FindServers';
 import {
   ACTION_DOMAINS,
   ACTION_SERVICES,
@@ -15,7 +16,7 @@ import type { Notify } from './Admin';
 
 /** Home lab services, sensors and actions, edited from a phone or laptop (saved into config.yaml). */
 export function LabSection({ notify }: { notify: Notify }) {
-  const { data, setData } = useApi<LabConfigView>('/api/lab/config');
+  const { data, setData, reload: reloadLab } = useApi<LabConfigView>('/api/lab/config');
   const sensors = useApi<HaPick[]>(data?.homeassistant ? '/api/ha/pick?domains=sensor,binary_sensor' : null);
   const [service, setService] = useState<{ index?: number; item: LabServiceItem } | null>(null);
   const [action, setAction] = useState<{ index?: number; item: LabActionItem } | null>(null);
@@ -40,6 +41,8 @@ export function LabSection({ notify }: { notify: Notify }) {
     <section>
       <h1>Home Lab</h1>
       <p className="ad-muted">What the TV’s Lab page shows. Changes appear on the TV straight away and are saved in config.yaml (the old version is kept in backups).</p>
+
+      <FindCard notify={notify} onAdded={() => void reloadLab()} />
 
       <div className="ad-card">
         <h2>Services</h2>
@@ -252,6 +255,46 @@ function ActionForm({ item, homeassistant, onSave, onCancel }: { item: LabAction
         </button>
         <button className="ad-btn" onClick={onCancel}>Cancel</button>
       </div>
+    </div>
+  );
+}
+
+/** Find what's running on your servers and add it to the Lab page. */
+function FindCard({ notify, onAdded }: { notify: Notify; onAdded: () => void }) {
+  const { data, reload } = useDiscovery();
+  const [hosts, setHosts] = useState('');
+  const start = async (network: boolean) => {
+    const r = await post<{ ok: boolean; error?: string }>('/api/discover', network ? { network: true } : { hosts });
+    if (!r.ok) notify(r.error ?? 'Couldn’t start looking', true);
+    void reload();
+  };
+  const add = async (f: FoundService) => {
+    const r = await post<{ ok: boolean; error?: string }>('/api/lab/config/services', { item: { name: f.name.split(' · ')[0], url: f.url, open: true } });
+    if (!r.ok) notify(r.error ?? 'Couldn’t add it', true);
+    else notify(`Added ${f.name}`);
+    void reload();
+    onAdded();
+  };
+  const results = data?.results ?? [];
+  return (
+    <div className="ad-card">
+      <h2>Find services</h2>
+      <p className="ad-muted">Type your servers’ addresses (or scan the whole network) to find Proxmox, Portainer, Pi-hole, the *arrs and the rest. Plex, Jellyfin, Home Assistant and co can be linked from Connections.</p>
+      <div className="ad-row">
+        <input className="ad-grow" value={hosts} onChange={(e) => setHosts(e.target.value)} placeholder="192.168.1.10, nas.lan" />
+        <button className="ad-btn primary" disabled={!hosts.trim() || data?.running} onClick={() => void start(false)}>Find</button>
+        <button className="ad-btn" disabled={data?.running} onClick={() => void start(true)}>Scan network</button>
+      </div>
+      {data?.running ? <p className="ad-muted">Looking… {Math.round(data.progress * 100)}%</p> : null}
+      {results.map((f) => (
+        <div className="ad-kv" key={f.url}>
+          <div className="ad-grow">
+            <b>{f.name}</b>
+            <div className="ad-note">{f.url}</div>
+          </div>
+          {f.added ? <span className="ad-note">✓ Added</span> : f.link ? <a className="ad-btn" href="/setup">Link</a> : <button className="ad-btn" onClick={() => void add(f)}>Add</button>}
+        </div>
+      ))}
     </div>
   );
 }

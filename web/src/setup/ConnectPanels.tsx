@@ -1,9 +1,13 @@
 import QRCode from 'qrcode';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button } from '../components/Layout';
 import { api, hereUrl, jobFor, type InstallJob, type ServiceId, type SetupView } from './types';
 
 /* ---------------------------------------------------------------- small pieces */
+
+/** Addresses found by "Find my servers", by service: the link forms start filled in with them. */
+export const FoundUrls = createContext<Partial<Record<string, string>>>({});
+const useFound = (kind: string) => useContext(FoundUrls)[kind];
 
 export function Qr({ url, size = 9 }: { url: string; size?: number }) {
   const [src, setSrc] = useState('');
@@ -138,7 +142,7 @@ function PlexSignIn({ onSignedIn }: { onSignedIn: (servers: Array<{ name: string
 
 export function PlexPanel({ view, reload, mode }: { view: SetupView; reload: () => void; mode: 'link' | 'install' }) {
   const [servers, setServers] = useState<Array<{ name: string; url: string; local: boolean }> | null>(null);
-  const [manual, setManual] = useState('');
+  const [manual, setManual] = useState(useFound('plex') ?? '');
   const { busy, error, note, go } = useAction(reload);
   const job = jobFor(view, 'plex');
 
@@ -196,7 +200,7 @@ export function PlexPanel({ view, reload, mode }: { view: SetupView; reload: () 
 
 export function MediaServerPanel({ view, reload, kind, mode }: { view: SetupView; reload: () => void; kind: 'jellyfin' | 'emby'; mode: 'link' | 'install' }) {
   const name = kind === 'jellyfin' ? 'Jellyfin' : 'Emby';
-  const [url, setUrl] = useState('');
+  const [url, setUrl] = useState(useFound(kind) ?? '');
   const [found, setFound] = useState<Array<{ name: string; url: string }> | null>(null);
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
@@ -330,7 +334,7 @@ function ManualUrl({ placeholder, onPick }: { placeholder: string; onPick: (url:
 /* ---------------------------------------------------------------- Home Assistant */
 
 export function HomeAssistantPanel({ view, reload, mode }: { view: SetupView; reload: () => void; mode: 'link' | 'install' }) {
-  const [url, setUrl] = useState('http://homeassistant.local:8123');
+  const [url, setUrl] = useState(useFound('homeassistant') ?? 'http://homeassistant.local:8123');
   const [token, setToken] = useState('');
   const [name, setName] = useState('');
   const [user, setUser] = useState('');
@@ -375,7 +379,7 @@ export function HomeAssistantPanel({ view, reload, mode }: { view: SetupView; re
 /* ---------------------------------------------------------------- Live TV */
 
 export function TvheadendPanel({ view, reload, mode }: { view: SetupView; reload: () => void; mode: 'link' | 'install' }) {
-  const [url, setUrl] = useState('http://');
+  const [url, setUrl] = useState(useFound('tvheadend') ?? 'http://');
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
   const { busy, error, note, go } = useAction(reload);
@@ -423,7 +427,7 @@ export function PlexDvrPanel({ view, reload }: { view: SetupView; reload: () => 
 /* ---------------------------------------------------------------- requests & downloads */
 
 function ArrForm({ kind, label, placeholder, keyHint, reload }: { kind: 'seerr' | 'radarr' | 'sonarr'; label: string; placeholder: string; keyHint: string; reload: () => void }) {
-  const [url, setUrl] = useState('http://');
+  const [url, setUrl] = useState(useFound(kind) ?? 'http://');
   const [key, setKey] = useState('');
   const { busy, error, note, go } = useAction(reload);
   return (

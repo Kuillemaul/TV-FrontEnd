@@ -89,6 +89,15 @@ The installer:
      their own first-run screens, linked from the QR codes shown).
    - **Gaming PCs:** the PC's address and the agent token (see part 4). Pair Moonlight afterwards in Settings → Gaming PCs.
 
+**Already have a server (or a whole lab)?** Open *Already have servers? Find what's on them* on the first choice
+screen (or **Find my servers** in Settings → Connections), type its address(es), e.g. `192.168.1.10, nas.lan`, or
+choose *Scan my whole network*. Hearth checks the usual ports and recognises apps by what they answer (so one moved
+to another port is still found): Plex, Jellyfin, Emby, Home Assistant, Tvheadend, Seerr, Radarr, Sonarr and Lidarr
+are ticked for you and their link forms start with the address filled in; everything else it finds (Proxmox,
+Portainer, Pi-hole, Uptime Kuma, TrueNAS, Grafana, qBittorrent, Immich…) can go on the Lab page with one press, or all
+at once. The Lab editor (Lab → Edit lab → *Find services*) and the network editor's Home Lab section have the same.
+It only looks at your own network (private addresses and local names).
+
 **Finish** writes `config/config.yaml` and restarts Hearth (a couple of seconds). Change anything later in
 **Settings → Connections**: link, install here, unlink, hide pages, or *Run setup again*. Apps installed here run as
 Docker containers (`docker ps`; their settings stay in `/opt/hearth-apps` if removed). Installer log:

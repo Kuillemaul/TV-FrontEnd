@@ -14,6 +14,7 @@ import {
 } from '../lib/labitems';
 import { Icon } from './Icon';
 import { Button, Modal } from './Layout';
+import { FindServers } from '../setup/FindServers';
 
 type Editing =
   | { kind: 'services'; index?: number; item?: LabServiceItem }
@@ -26,8 +27,9 @@ type Editing =
  */
 export function LabEditor({ onClose }: { onClose: () => void }) {
   const hearth = useHearth();
-  const { data, setData } = useApi<LabConfigView>('/api/lab/config');
+  const { data, setData, reload } = useApi<LabConfigView>('/api/lab/config');
   const [editing, setEditing] = useState<Editing | null>(null);
+  const [finding, setFinding] = useState(false);
   const [confirm, setConfirm] = useState<string | null>(null);
   const sensors = useApi<HaPick[]>(data?.homeassistant ? '/api/ha/pick?domains=sensor,binary_sensor' : null);
   const sensorName = (id: string) => sensors.data?.find((s) => s.id === id)?.name ?? id;
@@ -107,7 +109,10 @@ export function LabEditor({ onClose }: { onClose: () => void }) {
       </div>
 
       <div className="modal-actions" data-nav-group>
-        <Button icon="plus" onClick={() => setEditing({ kind: 'services' })} autoFocus>
+        <Button icon="search" onClick={() => setFinding(true)} autoFocus>
+          Find services
+        </Button>
+        <Button icon="plus" onClick={() => setEditing({ kind: 'services' })}>
           Add service
         </Button>
         <Button icon="plus" onClick={() => setEditing({ kind: 'sensors' })}>
@@ -120,6 +125,17 @@ export function LabEditor({ onClose }: { onClose: () => void }) {
           Done
         </Button>
       </div>
+
+      {finding ? (
+        <Modal title="Find services on your servers" onClose={() => (setFinding(false), void reload())} wide>
+          <FindServers mode="lab" reload={() => void reload()} intro={<p className="modal-sub">Type your servers’ addresses (or scan the network); add what turns up to the Lab page.</p>} />
+          <div className="modal-actions">
+            <Button variant="primary" onClick={() => (setFinding(false), void reload())}>
+              Done
+            </Button>
+          </div>
+        </Modal>
+      ) : null}
 
       {editing?.kind === 'services' ? (
         <ServiceForm
