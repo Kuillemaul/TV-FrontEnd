@@ -23,7 +23,10 @@ export class ImmichClient {
       ...init,
       headers: { 'x-api-key': this.cfg.apiKey, Accept: 'application/json', 'Content-Type': 'application/json', ...(init.headers ?? {}) },
       signal: AbortSignal.timeout(10_000),
+    }).catch(() => {
+      throw new Error(`Immich didn’t answer at ${new URL(this.cfg.url).host}. Is the address right, and is it running?`);
     });
+    if (res.status === 401 || res.status === 403) throw Object.assign(new Error('Immich said no: check the API key (from an admin account)'), { status: res.status });
     if (!res.ok) throw Object.assign(new Error(`Immich ${path}: HTTP ${res.status}`), { status: res.status });
     return res.status === 204 ? null : res.json().catch(() => null);
   }
