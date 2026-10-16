@@ -2,7 +2,7 @@
   "name": "hearth",
   "private": true,
   "version": "0.1.0",
-  "description": "Hearth \u2013 a living-room OS shell: live TV, streaming apps, Home Assistant, voice and game streaming in one remote-friendly UI.",
+  "description": "UN-Mayzing — untangle your entertainment: a living-room frontend for live TV, streaming apps, Home Assistant, voice and game streaming in one controller-friendly UI.",
   "workspaces": [
     "server",
     "web"
