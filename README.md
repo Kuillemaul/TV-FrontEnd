@@ -1,4 +1,6 @@
-# Hearth
+# UN-Mayzing
+
+**Untangle your entertainment.**
 
 A custom TV operating system for a small PC behind the TV (built for a Dell OptiPlex 5080 Micro).
 It replaces the smart-TV interface with a single interface you drive with a remote, a game
@@ -19,10 +21,10 @@ controller, or a keyboard and mouse.
 ```
  ┌──────────────── OptiPlex 5080 (Debian/Ubuntu) ─────────────────┐        ┌──── Gaming PC ────┐
  │ cage (Wayland kiosk)                                            │        │ Sunshine          │
- │  ├─ Chrome kiosk ── Hearth UI (React, spatial navigation)       │  HTTP  │ hearth_agent.py   │
+ │  ├─ Chrome kiosk ── UN-Mayzing UI (React, spatial navigation)       │  HTTP  │ hearth_agent.py   │
  │  └─ foreground app: mpv · Plex · Chrome app · Moonlight ────────┼───────►│  Steam library,   │
  │                                                                 │ stream │  launch / stop    │
- │ Hearth server (Node) ── REST + WebSocket for the UI             │◄───────┤                   │
+ │ UN-Mayzing server (Node) ── REST + WebSocket for the UI             │◄───────┤                   │
  │  ├─ launcher (one foreground app, returns to UI on exit)        │        └───────────────────┘
  │  ├─ /dev/input hotkeys (Home works even inside other apps)      │        ┌─── Emulator PC ───┐
  │  ├─ Tvheadend client ──► Tvheadend + USB tuner                  │        │ Sunshine          │
@@ -52,7 +54,7 @@ For UI development with hot reload, run `npm run dev:server` and `npm run dev:we
 | Back | Back / Esc / Backspace | B |
 | Voice | Mic key / `M` / F2 | Y |
 | Home | Home | Start |
-| Close any app, back to Hearth | Remote **Home** key | Hold **Xbox/PS** button 1s |
+| Close any app, back to UN-Mayzing | Remote **Home** key | Hold **Xbox/PS** button 1s |
 | Type (on-screen keyboard) | OK on a text box, Back closes | A on a text box, **X** deletes |
 
 The mouse works everywhere too. Hovering focuses, clicking selects, and the cursor hides when idle.
@@ -65,7 +67,7 @@ Follow **[docs/SETUP.md](docs/SETUP.md)**: OS install, the tuner, Home Assistant
 
 | Path | What it is |
 | --- | --- |
-| `server/` | Hearth server (TypeScript, Fastify). Launcher, Tvheadend/Home Assistant/game clients, voice intents, input hotkeys. |
+| `server/` | UN-Mayzing server (TypeScript, Fastify). Launcher, Tvheadend/Home Assistant/game clients, voice intents, input hotkeys. |
 | `web/` | The TV interface (React + Vite). `src/nav/spatial.ts` handles remote/controller/mouse navigation. |
 | `pc-agent/` | `hearth_agent.py`: dependency-free agent for the gaming and emulator PCs (Playnite, LaunchBox, Steam, ROM folders, launch/stop). `playnite/` holds the Playnite exporter extension. |
 | `config/config.example.yaml` | Every setting, documented. Copy to `config/config.yaml`. |
@@ -78,3 +80,8 @@ npm test -w server      # voice intents + input device detection
 cd pc-agent && python -m unittest test_hearth_agent.py   # LaunchBox/Playnite sources
 npm run typecheck
 ```
+
+
+---
+
+UN-Mayzing is an open-source project. The name and visual identity are being prepared; domain and trademark availability have not yet been legally cleared.
